@@ -45,14 +45,31 @@ const mockLatestRates = (base) => {
 
 const getHistoricalRates = async (baseCurrency, targetCurrency, days = 7) => {
   try {
-    // Free tier doesn't support history endpoint, so we fetch the REAL current rate
-    // and generate a realistic mock history that ends EXACTLY at the real rate!
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - days);
+
+    const endStr = endDate.toISOString().split('T')[0];
+    const startStr = startDate.toISOString().split('T')[0];
+
+    const url = `https://api.frankfurter.dev/v1/${startStr}..${endStr}?base=${baseCurrency}&symbols=${targetCurrency}`;
+    const response = await axios.get(url);
+
+    if (response.data && response.data.rates) {
+      return {
+        result: 'success',
+        base_code: baseCurrency,
+        conversion_rates: response.data.rates,
+        is_mock: false
+      };
+    }
+    throw new Error('Invalid response from Frankfurter API');
+  } catch (error) {
+    console.error('Exchange History API Error:', error.message);
+    // Fallback to fetching the real current rate and mocking history if API fails
     const latestRates = await getExchangeRates(baseCurrency);
     const anchorRate = latestRates.conversion_rates[targetCurrency] || 1.0;
     return mockHistoricalData(baseCurrency, targetCurrency, days, anchorRate);
-  } catch (error) {
-    console.error('Exchange History API Error:', error.message);
-    return mockHistoricalData(baseCurrency, targetCurrency, days, 1.0);
   }
 };
 
