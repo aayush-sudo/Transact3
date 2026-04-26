@@ -21,6 +21,10 @@ const UserSchema = new mongoose.Schema({
     minlength: 6,
     select: false, // Don't return password by default
   },
+  walletBalance: {
+    type: Number,
+    default: 0,
+  },
   createdAt: {
     type: Date,
     default: Date.now,

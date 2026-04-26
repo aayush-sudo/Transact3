@@ -35,6 +35,7 @@ exports.registerUser = async (req, res) => {
         _id: user._id,
         name: user.name,
         email: user.email,
+        walletBalance: user.walletBalance,
         token: generateToken(user._id),
       });
     } else {
@@ -71,6 +72,7 @@ exports.loginUser = async (req, res) => {
       _id: user._id,
       name: user.name,
       email: user.email,
+      walletBalance: user.walletBalance,
       token: generateToken(user._id),
     });
   } catch (error) {
