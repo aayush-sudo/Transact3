@@ -21,11 +21,13 @@ app.use(cors());
 const authRoutes = require('./routes/authRoutes');
 const currencyRoutes = require('./routes/currencyRoutes');
 const portfolioRoutes = require('./routes/portfolioRoutes');
+const { router: blockchainRoutes } = require('./routes/blockchainRoutes');
 
 // Mount routers
 app.use('/api/user', authRoutes);
 app.use('/api/currency', currencyRoutes);
 app.use('/api/portfolio', portfolioRoutes);
+app.use('/api', blockchainRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
