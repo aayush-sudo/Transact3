@@ -1,78 +1,69 @@
-import React, { useState, useContext } from 'react';
-import { Send, CheckCircle, XCircle, Loader, ExternalLink } from 'lucide-react';
-import { AuthContext } from '../context/AuthContext';
+import React, { useState } from 'react';
+import { Send, CheckCircle, XCircle, Loader } from 'lucide-react';
+import api from '../services/api';
 import TransactionStepper from './TransactionStepper';
 
 const SendMoney = ({ onTransactionComplete }) => {
-  const { walletAddress, connectWallet } = useContext(AuthContext);
   const [receiver, setReceiver] = useState('');
   const [amount, setAmount] = useState('');
+  const [currency, setCurrency] = useState('USD');
+  const [receiverCurrency, setReceiverCurrency] = useState('EUR');
+  
   const [processing, setProcessing] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
-  const [txResult, setTxResult] = useState(null);
   const [showApproval, setShowApproval] = useState(false);
+  const [txResult, setTxResult] = useState(null);
+  const [error, setError] = useState(null);
 
-  const generateTxHash = () => {
-    const chars = '0123456789abcdef';
-    let hash = '0x';
-    for (let i = 0; i < 64; i++) {
-      hash += chars[Math.floor(Math.random() * chars.length)];
-    }
-    return hash;
-  };
-
-  const simulateTransaction = async () => {
+  const initiateTransaction = async () => {
     if (!receiver || !amount) return;
-
-    // Show MetaMask-style approval popup
     setShowApproval(true);
   };
 
   const handleApprove = async () => {
     setShowApproval(false);
     setProcessing(true);
+    setError(null);
     setTxResult(null);
 
-    // Step 1: Initiated
-    setCurrentStep(1);
-    await new Promise((r) => setTimeout(r, 1200));
+    try {
+      // Step 1: Initiated
+      setCurrentStep(1);
+      await new Promise((r) => setTimeout(r, 1200));
 
-    // Step 2: Validated
-    setCurrentStep(2);
-    await new Promise((r) => setTimeout(r, 1000));
+      // Step 2: Validated
+      setCurrentStep(2);
+      await new Promise((r) => setTimeout(r, 1000));
 
-    // Step 3: AI Decision
-    setCurrentStep(3);
-    await new Promise((r) => setTimeout(r, 1500));
-
-    // Step 4: Risk Check
-    setCurrentStep(4);
-    await new Promise((r) => setTimeout(r, 1000));
-
-    // Step 5: Blockchain Confirmed
-    setCurrentStep(5);
-    await new Promise((r) => setTimeout(r, 800));
-
-    const txHash = generateTxHash();
-    setTxResult({
-      hash: txHash,
-      status: 'Confirmed',
-      time: '~2 sec',
-      receiver,
-      amount,
-    });
-
-    if (onTransactionComplete) {
-      onTransactionComplete({
-        hash: txHash,
-        from: walletAddress || '0xMock...1234',
-        to: receiver,
-        amount,
-        timestamp: new Date().toISOString(),
+      // Step 3: AI Decision (Backend API Call happens here)
+      setCurrentStep(3);
+      const { data } = await api.post('/transaction/send', {
+        receiverEmail: receiver,
+        amount: Number(amount),
+        currency,
+        receiverCurrency,
       });
-    }
 
-    setProcessing(false);
+      // Step 4: Risk Check
+      setCurrentStep(4);
+      await new Promise((r) => setTimeout(r, 1000));
+
+      // Step 5: Confirmed
+      setCurrentStep(5);
+      await new Promise((r) => setTimeout(r, 800));
+
+      if (data.success) {
+        setTxResult(data.data);
+        if (onTransactionComplete) {
+          onTransactionComplete(data.data);
+        }
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Transaction failed');
+      setCurrentStep(0);
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const handleReject = () => {
@@ -84,11 +75,11 @@ const SendMoney = ({ onTransactionComplete }) => {
     setAmount('');
     setCurrentStep(0);
     setTxResult(null);
+    setError(null);
   };
 
   return (
-    <div className="space-y-4">
-      {/* Send Money Form */}
+    <div className="space-y-4 max-w-md w-full">
       <div className="card">
         <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
           <Send size={20} className="text-fintech-primary" />
@@ -97,76 +88,105 @@ const SendMoney = ({ onTransactionComplete }) => {
 
         {!txResult ? (
           <div className="space-y-3">
+            {error && (
+              <div className="p-2 text-sm text-red-500 bg-red-500/10 rounded-md">
+                {error}
+              </div>
+            )}
             <div>
-              <label className="text-sm text-slate-400 block mb-1">Receiver Address</label>
+              <label className="text-sm text-slate-400 block mb-1">Receiver Email</label>
               <input
-                type="text"
+                type="email"
                 value={receiver}
                 onChange={(e) => setReceiver(e.target.value)}
-                placeholder="0x... or wallet address"
-                className="input-field font-mono text-sm"
+                placeholder="bob@example.com"
+                className="input-field text-sm w-full"
                 disabled={processing}
               />
+            </div>
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label className="text-sm text-slate-400 block mb-1">Amount</label>
+                <div className="flex bg-fintech-darker rounded-lg border border-slate-700/50">
+                  <input
+                    type="number"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="bg-transparent text-white px-3 py-2 outline-none w-full border-none m-0 focus:ring-0"
+                    disabled={processing}
+                    min="0"
+                  />
+                  <select
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
+                    className="bg-transparent text-slate-300 border-none px-2 outline-none cursor-pointer"
+                  >
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                    <option value="GBP">GBP</option>
+                    <option value="INR">INR</option>
+                  </select>
+                </div>
+              </div>
             </div>
             <div>
-              <label className="text-sm text-slate-400 block mb-1">Amount (USD)</label>
-              <input
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.00"
-                className="input-field"
+              <label className="text-sm text-slate-400 block mb-1">Convert To</label>
+              <select
+                value={receiverCurrency}
+                onChange={(e) => setReceiverCurrency(e.target.value)}
+                className="input-field w-full"
                 disabled={processing}
-                min="0"
-                step="0.01"
-              />
+              >
+                <option value="EUR">EUR</option>
+                <option value="USD">USD</option>
+                <option value="GBP">GBP</option>
+                <option value="INR">INR</option>
+              </select>
             </div>
             <button
-              onClick={simulateTransaction}
+              onClick={initiateTransaction}
               disabled={processing || !receiver || !amount}
-              className="w-full btn-primary flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full btn-primary flex items-center justify-center gap-2 mt-4 disabled:opacity-50"
             >
               {processing ? (
-                <>
-                  <Loader size={16} className="animate-spin" />
-                  Processing...
-                </>
+                <><Loader size={16} className="animate-spin" /> Processing...</>
               ) : (
-                <>
-                  <Send size={16} />
-                  Send Transaction
-                </>
+                <><Send size={16} /> Send Transaction</>
               )}
             </button>
           </div>
         ) : (
-          /* Success Result */
           <div className="space-y-3">
-            <div className="flex items-center justify-center mb-2">
-              <div className="p-3 bg-green-500/10 rounded-full">
-                <CheckCircle size={32} className="text-green-400" />
-              </div>
+            <div className="flex justify-center mb-2">
+              <CheckCircle size={40} className="text-green-400" />
             </div>
-            <p className="text-center text-green-400 font-semibold">Transaction Successful!</p>
+            <p className="text-center text-green-400 font-semibold mb-4">Transaction Initialized</p>
 
-            <div className="bg-fintech-darker rounded-lg p-4 space-y-2 border border-slate-700/50">
+            <div className="bg-fintech-darker rounded-lg p-4 space-y-3 border border-slate-700/50">
               <div className="flex justify-between text-sm">
-                <span className="text-slate-400">TX Hash</span>
-                <span className="text-slate-300 font-mono text-xs truncate max-w-[180px]">
-                  {txResult.hash}
+                <span className="text-slate-400">Status</span>
+                <span className="text-white font-medium">{txResult.status}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-400">Risk Score</span>
+                <span className="text-white font-mono">{txResult.riskScore?.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-400">Amount Sent</span>
+                <span className="text-white font-medium">
+                  {txResult.amount?.toLocaleString()} {txResult.currency}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-slate-400">Status</span>
-                <span className="text-green-400 font-medium">{txResult.status}</span>
+                <span className="text-slate-400">Exchange Rate</span>
+                <span className="text-slate-300 font-mono">1 {txResult.currency} = {txResult.exchangeRate} {txResult.receiverCurrency}</span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-400">Time</span>
-                <span className="text-slate-300">{txResult.time}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-400">Amount</span>
-                <span className="text-white font-medium">${txResult.amount}</span>
+              <div className="flex justify-between text-sm items-center">
+                <span className="text-slate-400">Converted Amount</span>
+                <span className="text-green-400 font-bold text-base">
+                  ~{txResult.convertedAmount?.toLocaleString()} {txResult.receiverCurrency}
+                </span>
               </div>
             </div>
 
@@ -177,8 +197,8 @@ const SendMoney = ({ onTransactionComplete }) => {
         )}
       </div>
 
-      {/* Transaction Stepper */}
-      {(processing || currentStep > 0) && (
+      {/* Transaction Stepper Component */}
+      {(processing || currentStep > 0) && !txResult && (
         <TransactionStepper currentStep={currentStep} isProcessing={processing} />
       )}
 
@@ -196,28 +216,24 @@ const SendMoney = ({ onTransactionComplete }) => {
                 />
               </div>
               <h4 className="text-lg font-bold text-white">Confirm Transaction</h4>
-              <p className="text-sm text-slate-400 mt-1">MetaMask Approval</p>
+              <p className="text-sm text-slate-400 mt-1">Transaction Approval</p>
             </div>
 
             <div className="bg-fintech-darker rounded-lg p-4 space-y-2 mb-4 border border-slate-700/50">
               <div className="flex justify-between text-sm">
-                <span className="text-slate-400">To</span>
+                <span className="text-slate-400">To Email</span>
                 <span className="text-slate-300 font-mono text-xs truncate max-w-[180px]">
                   {receiver}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-slate-400">Amount</span>
-                <span className="text-white font-bold">${amount}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-400">Gas Fee</span>
-                <span className="text-slate-300">~$0.02</span>
+                <span className="text-white font-bold">{amount} {currency}</span>
               </div>
               <hr className="border-slate-700" />
               <div className="flex justify-between text-sm">
-                <span className="text-slate-400">Total</span>
-                <span className="text-white font-bold">${(parseFloat(amount) + 0.02).toFixed(2)}</span>
+                <span className="text-slate-400">Conversion</span>
+                <span className="text-slate-300">To {receiverCurrency}</span>
               </div>
             </div>
 
