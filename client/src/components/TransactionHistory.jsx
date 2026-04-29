@@ -3,9 +3,9 @@ import { ArrowUpDown, Clock, CheckCircle, XCircle } from 'lucide-react';
 import api from '../services/api';
 
 const statusConfig = {
-  approved: { icon: CheckCircle, color: 'text-green-400', bg: 'bg-green-500/10', label: 'Approved' },
-  under_review: { icon: Clock, color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Under Review' },
-  blocked: { icon: XCircle, color: 'text-red-400', bg: 'bg-red-500/10', label: 'Blocked' },
+  approved:     { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-200', label: 'Approved' },
+  under_review: { icon: Clock,        color: 'text-amber-600', bg: 'bg-amber-50',  border: 'border-amber-200',  label: 'Under Review' },
+  blocked:      { icon: XCircle,      color: 'text-red-600',   bg: 'bg-red-50',    border: 'border-red-200',    label: 'Blocked' },
 };
 
 const TransactionHistory = () => {
@@ -33,28 +33,30 @@ const TransactionHistory = () => {
 
   return (
     <div className="card">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold text-white flex items-center gap-2">
-          <ArrowUpDown size={20} className="text-fintech-primary" />
+      <div className="flex items-center justify-between mb-5">
+        <h3 className="text-base font-bold text-velto-ink flex items-center gap-2">
+          <div className="p-1.5 bg-velto-forest rounded-lg">
+            <ArrowUpDown size={15} className="text-velto-lime" />
+          </div>
           Transaction History
         </h3>
-        <span className="text-xs text-slate-500 bg-fintech-darker px-2 py-1 rounded-full">
+        <span className="text-xs font-bold text-velto-muted bg-velto-surface px-3 py-1 rounded-full border border-velto-surface-dark">
           {transactions.length} transactions
         </span>
       </div>
 
       <div className="overflow-x-auto">
         {loading ? (
-          <p className="text-slate-400 text-sm">Loading history...</p>
+          <p className="text-velto-faint text-sm">Loading history...</p>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-xs text-slate-500 border-b border-slate-700">
-                <th className="text-left pb-3 font-medium">To (Email)</th>
-                <th className="text-right pb-3 font-medium">Amount Sent</th>
-                <th className="text-right pb-3 font-medium">Converted</th>
-                <th className="text-left pb-3 pl-4 font-medium">Date (UTC)</th>
-                <th className="text-center pb-3 font-medium">Status (Risk)</th>
+              <tr className="text-xs text-velto-faint border-b border-velto-surface-dark">
+                <th className="text-left pb-3 font-semibold uppercase tracking-wider">To (Email)</th>
+                <th className="text-right pb-3 font-semibold uppercase tracking-wider">Amount Sent</th>
+                <th className="text-right pb-3 font-semibold uppercase tracking-wider">Converted</th>
+                <th className="text-left pb-3 pl-4 font-semibold uppercase tracking-wider">Date (UTC)</th>
+                <th className="text-center pb-3 font-semibold uppercase tracking-wider">Status</th>
               </tr>
             </thead>
             <tbody>
@@ -64,28 +66,28 @@ const TransactionHistory = () => {
                 return (
                   <tr
                     key={tx._id}
-                    className="border-b border-slate-700/50 hover:bg-fintech-darker/50 transition-colors"
+                    className="border-b border-velto-surface hover:bg-velto-surface/60 transition-colors"
                   >
-                    <td className="py-3 font-mono text-xs text-slate-400">
+                    <td className="py-3 font-mono text-xs text-velto-muted">
                       {tx.receiver?.email}
                     </td>
-                    <td className="py-3 text-right text-white font-medium">
+                    <td className="py-3 text-right text-velto-ink font-semibold">
                       {tx.amount?.toLocaleString()}
-                      <span className="text-slate-500 ml-1 text-xs">{tx.currency}</span>
+                      <span className="text-velto-faint ml-1 text-xs">{tx.currency}</span>
                     </td>
-                    <td className="py-3 text-right text-white font-medium">
+                    <td className="py-3 text-right text-velto-ink font-semibold">
                       ~{tx.convertedAmount?.toLocaleString() || '0'}
-                      <span className="text-slate-500 ml-1 text-xs">{tx.receiverCurrency}</span>
+                      <span className="text-velto-faint ml-1 text-xs">{tx.receiverCurrency}</span>
                     </td>
-                    <td className="py-3 pl-4 text-slate-400 text-xs">
+                    <td className="py-3 pl-4 text-velto-faint text-xs">
                       {new Date(tx.timestamp).toLocaleString()}
                     </td>
                     <td className="py-3">
                       <div
-                        className={`flex flex-col items-center justify-center gap-1 ${status.bg} ${status.color} px-2 py-1 rounded-lg text-xs font-medium w-max mx-auto`}
+                        className={`flex flex-col items-center justify-center gap-0.5 ${status.bg} ${status.color} px-2.5 py-1.5 rounded-xl text-xs font-semibold w-max mx-auto border ${status.border}`}
                       >
                         <div className="flex gap-1 items-center">
-                          <StatusIcon size={12} />
+                          <StatusIcon size={11} />
                           {status.label}
                         </div>
                         <span className="text-[10px] opacity-70">Risk: {tx.riskScore?.toFixed(2)}</span>
@@ -96,7 +98,7 @@ const TransactionHistory = () => {
               })}
               {transactions.length === 0 && (
                 <tr>
-                  <td colSpan="5" className="text-center py-4 text-slate-500 text-sm">
+                  <td colSpan="5" className="text-center py-8 text-velto-faint text-sm">
                     No transactions found.
                   </td>
                 </tr>

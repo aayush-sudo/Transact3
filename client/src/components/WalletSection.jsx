@@ -23,67 +23,67 @@ const WalletSection = () => {
 
   return (
     <div className="card relative overflow-hidden">
-      {/* Gradient accent */}
-      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-fintech-primary via-fintech-secondary to-fintech-accent" />
+      {/* Lime accent stripe */}
+      <div className="absolute top-0 left-0 right-0 h-1 bg-velto-lime rounded-t-2xl" />
 
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <div className="p-2 bg-fintech-primary/20 rounded-lg">
-            <Wallet className="text-fintech-primary" size={20} />
+          <div className="p-2 bg-velto-forest rounded-xl">
+            <Wallet className="text-velto-lime" size={18} />
           </div>
-          <h3 className="text-lg font-bold text-white">Wallet</h3>
+          <h3 className="text-base font-bold text-velto-ink">Wallet</h3>
         </div>
-        <div className="flex items-center gap-1.5 bg-violet-500/10 text-violet-400 px-3 py-1 rounded-full text-xs font-medium border border-violet-500/20">
-          <Zap size={12} />
+        <div className="flex items-center gap-1.5 bg-velto-surface text-velto-forest px-3 py-1 rounded-full text-xs font-bold border border-velto-surface-dark">
+          <Zap size={11} />
           Polygon
         </div>
       </div>
 
       {/* Balance */}
       <div className="mb-4">
-        <p className="text-slate-400 text-sm mb-1">Total Balance</p>
-        <p className="text-3xl font-bold text-white">
+        <p className="text-velto-muted text-xs font-semibold uppercase tracking-wider mb-1">Total Balance</p>
+        <p className="text-3xl font-bold text-velto-ink">
           ${balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
         </p>
       </div>
 
       {/* Wallet Address */}
       {walletAddress ? (
-        <div className="bg-fintech-darker rounded-lg px-4 py-3 flex items-center justify-between border border-slate-700/50">
+        <div className="bg-velto-surface rounded-xl px-4 py-3 flex items-center justify-between border border-velto-surface-dark">
           <div>
-            <p className="text-xs text-slate-500 mb-0.5">Wallet Address</p>
-            <p className="text-sm text-slate-300 font-mono">{truncateAddress(walletAddress)}</p>
+            <p className="text-xs text-velto-faint mb-0.5 font-medium">Wallet Address</p>
+            <p className="text-sm text-velto-ink font-mono">{truncateAddress(walletAddress)}</p>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={handleCopy}
-              className="p-1.5 hover:bg-slate-700 rounded-md transition-colors text-slate-400 hover:text-white"
+              className="p-1.5 hover:bg-velto-surface-dark rounded-lg transition-colors text-velto-muted hover:text-velto-ink"
               title="Copy"
             >
-              <Copy size={14} />
+              <Copy size={13} />
             </button>
             <a
               href={`https://polygonscan.com/address/${walletAddress}`}
               target="_blank"
               rel="noreferrer"
-              className="p-1.5 hover:bg-slate-700 rounded-md transition-colors text-slate-400 hover:text-white"
+              className="p-1.5 hover:bg-velto-surface-dark rounded-lg transition-colors text-velto-muted hover:text-velto-ink"
               title="View on Explorer"
             >
-              <ExternalLink size={14} />
+              <ExternalLink size={13} />
             </a>
           </div>
         </div>
       ) : (
         <button
           onClick={connectWallet}
-          className="w-full btn-primary flex items-center justify-center gap-2"
+          className="w-full btn-primary flex items-center justify-center gap-2 text-sm"
         >
-          <Wallet size={16} />
+          <Wallet size={15} />
           Connect Wallet
         </button>
       )}
       {copied && (
-        <p className="text-xs text-fintech-primary mt-2 text-center animate-pulse">Address copied!</p>
+        <p className="text-xs text-velto-forest mt-2 text-center font-semibold">Address copied!</p>
       )}
     </div>
   );

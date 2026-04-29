@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Shield, AlertTriangle, CheckCircle, XCircle, Ban, Eye, Filter } from 'lucide-react';
+import { Shield, AlertTriangle, CheckCircle, XCircle, Ban } from 'lucide-react';
 
 const mockAdminData = [
   { id: 'TX001', user: 'Alice Johnson', email: 'alice@email.com', amount: 500, risk: 12, status: 'approved', country: 'US → UK', date: '2026-04-26' },
@@ -15,9 +15,9 @@ const mockAdminData = [
 ];
 
 const statusConfig = {
-  approved: { icon: CheckCircle, color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/20' },
-  flagged: { icon: AlertTriangle, color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20' },
-  blocked: { icon: Ban, color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20' },
+  approved: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-200' },
+  flagged:  { icon: AlertTriangle, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' },
+  blocked:  { icon: Ban, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200' },
 };
 
 const Admin = () => {
@@ -37,51 +37,46 @@ const Admin = () => {
   };
 
   const getRiskColor = (risk) => {
-    if (risk <= 33) return 'text-green-400';
-    if (risk <= 66) return 'text-yellow-400';
-    return 'text-red-400';
-  };
-
-  const getRiskBg = (risk) => {
-    if (risk <= 33) return 'bg-green-400';
-    if (risk <= 66) return 'bg-yellow-400';
-    return 'bg-red-400';
+    if (risk <= 33) return { text: 'text-green-600', bar: 'bg-green-400' };
+    if (risk <= 66) return { text: 'text-amber-600', bar: 'bg-amber-400' };
+    return { text: 'text-red-600', bar: 'bg-red-400' };
   };
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-white mb-1 flex items-center gap-3">
-            <Shield size={28} className="text-fintech-accent" />
-            Admin Panel
-          </h1>
-          <p className="text-slate-400">Transaction monitoring & risk oversight</p>
-        </div>
+      <div>
+        <p className="text-xs font-bold tracking-widest text-velto-muted uppercase mb-1">RISK OVERSIGHT</p>
+        <h1 className="text-3xl font-bold text-velto-ink flex items-center gap-3">
+          <div className="p-2 bg-velto-forest rounded-xl">
+            <Shield size={22} className="text-velto-lime" />
+          </div>
+          Admin Panel
+        </h1>
+        <p className="text-velto-muted mt-1">Transaction monitoring & risk oversight</p>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="card !p-4">
-          <p className="text-xs text-slate-500 mb-1">Total Transactions</p>
-          <p className="text-2xl font-bold text-white">{stats.total}</p>
+          <p className="text-xs font-bold text-velto-faint uppercase tracking-wider mb-1">Total</p>
+          <p className="text-2xl font-bold text-velto-ink">{stats.total}</p>
         </div>
-        <div className="card !p-4">
-          <p className="text-xs text-slate-500 mb-1">Total Volume</p>
+        <div className="bg-velto-forest rounded-2xl p-4">
+          <p className="text-xs font-bold text-velto-lime/60 uppercase tracking-wider mb-1">Volume</p>
           <p className="text-2xl font-bold text-white">${stats.totalVolume.toLocaleString()}</p>
         </div>
-        <div className="card !p-4">
-          <p className="text-xs text-green-400 mb-1">Approved</p>
-          <p className="text-2xl font-bold text-green-400">{stats.approved}</p>
+        <div className="bg-green-50 rounded-2xl p-4 border border-green-200">
+          <p className="text-xs font-bold text-green-500 uppercase tracking-wider mb-1">Approved</p>
+          <p className="text-2xl font-bold text-green-600">{stats.approved}</p>
         </div>
-        <div className="card !p-4">
-          <p className="text-xs text-yellow-400 mb-1">Flagged</p>
-          <p className="text-2xl font-bold text-yellow-400">{stats.flagged}</p>
+        <div className="bg-amber-50 rounded-2xl p-4 border border-amber-200">
+          <p className="text-xs font-bold text-amber-500 uppercase tracking-wider mb-1">Flagged</p>
+          <p className="text-2xl font-bold text-amber-600">{stats.flagged}</p>
         </div>
-        <div className="card !p-4">
-          <p className="text-xs text-red-400 mb-1">Blocked</p>
-          <p className="text-2xl font-bold text-red-400">{stats.blocked}</p>
+        <div className="bg-red-50 rounded-2xl p-4 border border-red-200">
+          <p className="text-xs font-bold text-red-500 uppercase tracking-wider mb-1">Blocked</p>
+          <p className="text-2xl font-bold text-red-600">{stats.blocked}</p>
         </div>
       </div>
 
@@ -91,10 +86,10 @@ const Admin = () => {
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all capitalize ${
+            className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all capitalize ${
               filter === f
-                ? 'bg-fintech-primary text-white'
-                : 'bg-fintech-card text-slate-400 hover:text-white border border-slate-700'
+                ? 'bg-velto-forest text-velto-lime'
+                : 'bg-white text-velto-muted hover:text-velto-ink border border-velto-surface hover:bg-velto-surface'
             }`}
           >
             {f === 'all' ? `All (${stats.total})` : `${f} (${stats[f]})`}
@@ -103,65 +98,64 @@ const Admin = () => {
       </div>
 
       {/* Table */}
-      <div className="card overflow-x-auto">
+      <div className="card overflow-x-auto p-0">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-xs text-slate-500 border-b border-slate-700">
-              <th className="text-left pb-3 font-medium">User</th>
-              <th className="text-left pb-3 font-medium">Route</th>
-              <th className="text-right pb-3 font-medium">Amount</th>
-              <th className="text-center pb-3 font-medium">Risk Score</th>
-              <th className="text-center pb-3 font-medium">Status</th>
-              <th className="text-left pb-3 font-medium">Date</th>
+            <tr className="text-xs text-velto-faint border-b border-velto-surface bg-velto-surface">
+              <th className="text-left py-3 px-4 font-bold uppercase tracking-wider">User</th>
+              <th className="text-left py-3 px-4 font-bold uppercase tracking-wider">Route</th>
+              <th className="text-right py-3 px-4 font-bold uppercase tracking-wider">Amount</th>
+              <th className="text-center py-3 px-4 font-bold uppercase tracking-wider">Risk Score</th>
+              <th className="text-center py-3 px-4 font-bold uppercase tracking-wider">Status</th>
+              <th className="text-left py-3 px-4 font-bold uppercase tracking-wider">Date</th>
             </tr>
           </thead>
           <tbody>
             {filteredData.map((tx) => {
               const status = statusConfig[tx.status];
               const StatusIcon = status.icon;
+              const risk = getRiskColor(tx.risk);
               return (
                 <tr
                   key={tx.id}
-                  className={`border-b border-slate-700/50 transition-colors ${
+                  className={`border-b border-velto-surface transition-colors ${
                     tx.status === 'blocked'
-                      ? 'bg-red-500/5 hover:bg-red-500/10'
+                      ? 'bg-red-50/50 hover:bg-red-50'
                       : tx.status === 'flagged'
-                      ? 'bg-yellow-500/5 hover:bg-yellow-500/10'
-                      : 'hover:bg-fintech-darker/50'
+                      ? 'bg-amber-50/50 hover:bg-amber-50'
+                      : 'hover:bg-velto-surface/40'
                   }`}
                 >
-                  <td className="py-3">
+                  <td className="py-3 px-4">
                     <div>
-                      <p className="text-white font-medium">{tx.user}</p>
-                      <p className="text-xs text-slate-500">{tx.email}</p>
+                      <p className="text-velto-ink font-semibold">{tx.user}</p>
+                      <p className="text-xs text-velto-faint">{tx.email}</p>
                     </div>
                   </td>
-                  <td className="py-3 text-slate-400 text-xs font-medium">{tx.country}</td>
-                  <td className="py-3 text-right text-white font-semibold">
+                  <td className="py-3 px-4 text-velto-muted text-xs font-semibold">{tx.country}</td>
+                  <td className="py-3 px-4 text-right text-velto-ink font-bold">
                     ${tx.amount.toLocaleString()}
                   </td>
-                  <td className="py-3">
+                  <td className="py-3 px-4">
                     <div className="flex items-center justify-center gap-2">
-                      <div className="w-16 bg-slate-700 rounded-full h-1.5">
+                      <div className="w-16 bg-velto-surface-dark rounded-full h-1.5">
                         <div
-                          className={`h-1.5 rounded-full ${getRiskBg(tx.risk)}`}
+                          className={`h-1.5 rounded-full ${risk.bar}`}
                           style={{ width: `${tx.risk}%` }}
                         />
                       </div>
-                      <span className={`text-xs font-bold ${getRiskColor(tx.risk)}`}>
-                        {tx.risk}
-                      </span>
+                      <span className={`text-xs font-bold ${risk.text}`}>{tx.risk}</span>
                     </div>
                   </td>
-                  <td className="py-3">
+                  <td className="py-3 px-4">
                     <div
-                      className={`flex items-center justify-center gap-1 ${status.bg} ${status.color} px-2.5 py-1 rounded-full text-xs font-medium w-fit mx-auto border ${status.border}`}
+                      className={`flex items-center justify-center gap-1 ${status.bg} ${status.color} px-2.5 py-1 rounded-full text-xs font-semibold w-fit mx-auto border ${status.border}`}
                     >
-                      <StatusIcon size={12} />
+                      <StatusIcon size={11} />
                       {tx.status.charAt(0).toUpperCase() + tx.status.slice(1)}
                     </div>
                   </td>
-                  <td className="py-3 text-slate-400 text-xs">{tx.date}</td>
+                  <td className="py-3 px-4 text-velto-faint text-xs font-medium">{tx.date}</td>
                 </tr>
               );
             })}

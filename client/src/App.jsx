@@ -11,10 +11,10 @@ import Admin from './pages/Admin';
 const PrivateRoute = ({ children }) => {
   const { user, loading } = React.useContext(AuthContext);
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center bg-velto-offwhite">
       <div className="flex flex-col items-center gap-3">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-fintech-primary" />
-        <p className="text-slate-400 text-sm">Loading...</p>
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-velto-lime" />
+        <p className="text-velto-muted text-sm font-medium">Loading...</p>
       </div>
     </div>
   );

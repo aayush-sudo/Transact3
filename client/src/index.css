@@ -1,43 +1,50 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   body {
-    @apply bg-fintech-darker text-fintech-text font-sans antialiased;
+    @apply bg-velto-offwhite text-velto-ink font-sans antialiased;
   }
 }
 
 @layer components {
+  /* ── Cards ─────────────────────────────────────────────── */
   .card {
-    @apply bg-fintech-card rounded-xl p-6 shadow-lg border border-slate-700/50 backdrop-blur-sm;
+    @apply bg-white rounded-2xl p-6 shadow-sm border border-velto-surface;
   }
+  .card-dark {
+    @apply bg-velto-forest rounded-2xl p-6 shadow-lg border border-velto-forest-light;
+  }
+
+  /* ── Inputs ─────────────────────────────────────────────── */
   .input-field {
-    @apply w-full bg-fintech-dark border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-fintech-primary focus:border-transparent transition-all;
+    @apply w-full bg-velto-surface border border-velto-surface-dark rounded-xl px-4 py-2.5
+           text-velto-ink placeholder-velto-faint
+           focus:outline-none focus:ring-2 focus:ring-velto-lime focus:border-transparent
+           transition-all;
   }
+
+  /* ── Buttons ────────────────────────────────────────────── */
   .btn-primary {
-    @apply bg-fintech-primary hover:bg-emerald-600 text-white font-medium py-2 px-4 rounded-lg transition-all shadow-md shadow-emerald-500/20 active:scale-95;
+    @apply bg-velto-forest text-velto-lime font-semibold py-2.5 px-5 rounded-xl
+           hover:bg-velto-forest-mid transition-all shadow-sm active:scale-95;
+  }
+  .btn-lime {
+    @apply bg-velto-lime text-velto-forest font-semibold py-2.5 px-5 rounded-xl
+           hover:bg-velto-lime-dark transition-all shadow-sm active:scale-95;
   }
   .btn-secondary {
-    @apply bg-fintech-card hover:bg-slate-700 text-white font-medium py-2 px-4 rounded-lg border border-slate-600 transition-all active:scale-95;
+    @apply bg-velto-surface text-velto-ink font-medium py-2.5 px-5 rounded-xl
+           border border-velto-surface-dark hover:bg-velto-surface-dark
+           transition-all active:scale-95;
   }
 }
 
-/* Custom Scrollbar for modern look */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #020617; 
-}
-
-::-webkit-scrollbar-thumb {
-  background: #334155; 
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #475569; 
-}
+/* ── Custom Scrollbar ───────────────────────────────────── */
+::-webkit-scrollbar        { width: 6px; height: 6px; }
+::-webkit-scrollbar-track  { background: #E8E8E4; }
+::-webkit-scrollbar-thumb  { background: #AEEA00; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #C6FF00; }

@@ -14,10 +14,11 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center mb-2">
+      {/* Page header */}
+      <div className="flex justify-between items-end mb-2">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-1">Dashboard</h1>
-          <p className="text-slate-400">Secure Cross-Border Digital Payment System</p>
+          <p className="text-xs font-bold tracking-widest text-velto-muted uppercase mb-1">DIGITAL WALLET & FINANCIAL SERVICES</p>
+          <h1 className="text-3xl font-bold text-velto-ink">Dashboard</h1>
         </div>
       </div>
 
