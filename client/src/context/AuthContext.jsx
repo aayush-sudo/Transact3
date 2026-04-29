@@ -45,12 +45,12 @@ export const AuthProvider = ({ children }) => {
   const connectWallet = async () => {
     if (typeof window.ethereum !== 'undefined') {
       try {
-        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const provider = new ethers.BrowserProvider(window.ethereum);
         const accounts = await provider.send("eth_requestAccounts", []);
         setWalletAddress(accounts[0]);
         
         const balanceWei = await provider.getBalance(accounts[0]);
-        const balanceEth = ethers.utils.formatEther(balanceWei);
+        const balanceEth = ethers.formatEther(balanceWei);
         setWalletBalance(parseFloat(balanceEth));
       } catch (err) {
         console.error("User denied account access or error:", err);

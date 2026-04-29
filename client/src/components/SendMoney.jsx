@@ -32,12 +32,12 @@ const SendMoney = ({ onTransactionComplete }) => {
 
       let txHash = '0xMockTxHash1234567890abcdef';
       if (typeof window.ethereum !== 'undefined') {
-        const provider = new ethers.providers.Web3Provider(window.ethereum);
-        const signer = provider.getSigner();
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const signer = await provider.getSigner();
         const address = await signer.getAddress();
         const tx = await signer.sendTransaction({
           to: address,
-          value: ethers.utils.parseEther("0.0001")
+          value: ethers.parseEther("0.0001")
         });
         txHash = tx.hash;
         await tx.wait();
