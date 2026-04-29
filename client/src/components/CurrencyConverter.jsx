@@ -97,9 +97,11 @@ const CurrencyConverter = ({ base, setBase, target, setTarget }) => {
             <p className="text-4xl font-bold text-velto-lime">
               {result.convertedAmount} {target}
             </p>
-            <p className="text-xs text-velto-lime/50 mt-2">
-              1 {base} = {result.rate} {target}
-            </p>
+            {Number(amount) !== 1 && (
+              <p className="text-xs text-velto-lime/50 mt-2">
+                1 {base} = {result.rate} {target}
+              </p>
+            )}
           </>
         ) : null}
       </div>

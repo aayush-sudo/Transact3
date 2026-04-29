@@ -39,9 +39,9 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Row 3: Blockchain Viewer + Transaction History */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <BlockchainViewer newTransaction={lastTx} />
+      {/* Row 3: Transaction History (Blockchain Viewer hidden) */}
+      <div className="grid grid-cols-1 gap-6">
+        {/* <BlockchainViewer newTransaction={lastTx} /> */}
         <TransactionHistory />
       </div>
     </div>
