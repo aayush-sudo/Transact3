@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Hash, ChevronRight, Pickaxe, Loader, Clock, ArrowRight } from 'lucide-react';
+import api from '../services/api';
 
 const generateHash = () => {
   const chars = '0123456789abcdef';
@@ -8,60 +9,39 @@ const generateHash = () => {
   return hash;
 };
 
-const initialBlocks = [
-  {
-    index: 0,
-    hash: '0x0000000000000000000000000000000000000000000000000000000000000000',
-    previousHash: '0x0000000000000000000000000000000000000000000000000000000000000000',
-    transactions: ['Genesis Block'],
-    timestamp: new Date('2025-01-01').toISOString(),
-    nonce: 0,
-  },
-  {
-    index: 1,
-    hash: generateHash(),
-    previousHash: '0x0000000000000000000000000000000000000000000000000000000000000000',
-    transactions: ['TX: 0xabc...→ 0xdef... ($500)', 'TX: 0x123...→ 0x456... ($250)'],
-    timestamp: new Date('2025-01-02').toISOString(),
-    nonce: 14523,
-  },
-  {
-    index: 2,
-    hash: generateHash(),
-    previousHash: '',
-    transactions: ['TX: 0xfed...→ 0xcba... ($1200)'],
-    timestamp: new Date('2025-01-03').toISOString(),
-    nonce: 28341,
-  },
-];
-
-// Fix previousHash chain
-initialBlocks[2].previousHash = initialBlocks[1].hash;
-
 const BlockchainViewer = ({ newTransaction }) => {
-  const [blocks, setBlocks] = useState(initialBlocks);
+  const [blocks, setBlocks] = useState([]);
   const [mining, setMining] = useState(false);
   const [expandedBlock, setExpandedBlock] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchBlockchain();
+    const interval = setInterval(fetchBlockchain, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchBlockchain = async () => {
+    try {
+      const { data } = await api.get('/blockchain');
+      setBlocks(data);
+    } catch (err) {
+      console.error("Failed to fetch blockchain", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const mineBlock = async () => {
     setMining(true);
-    // Simulate mining delay
-    await new Promise((r) => setTimeout(r, 2500));
-
-    const lastBlock = blocks[blocks.length - 1];
-    const newBlock = {
-      index: lastBlock.index + 1,
-      hash: generateHash(),
-      previousHash: lastBlock.hash,
-      transactions: newTransaction
-        ? [`TX: ${newTransaction.from?.slice(0, 8)}...→ ${newTransaction.to?.slice(0, 8)}... ($${newTransaction.amount})`]
-        : [`TX: ${generateHash().slice(0, 10)}...→ ${generateHash().slice(0, 10)}... ($${(Math.random() * 1000).toFixed(2)})`],
-      timestamp: new Date().toISOString(),
-      nonce: Math.floor(Math.random() * 100000),
-    };
-
-    setBlocks((prev) => [...prev, newBlock]);
-    setMining(false);
+    try {
+      await api.get('/mine');
+      await fetchBlockchain();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setMining(false);
+    }
   };
 
   const truncateHash = (hash) => `${hash.slice(0, 10)}...${hash.slice(-6)}`;
@@ -176,7 +156,7 @@ const BlockchainViewer = ({ newTransaction }) => {
                           key={j}
                           className="bg-slate-800 rounded px-2 py-1 text-slate-300 font-mono"
                         >
-                          {tx}
+                          {typeof tx === 'string' ? tx : `TX: ${tx.sender?.slice(0, 8)}...→ ${tx.receiver?.slice(0, 8)}... (${tx.amount})`}
                         </li>
                       ))}
                     </ul>
