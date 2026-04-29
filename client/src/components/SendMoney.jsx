@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Send, CheckCircle, XCircle, Loader } from 'lucide-react';
+import { ethers } from 'ethers';
 import api from '../services/api';
 import TransactionStepper from './TransactionStepper';
 
@@ -29,37 +30,54 @@ const SendMoney = ({ onTransactionComplete }) => {
     try {
       // Step 1: Initiated
       setCurrentStep(1);
-      await new Promise((r) => setTimeout(r, 1200));
+      
+      let txHash = '0xMockTxHash1234567890abcdef';
+      // Trigger Web3 MetaMask Transaction
+      if (typeof window.ethereum !== 'undefined') {
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const signer = provider.getSigner();
+        const address = await signer.getAddress();
+        
+        // Send a nominal transaction or value based on amount
+        const tx = await signer.sendTransaction({
+          to: address, // sending to self to demonstrate flow
+          value: ethers.utils.parseEther("0.0001") // Mock small amount
+        });
+        txHash = tx.hash;
+        await tx.wait();
+      }
 
       // Step 2: Validated
       setCurrentStep(2);
-      await new Promise((r) => setTimeout(r, 1000));
+      await new Promise((r) => setTimeout(r, 500));
 
-      // Step 3: AI Decision (Backend API Call happens here)
+      // Step 3: AI Decision (Backend API Call)
       setCurrentStep(3);
       const { data } = await api.post('/transaction/send', {
         receiverEmail: receiver,
         amount: Number(amount),
         currency,
         receiverCurrency,
+        txHash, // Save the actual web3 transaction hash
       });
 
       // Step 4: Risk Check
       setCurrentStep(4);
-      await new Promise((r) => setTimeout(r, 1000));
+      await new Promise((r) => setTimeout(r, 500));
 
       // Step 5: Confirmed
       setCurrentStep(5);
-      await new Promise((r) => setTimeout(r, 800));
+      await new Promise((r) => setTimeout(r, 500));
 
       if (data.success) {
-        setTxResult(data.data);
+        setTxResult({ ...data.data, txHash });
         if (onTransactionComplete) {
-          onTransactionComplete(data.data);
+          onTransactionComplete({ ...data.data, txHash });
         }
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Transaction failed');
+      console.error(err);
+      setError(err.response?.data?.message || err.message || 'Transaction failed');
       setCurrentStep(0);
     } finally {
       setProcessing(false);
@@ -188,6 +206,14 @@ const SendMoney = ({ onTransactionComplete }) => {
                   ~{txResult.convertedAmount?.toLocaleString()} {txResult.receiverCurrency}
                 </span>
               </div>
+              {txResult.txHash && (
+                <div className="flex justify-between text-sm items-center mt-2 border-t border-slate-700/50 pt-2">
+                  <span className="text-slate-400">Blockchain Tx</span>
+                  <a href={`https://polygonscan.com/tx/${txResult.txHash}`} target="_blank" rel="noreferrer" className="text-fintech-primary font-mono text-xs hover:underline">
+                    {txResult.txHash.slice(0, 8)}...{txResult.txHash.slice(-6)}
+                  </a>
+                </div>
+              )}
             </div>
 
             <button onClick={reset} className="w-full btn-secondary mt-2">

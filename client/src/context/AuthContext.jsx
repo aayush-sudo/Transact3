@@ -1,4 +1,5 @@
 import React, { createContext, useState, useEffect } from 'react';
+import { ethers } from 'ethers';
 import api from '../services/api';
 
 export const AuthContext = createContext();
@@ -7,6 +8,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [walletAddress, setWalletAddress] = useState(null);
+  const [walletBalance, setWalletBalance] = useState(0);
 
   useEffect(() => {
     const checkLoggedIn = async () => {
@@ -43,15 +45,18 @@ export const AuthProvider = ({ children }) => {
   const connectWallet = async () => {
     if (typeof window.ethereum !== 'undefined') {
       try {
-        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const accounts = await provider.send("eth_requestAccounts", []);
         setWalletAddress(accounts[0]);
+        
+        const balanceWei = await provider.getBalance(accounts[0]);
+        const balanceEth = ethers.utils.formatEther(balanceWei);
+        setWalletBalance(parseFloat(balanceEth));
       } catch (err) {
-        console.error("User denied account access");
-        setWalletAddress('0xMockWalletAddress1234567890abcdef');
+        console.error("User denied account access or error:", err);
       }
     } else {
-      console.log('MetaMask not installed; using mock wallet.');
-      setWalletAddress('0xMockWalletAddress1234567890abcdef');
+      console.log('MetaMask not installed.');
     }
   };
 
@@ -59,10 +64,11 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('token');
     setUser(null);
     setWalletAddress(null);
+    setWalletBalance(0);
   };
 
   return (
-    <AuthContext.Provider value={{ user, setUser, loading, login, register, logout, walletAddress, connectWallet }}>
+    <AuthContext.Provider value={{ user, setUser, loading, login, register, logout, walletAddress, walletBalance, connectWallet }}>
       {children}
     </AuthContext.Provider>
   );

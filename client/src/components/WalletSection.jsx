@@ -3,10 +3,10 @@ import { AuthContext } from '../context/AuthContext';
 import { Wallet, Copy, ExternalLink, Zap } from 'lucide-react';
 
 const WalletSection = () => {
-  const { user, walletAddress, connectWallet } = useContext(AuthContext);
+  const { user, walletAddress, walletBalance, connectWallet } = useContext(AuthContext);
   const [copied, setCopied] = React.useState(false);
 
-  const balance = user?.walletBalance ?? 10000;
+  const balance = walletBalance || user?.walletBalance || 0;
 
   const handleCopy = () => {
     if (walletAddress) {
