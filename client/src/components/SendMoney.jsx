@@ -4,7 +4,7 @@ import { ethers } from 'ethers';
 import api from '../services/api';
 import TransactionStepper from './TransactionStepper';
 
-const SendMoney = ({ onTransactionComplete }) => {
+const SendMoney = ({ onTransactionComplete, onAmountChange }) => {
   const [receiver, setReceiver] = useState('');
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState('USD');
@@ -34,14 +34,15 @@ const SendMoney = ({ onTransactionComplete }) => {
       let txHash = '0xMockTxHash1234567890abcdef';
       // Trigger Web3 MetaMask Transaction
       if (typeof window.ethereum !== 'undefined') {
-        const provider = new ethers.providers.Web3Provider(window.ethereum);
-        const signer = provider.getSigner();
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        await provider.send("eth_requestAccounts", []); // Make sure accounts are requested
+        const signer = await provider.getSigner(); // getSigner is async in v6
         const address = await signer.getAddress();
         
         // Send a nominal transaction or value based on amount
         const tx = await signer.sendTransaction({
           to: address, // sending to self to demonstrate flow
-          value: ethers.utils.parseEther("0.0001") // Mock small amount
+          value: ethers.parseEther("0.0001") // Mock small amount (ethers.parseEther in v6)
         });
         txHash = tx.hash;
         await tx.wait();
@@ -129,7 +130,10 @@ const SendMoney = ({ onTransactionComplete }) => {
                   <input
                     type="number"
                     value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
+                    onChange={(e) => {
+                      setAmount(e.target.value);
+                      if (onAmountChange) onAmountChange(e.target.value);
+                    }}
                     placeholder="0.00"
                     className="bg-transparent text-white px-3 py-2 outline-none w-full border-none m-0 focus:ring-0"
                     disabled={processing}

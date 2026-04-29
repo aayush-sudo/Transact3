@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Brain, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
 import api from '../services/api';
 
-const AiInsights = ({ base = 'USD', target = 'INR' }) => {
+const AiInsights = ({ base = 'USD', target = 'INR', currentAmount = 0 }) => {
   const [currentRate, setCurrentRate] = useState(null);
   const [predictedRate, setPredictedRate] = useState(null);
   const [suggestion, setSuggestion] = useState('');
@@ -31,14 +31,22 @@ const AiInsights = ({ base = 'USD', target = 'INR' }) => {
         setPredictedRate(mockRate * (1 + fluctuation));
         setSuggestion(Math.random() > 0.5 ? 'Convert Now' : 'Wait');
       }
-      // Generate risk score
-      setRiskScore(Math.floor(Math.random() * 100));
       setLoading(false);
     };
     fetchInsights();
     const interval = setInterval(fetchInsights, 30000);
     return () => clearInterval(interval);
   }, [base, target]);
+
+  useEffect(() => {
+    let score = 10; // Base score (similar to backend WEIGHTS.BASE = 0.1 -> 10)
+    if (currentAmount > 10000) {
+      score += 50; // High amount penalty
+    } else if (currentAmount > 0) {
+      score += (currentAmount / 10000) * 40; // Scales up to 40 based on amount
+    }
+    setRiskScore(Math.floor(Math.min(score, 100)));
+  }, [currentAmount]);
 
   const getRiskColor = (score) => {
     if (score <= 33) return { color: 'text-green-400', bg: 'bg-green-400', label: 'Low Risk', border: 'border-green-500/30' };

@@ -4,13 +4,13 @@ import HistoricalChart from '../components/HistoricalChart';
 import WalletSection from '../components/WalletSection';
 import AiInsights from '../components/AiInsights';
 import SendMoney from '../components/SendMoney';
-import BlockchainViewer from '../components/BlockchainViewer';
 import TransactionHistory from '../components/TransactionHistory';
 
 const Dashboard = () => {
   const [base, setBase] = useState('USD');
   const [target, setTarget] = useState('INR');
   const [lastTx, setLastTx] = useState(null);
+  const [currentAmount, setCurrentAmount] = useState(0);
 
   return (
     <div className="space-y-6">
@@ -25,22 +25,21 @@ const Dashboard = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <WalletSection />
         <CurrencyConverter base={base} setBase={setBase} target={target} setTarget={setTarget} />
-        <AiInsights base={base} target={target} />
+        <AiInsights base={base} target={target} currentAmount={currentAmount} />
       </div>
 
       {/* Row 2: Send Money + Historical Chart */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1">
-          <SendMoney onTransactionComplete={(tx) => setLastTx(tx)} />
+          <SendMoney onTransactionComplete={(tx) => setLastTx(tx)} onAmountChange={(val) => setCurrentAmount(Number(val) || 0)} />
         </div>
         <div className="lg:col-span-2">
           <HistoricalChart base={base} setBase={setBase} target={target} setTarget={setTarget} />
         </div>
       </div>
 
-      {/* Row 3: Blockchain Viewer + Transaction History */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <BlockchainViewer newTransaction={lastTx} />
+      {/* Row 3: Transaction History */}
+      <div className="grid grid-cols-1 gap-6">
         <TransactionHistory />
       </div>
     </div>
