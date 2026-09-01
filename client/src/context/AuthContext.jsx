@@ -60,6 +60,31 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  useEffect(() => {
+    if (typeof window.ethereum !== 'undefined') {
+      const handleAccountsChanged = (accounts) => {
+        if (accounts.length > 0) {
+          setWalletAddress(accounts[0]);
+          // Refresh balance
+          const provider = new ethers.BrowserProvider(window.ethereum);
+          provider.getBalance(accounts[0]).then(balanceWei => {
+            setWalletBalance(parseFloat(ethers.formatEther(balanceWei)));
+          });
+        } else {
+          setWalletAddress(null);
+          setWalletBalance(0);
+        }
+      };
+
+      window.ethereum.on('accountsChanged', handleAccountsChanged);
+      window.ethereum.on('chainChanged', () => window.location.reload());
+
+      return () => {
+        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+      };
+    }
+  }, []);
+
   const logout = () => {
     localStorage.removeItem('token');
     setUser(null);
