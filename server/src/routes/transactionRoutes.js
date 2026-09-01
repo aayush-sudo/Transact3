@@ -1,9 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { sendTransaction, getTransactionHistory } = require('../controllers/transactionController');
-const { protect } = require('../middleware/authMiddleware');
+const transactionController = require('../controllers/transactionController');
+const { protect } = require('../middleware/auth');
+const { validatePaymentQuoteRequest, validatePaymentExecuteRequest } = require('../middleware/validation');
+const { checkIdempotency } = require('../middleware/idempotency');
 
-router.post('/send', protect, sendTransaction);
-router.get('/history', protect, getTransactionHistory);
+router.post('/quote', protect, validatePaymentQuoteRequest, transactionController.createTransactionQuote);
+router.post('/send', protect, checkIdempotency, validatePaymentExecuteRequest, transactionController.executeTransaction);
+router.get('/history', protect, transactionController.getTransactionHistory);
 
 module.exports = router;

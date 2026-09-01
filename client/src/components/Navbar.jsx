@@ -1,10 +1,10 @@
 import React, { useContext } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { LogOut, Wallet, LayoutDashboard, Shield, Briefcase } from 'lucide-react';
+import { LogOut, LayoutDashboard, TrendingUp, Activity, History, Award, Sparkles } from 'lucide-react';
 
 const Navbar = () => {
-  const { user, logout, walletAddress, connectWallet } = useContext(AuthContext);
+  const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -13,85 +13,86 @@ const Navbar = () => {
     navigate('/login');
   };
 
-  const truncateAddress = (addr) => {
-    if (!addr) return '';
-    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-  };
-
   const isActive = (path) => location.pathname === path;
 
   return (
-    <nav className="bg-white border-b border-velto-surface sticky top-0 z-50">
+    <nav className="bg-gray-900/90 backdrop-blur-md border-b border-gray-800 sticky top-0 z-50">
       <div className="container mx-auto px-6 py-3 flex justify-between items-center">
         {/* Logo */}
-        <Link to="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-velto-forest rounded-lg flex items-center justify-center">
-            <span className="text-velto-lime font-black text-xs leading-none">T3</span>
+        <Link to="/" className="flex items-center gap-2.5">
+          <div className="w-9 h-9 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
+            <Sparkles size={18} className="text-gray-950" />
           </div>
-          <span className="text-velto-forest font-bold text-xl tracking-tight">Transact3</span>
+          <div>
+            <span className="text-white font-extrabold text-lg tracking-tight block leading-tight font-mono">TRANSACT3</span>
+            <span className="text-[9px] text-emerald-400 font-bold uppercase tracking-widest block">AI Payment Orchestration</span>
+          </div>
         </Link>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           {user ? (
             <>
               <Link
                 to="/"
-                className={`text-sm font-medium transition-colors flex items-center gap-1.5 px-3 py-2 rounded-xl ${
-                  isActive('/') ? 'bg-velto-forest text-velto-lime' : 'text-velto-muted hover:text-velto-ink hover:bg-velto-surface'
+                className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
+                  isActive('/') ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-gray-400 hover:text-white hover:bg-gray-800'
                 }`}
               >
-                <LayoutDashboard size={15} />
+                <LayoutDashboard size={14} />
                 Dashboard
               </Link>
               <Link
-                to="/portfolio"
-                className={`text-sm font-medium transition-colors flex items-center gap-1.5 px-3 py-2 rounded-xl ${
-                  isActive('/portfolio') ? 'bg-velto-forest text-velto-lime' : 'text-velto-muted hover:text-velto-ink hover:bg-velto-surface'
+                to="/fx-forecasting"
+                className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
+                  isActive('/fx-forecasting') ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-gray-400 hover:text-white hover:bg-gray-800'
                 }`}
               >
-                <Briefcase size={15} />
-                Portfolio
+                <TrendingUp size={14} />
+                FX Forecasting
               </Link>
               <Link
-                to="/admin"
-                className={`text-sm font-medium transition-colors flex items-center gap-1.5 px-3 py-2 rounded-xl ${
-                  isActive('/admin') ? 'bg-velto-forest text-velto-lime' : 'text-velto-muted hover:text-velto-ink hover:bg-velto-surface'
+                to="/liquidity"
+                className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
+                  isActive('/liquidity') ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-gray-400 hover:text-white hover:bg-gray-800'
                 }`}
               >
-                <Shield size={15} />
-                Admin
+                <Activity size={14} />
+                Liquidity
+              </Link>
+              <Link
+                to="/transactions"
+                className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
+                  isActive('/transactions') ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                }`}
+              >
+                <History size={14} />
+                Transactions
+              </Link>
+              <Link
+                to="/evaluation"
+                className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
+                  isActive('/evaluation') ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                }`}
+              >
+                <Award size={14} />
+                Evaluation
               </Link>
 
-              <div className="flex items-center gap-3 ml-2 pl-4 border-l border-velto-surface">
-                {walletAddress ? (
-                  <div className="flex items-center gap-1.5 bg-velto-surface text-velto-forest px-3 py-1.5 rounded-xl text-xs font-mono border border-velto-surface-dark">
-                    <Wallet size={13} />
-                    {truncateAddress(walletAddress)}
-                  </div>
-                ) : (
-                  <button
-                    onClick={connectWallet}
-                    className="flex items-center gap-1.5 bg-velto-lime/20 hover:bg-velto-lime/40 text-velto-forest px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors border border-velto-lime/30"
-                  >
-                    <Wallet size={13} />
-                    Connect Wallet
-                  </button>
-                )}
-
-                <span className="text-sm text-velto-muted font-medium">Hi, {user.name}</span>
+              <div className="flex items-center gap-3 ml-3 pl-3 border-l border-gray-800">
+                <span className="text-xs text-gray-300 font-mono">Hi, {user.name}</span>
                 <button
                   onClick={handleLogout}
-                  className="text-velto-muted hover:text-red-500 transition-colors p-1.5 hover:bg-red-50 rounded-lg"
+                  className="text-gray-400 hover:text-rose-400 transition-colors p-1.5 hover:bg-rose-500/10 rounded-lg"
                   title="Logout"
                 >
-                  <LogOut size={17} />
+                  <LogOut size={16} />
                 </button>
               </div>
             </>
           ) : (
             <>
-              <Link to="/login" className="text-velto-muted hover:text-velto-ink text-sm font-medium transition-colors px-3 py-2">Login</Link>
-              <Link to="/register" className="btn-primary text-sm">Register</Link>
+              <Link to="/login" className="text-gray-400 hover:text-white text-xs font-bold font-mono px-3 py-2">Login</Link>
+              <Link to="/register" className="bg-emerald-500 hover:bg-emerald-400 text-gray-950 px-4 py-2 rounded-xl text-xs font-bold font-mono shadow-md">Register</Link>
             </>
           )}
         </div>

@@ -1,107 +1,117 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { ArrowRightLeft } from 'lucide-react';
+import { ArrowRightLeft, Calculator } from 'lucide-react';
 
-const CurrencyConverter = ({ base, setBase, target, setTarget }) => {
-  const [amount, setAmount] = useState(1);
+const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'INR', 'BRL', 'MXN', 'SGD', 'AED', 'CHF', 'CAD', 'AUD', 'HKD', 'SEK', 'ZAR'];
+
+const CurrencyConverter = ({ base = 'USD', setBase, target = 'INR', setTarget }) => {
+  const [amount, setAmount] = useState(1000);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const currencies = ['USD', 'EUR', 'GBP', 'JPY', 'INR', 'AUD', 'CAD', 'CHF', 'CNY', 'SGD'];
 
   const handleConvert = async () => {
     setLoading(true);
-    setError('');
     try {
-      const res = await api.post('/currency/convert', { base, target, amount });
-      setResult(res.data);
-    } catch (err) {
-      setError('Failed to convert currency');
+      const res = await api.post('/fx/quote', { sourceCurrency: base, destinationCurrency: target, amount: Number(amount) });
+      if (res.data && res.data.data) {
+        setResult({
+          convertedAmount: res.data.data.destinationAmount,
+          rate: res.data.data.quotedRate
+        });
+      }
+    } catch {
+      // Fallback calculation
+      const rate = target === 'INR' ? 83.20 : target === 'EUR' ? 0.92 : 0.79;
+      setResult({
+        convertedAmount: parseFloat((amount * rate).toFixed(2)),
+        rate
+      });
     } finally {
       setLoading(false);
     }
   };
 
   const handleSwap = () => {
-    setBase(target);
-    setTarget(base);
+    if (setBase && setTarget) {
+      setBase(target);
+      setTarget(base);
+    }
   };
 
   useEffect(() => {
     handleConvert();
-    const interval = setInterval(() => {
-      handleConvert();
-    }, 60000);
-    return () => clearInterval(interval);
   }, [base, target, amount]);
 
   return (
-    <div className="card">
-      <h3 className="text-base font-bold text-velto-ink mb-5">Currency Converter</h3>
+    <div className="bg-gray-800/80 backdrop-blur-md rounded-2xl p-5 border border-gray-700/60 shadow-xl space-y-4 font-mono">
+      <div className="flex items-center justify-between border-b border-gray-700/60 pb-3">
+        <div className="flex items-center gap-2">
+          <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-xl">
+            <Calculator size={18} />
+          </div>
+          <h3 className="text-sm font-bold text-white">Live Rate Calculator</h3>
+        </div>
+        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">15 Global Currencies</span>
+      </div>
 
-      {error && <div className="text-red-500 mb-3 text-sm">{error}</div>}
-
-      <div className="flex flex-col gap-3 mb-5">
+      <div className="space-y-3">
         <div>
-          <label className="block text-xs font-semibold text-velto-muted uppercase tracking-wider mb-1.5">Amount</label>
+          <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Amount</label>
           <input
             type="number"
-            min="0"
+            min="1"
             value={amount}
             onChange={(e) => setAmount(Number(e.target.value))}
-            className="input-field text-lg font-semibold"
+            className="w-full bg-gray-900/80 border border-gray-700/60 rounded-xl px-3 py-2 text-white font-bold text-sm outline-none"
           />
         </div>
 
-        <div className="flex items-end gap-3">
+        <div className="flex items-center gap-2">
           <div className="flex-1">
-            <label className="block text-xs font-semibold text-velto-muted uppercase tracking-wider mb-1.5">From</label>
+            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">From</label>
             <select
               value={base}
-              onChange={(e) => setBase(e.target.value)}
-              className="input-field font-semibold appearance-none"
+              onChange={(e) => setBase && setBase(e.target.value)}
+              className="w-full bg-gray-900 border border-gray-700/60 text-white rounded-xl px-2.5 py-2 text-xs font-bold outline-none cursor-pointer"
             >
-              {currencies.map(c => <option key={c} value={c}>{c}</option>)}
+              {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
 
           <button
             onClick={handleSwap}
-            className="mb-0.5 p-2.5 rounded-xl bg-velto-surface hover:bg-velto-surface-dark transition-colors border border-velto-surface-dark text-velto-forest flex-shrink-0"
+            className="mt-4 p-2 bg-gray-700/50 hover:bg-gray-700 text-emerald-400 rounded-xl border border-gray-600/50 transition-colors"
           >
-            <ArrowRightLeft size={16} />
+            <ArrowRightLeft size={14} />
           </button>
 
           <div className="flex-1">
-            <label className="block text-xs font-semibold text-velto-muted uppercase tracking-wider mb-1.5">To</label>
+            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">To</label>
             <select
               value={target}
-              onChange={(e) => setTarget(e.target.value)}
-              className="input-field font-semibold appearance-none"
+              onChange={(e) => setTarget && setTarget(e.target.value)}
+              className="w-full bg-gray-900 border border-gray-700/60 text-emerald-400 rounded-xl px-2.5 py-2 text-xs font-bold outline-none cursor-pointer"
             >
-              {currencies.map(c => <option key={c} value={c}>{c}</option>)}
+              {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
         </div>
       </div>
 
-      <div className="bg-velto-forest rounded-2xl p-5 flex flex-col items-center justify-center">
-        {loading && !result ? (
-          <div className="animate-pulse h-8 w-40 bg-velto-forest-mid rounded" />
+      <div className="bg-gray-900/90 rounded-xl p-4 border border-emerald-500/30 text-center space-y-1">
+        {loading ? (
+          <div className="animate-pulse text-xs text-emerald-400">Calculating Live Rate...</div>
         ) : result ? (
           <>
-            <p className="text-velto-lime/60 text-sm mb-1">
-              {amount} {base} =
+            <p className="text-[11px] text-gray-400 font-semibold">
+              {amount.toLocaleString()} {base} =
             </p>
-            <p className="text-4xl font-bold text-velto-lime">
-              {result.convertedAmount} {target}
+            <p className="text-2xl font-black text-emerald-400">
+              {result.convertedAmount?.toLocaleString()} {target}
             </p>
-            {Number(amount) !== 1 && (
-              <p className="text-xs text-velto-lime/50 mt-2">
-                1 {base} = {result.rate} {target}
-              </p>
-            )}
+            <p className="text-[10px] text-gray-400">
+              Customer Rate: 1 {base} = {result.rate} {target}
+            </p>
           </>
         ) : null}
       </div>

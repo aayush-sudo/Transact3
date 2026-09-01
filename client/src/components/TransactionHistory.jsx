@@ -1,12 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowUpDown, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { ArrowUpDown, CheckCircle } from 'lucide-react';
 import api from '../services/api';
-
-const statusConfig = {
-  approved:     { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-200', label: 'Approved' },
-  under_review: { icon: Clock,        color: 'text-amber-600', bg: 'bg-amber-50',  border: 'border-amber-200',  label: 'Under Review' },
-  blocked:      { icon: XCircle,      color: 'text-red-600',   bg: 'bg-red-50',    border: 'border-red-200',    label: 'Blocked' },
-};
 
 const TransactionHistory = () => {
   const [transactions, setTransactions] = useState([]);
@@ -32,74 +26,59 @@ const TransactionHistory = () => {
   }, []);
 
   return (
-    <div className="card">
-      <div className="flex items-center justify-between mb-5">
-        <h3 className="text-base font-bold text-velto-ink flex items-center gap-2">
-          <div className="p-1.5 bg-velto-forest rounded-lg">
-            <ArrowUpDown size={15} className="text-velto-lime" />
+    <div className="bg-gray-800/80 backdrop-blur-md rounded-2xl p-5 border border-gray-700/60 shadow-xl space-y-4 font-mono">
+      <div className="flex items-center justify-between border-b border-gray-700/60 pb-3">
+        <div className="flex items-center gap-2">
+          <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-xl">
+            <ArrowUpDown size={16} />
           </div>
-          Transaction History
-        </h3>
-        <span className="text-xs font-bold text-velto-muted bg-velto-surface px-3 py-1 rounded-full border border-velto-surface-dark">
-          {transactions.length} transactions
+          <h3 className="text-base font-bold text-white">Settlement History</h3>
+        </div>
+        <span className="text-xs font-bold text-gray-400 bg-gray-900 px-3 py-1 rounded-full border border-gray-700">
+          {transactions.length} Records
         </span>
       </div>
 
       <div className="overflow-x-auto">
         {loading ? (
-          <p className="text-velto-faint text-sm">Loading history...</p>
+          <p className="text-gray-400 text-xs">Loading history...</p>
         ) : (
-          <table className="w-full text-sm">
+          <table className="w-full text-xs text-left">
             <thead>
-              <tr className="text-xs text-velto-faint border-b border-velto-surface-dark">
-                <th className="text-left pb-3 font-semibold uppercase tracking-wider">To (Email)</th>
-                <th className="text-right pb-3 font-semibold uppercase tracking-wider">Amount Sent</th>
-                <th className="text-right pb-3 font-semibold uppercase tracking-wider">Converted</th>
-                <th className="text-left pb-3 pl-4 font-semibold uppercase tracking-wider">Date (UTC)</th>
-                <th className="text-center pb-3 font-semibold uppercase tracking-wider">Status</th>
+              <tr className="text-gray-400 border-b border-gray-700/60">
+                <th className="pb-2.5 font-bold uppercase">To (Recipient)</th>
+                <th className="pb-2.5 font-bold uppercase">Rail</th>
+                <th className="pb-2.5 text-right font-bold uppercase">Sent</th>
+                <th className="pb-2.5 text-right font-bold uppercase">Received</th>
+                <th className="pb-2.5 text-right font-bold uppercase">Timestamp</th>
+                <th className="pb-2.5 text-center font-bold uppercase">Status</th>
               </tr>
             </thead>
-            <tbody>
-              {transactions.map((tx) => {
-                const status = statusConfig[tx.status] || statusConfig.blocked;
-                const StatusIcon = status.icon;
-                return (
-                  <tr
-                    key={tx._id}
-                    className="border-b border-velto-surface hover:bg-velto-surface/60 transition-colors"
-                  >
-                    <td className="py-3 font-mono text-xs text-velto-muted">
-                      {tx.receiver?.email}
-                    </td>
-                    <td className="py-3 text-right text-velto-ink font-semibold">
-                      {tx.amount?.toLocaleString()}
-                      <span className="text-velto-faint ml-1 text-xs">{tx.currency}</span>
-                    </td>
-                    <td className="py-3 text-right text-velto-ink font-semibold">
-                      ~{tx.convertedAmount?.toLocaleString() || '0'}
-                      <span className="text-velto-faint ml-1 text-xs">{tx.receiverCurrency}</span>
-                    </td>
-                    <td className="py-3 pl-4 text-velto-faint text-xs">
-                      {new Date(tx.timestamp).toLocaleString()}
-                    </td>
-                    <td className="py-3">
-                      <div
-                        className={`flex flex-col items-center justify-center gap-0.5 ${status.bg} ${status.color} px-2.5 py-1.5 rounded-xl text-xs font-semibold w-max mx-auto border ${status.border}`}
-                      >
-                        <div className="flex gap-1 items-center">
-                          <StatusIcon size={11} />
-                          {status.label}
-                        </div>
-                        <span className="text-[10px] opacity-70">Risk: {tx.riskScore?.toFixed(2)}</span>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+            <tbody className="divide-y divide-gray-800">
+              {transactions.map((tx) => (
+                <tr key={tx._id || tx.quoteId} className="hover:bg-gray-700/20 transition-colors">
+                  <td className="py-3 font-semibold text-white">{tx.receiverEmail || tx.receiver?.email}</td>
+                  <td className="py-3 text-emerald-400 font-bold">{tx.selectedRail?.replace('_', ' ') || 'NETTING LEDGER'}</td>
+                  <td className="py-3 text-right font-bold text-white">
+                    {(tx.sourceAmount || tx.amount)?.toLocaleString()} <span className="text-gray-400">{tx.sourceCurrency || tx.currency}</span>
+                  </td>
+                  <td className="py-3 text-right font-bold text-emerald-400">
+                    ~{(tx.destinationAmount || tx.convertedAmount)?.toLocaleString()} <span className="text-gray-400">{tx.destinationCurrency || tx.receiverCurrency}</span>
+                  </td>
+                  <td className="py-3 text-right text-gray-400">
+                    {new Date(tx.timestamp || tx.createdAt || Date.now()).toLocaleString()}
+                  </td>
+                  <td className="py-3 text-center">
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                      {tx.status || 'COMPLETED'}
+                    </span>
+                  </td>
+                </tr>
+              ))}
               {transactions.length === 0 && (
                 <tr>
-                  <td colSpan="5" className="text-center py-8 text-velto-faint text-sm">
-                    No transactions found.
+                  <td colSpan="6" className="text-center py-8 text-gray-500">
+                    No transactions recorded in clearing ledger yet.
                   </td>
                 </tr>
               )}

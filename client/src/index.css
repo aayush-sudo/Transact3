@@ -6,45 +6,54 @@
 
 @layer base {
   body {
-    @apply bg-velto-offwhite text-velto-ink font-sans antialiased;
+    @apply bg-gray-950 text-gray-100 font-sans antialiased;
   }
 }
 
 @layer components {
   /* ── Cards ─────────────────────────────────────────────── */
   .card {
-    @apply bg-white rounded-2xl p-6 shadow-sm border border-velto-surface;
+    @apply bg-gray-800/80 backdrop-blur-md rounded-2xl p-6 shadow-xl border border-gray-700/60;
   }
   .card-dark {
-    @apply bg-velto-forest rounded-2xl p-6 shadow-lg border border-velto-forest-light;
+    @apply bg-gray-900/90 rounded-2xl p-6 shadow-2xl border border-gray-800;
   }
 
   /* ── Inputs ─────────────────────────────────────────────── */
   .input-field {
-    @apply w-full bg-velto-surface border border-velto-surface-dark rounded-xl px-4 py-2.5
-           text-velto-ink placeholder-velto-faint
-           focus:outline-none focus:ring-2 focus:ring-velto-lime focus:border-transparent
+    @apply w-full bg-gray-900/80 border border-gray-700/60 rounded-xl px-4 py-2.5
+           text-white placeholder-gray-500
+           focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent
            transition-all;
   }
 
   /* ── Buttons ────────────────────────────────────────────── */
   .btn-primary {
-    @apply bg-velto-forest text-velto-lime font-semibold py-2.5 px-5 rounded-xl
-           hover:bg-velto-forest-mid transition-all shadow-sm active:scale-95;
+    @apply bg-emerald-500 text-gray-950 font-bold py-2.5 px-5 rounded-xl
+           hover:bg-emerald-400 transition-all shadow-md active:scale-95;
   }
   .btn-lime {
-    @apply bg-velto-lime text-velto-forest font-semibold py-2.5 px-5 rounded-xl
-           hover:bg-velto-lime-dark transition-all shadow-sm active:scale-95;
+    @apply bg-emerald-400 text-gray-950 font-bold py-2.5 px-5 rounded-xl
+           hover:bg-emerald-300 transition-all shadow-md active:scale-95;
   }
   .btn-secondary {
-    @apply bg-velto-surface text-velto-ink font-medium py-2.5 px-5 rounded-xl
-           border border-velto-surface-dark hover:bg-velto-surface-dark
+    @apply bg-gray-800 text-gray-200 font-medium py-2.5 px-5 rounded-xl
+           border border-gray-700 hover:bg-gray-700
            transition-all active:scale-95;
   }
 }
 
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
 /* ── Custom Scrollbar ───────────────────────────────────── */
 ::-webkit-scrollbar        { width: 6px; height: 6px; }
-::-webkit-scrollbar-track  { background: #E8E8E4; }
-::-webkit-scrollbar-thumb  { background: #AEEA00; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #C6FF00; }
+::-webkit-scrollbar-track  { background: #111827; }
+::-webkit-scrollbar-thumb  { background: #10b981; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #34d399; }
