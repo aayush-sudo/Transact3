@@ -146,6 +146,5 @@ const TransactionSchema = new mongoose.Schema({
 
 TransactionSchema.index({ sender: 1, timestamp: -1 });
 TransactionSchema.index({ quoteId: 1 });
-TransactionSchema.index({ idempotencyKey: 1 });
 
 module.exports = mongoose.model('Transaction', TransactionSchema);

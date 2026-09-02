@@ -4,7 +4,6 @@ import FXForecastChart from '../components/FXForecastChart';
 import RailStatusViewer from '../components/RailStatusViewer';
 import CurrencyConverter from '../components/CurrencyConverter';
 import AiInsights from '../components/AiInsights';
-import WalletSection from '../components/WalletSection';
 
 const Dashboard = () => {
   const [base, setBase] = useState('USD');
@@ -24,8 +23,7 @@ const Dashboard = () => {
       </div>
 
       {/* Top Metrics Row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <WalletSection />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <CurrencyConverter base={base} setBase={setBase} target={target} setTarget={setTarget} />
         <AiInsights base={base} target={target} />
       </div>
