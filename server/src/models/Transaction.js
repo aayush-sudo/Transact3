@@ -116,6 +116,43 @@ const TransactionSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  clearingReference: {
+    type: String,
+  },
+  iso20022Message: {
+    type: Object,
+  },
+  blockchainReceipt: {
+    txHash: String,
+    blockNumber: Number,
+    gasUsed: Number,
+    contractAddress: String,
+    network: String,
+  },
+  cutOffApplied: {
+    isWeekendOrAfterHours: { type: Boolean, default: false },
+    extraLatencyHours: { type: Number, default: 0 },
+    latePenaltyUSD: { type: Number, default: 0 }
+  },
+  usedFallbackRail: {
+    type: String,
+  },
+  executionMode: {
+    type: String,
+    enum: ['IMMEDIATE', 'SCHEDULED'],
+    default: 'IMMEDIATE',
+  },
+  scheduledFor: {
+    type: Date,
+  },
+  delayHours: {
+    type: Number,
+    default: 0,
+  },
+  expectedYieldSavingsUSD: {
+    type: Number,
+    default: 0,
+  },
   status: {
     type: String,
     enum: [
@@ -123,6 +160,7 @@ const TransactionSchema = new mongoose.Schema({
       'VALIDATED',
       'QUOTED',
       'AUTHORIZED',
+      'SCHEDULED',
       'FX_PENDING',
       'FX_EXECUTED',
       'RAIL_SELECTED',
@@ -130,6 +168,7 @@ const TransactionSchema = new mongoose.Schema({
       'SETTLEMENT_PENDING',
       'SETTLED',
       'COMPLETED',
+      'COMPLETED_VIA_FALLBACK',
       'REJECTED',
       'EXPIRED',
       'FAILED',

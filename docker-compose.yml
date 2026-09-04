@@ -1,0 +1,25 @@
+﻿version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "5001:5001"
+    environment:
+      - PORT=5001
+      - MONGO_URI=mongodb://mongo:27017/transact3
+      - JWT_SECRET=transact3_super_secret_jwt_key_2026
+    depends_on:
+      - mongo
+    restart: always
+
+  mongo:
+    image: mongo:7.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    restart: always
+
+volumes:
+  mongo_data:

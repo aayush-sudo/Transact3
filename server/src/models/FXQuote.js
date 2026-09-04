@@ -23,6 +23,6 @@ const FXQuoteSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
-FXQuoteSchema.index({ expiresAt: 1 });
+FXQuoteSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 module.exports = mongoose.model('FXQuote', FXQuoteSchema);

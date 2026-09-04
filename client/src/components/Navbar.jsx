@@ -1,7 +1,7 @@
 import React, { useContext } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { LogOut, LayoutDashboard, TrendingUp, Activity, History, Award, Sparkles } from 'lucide-react';
+import { LogOut, LayoutDashboard, TrendingUp, Activity, History, Award, Sparkles, Wallet, ShieldCheck } from 'lucide-react';
 
 const Navbar = () => {
   const { user, logout } = useContext(AuthContext);
@@ -29,7 +29,7 @@ const Navbar = () => {
           </div>
         </Link>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
           {user ? (
             <>
               <Link
@@ -48,7 +48,7 @@ const Navbar = () => {
                 }`}
               >
                 <TrendingUp size={14} />
-                FX Forecasting
+                Forecasting
               </Link>
               <Link
                 to="/liquidity"
@@ -58,6 +58,15 @@ const Navbar = () => {
               >
                 <Activity size={14} />
                 Liquidity
+              </Link>
+              <Link
+                to="/portfolio"
+                className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
+                  isActive('/portfolio') ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                }`}
+              >
+                <Wallet size={14} />
+                Portfolio
               </Link>
               <Link
                 to="/transactions"
@@ -77,9 +86,18 @@ const Navbar = () => {
                 <Award size={14} />
                 Evaluation
               </Link>
+              <Link
+                to="/admin"
+                className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
+                  isActive('/admin') ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                }`}
+              >
+                <ShieldCheck size={14} />
+                Admin
+              </Link>
 
-              <div className="flex items-center gap-3 ml-3 pl-3 border-l border-gray-800">
-                <span className="text-xs text-gray-300 font-mono">Hi, {user.name}</span>
+              <div className="flex items-center gap-3 ml-2 pl-2 border-l border-gray-800">
+                <span className="text-xs text-gray-300 font-mono hidden sm:inline">Hi, {user.name}</span>
                 <button
                   onClick={handleLogout}
                   className="text-gray-400 hover:text-rose-400 transition-colors p-1.5 hover:bg-rose-500/10 rounded-lg"

@@ -9,6 +9,8 @@ import FXForecasting from './pages/FXForecasting';
 import Liquidity from './pages/Liquidity';
 import Transactions from './pages/Transactions';
 import Evaluation from './pages/Evaluation';
+import Portfolio from './pages/Portfolio';
+import Admin from './pages/Admin';
 
 const PrivateRoute = ({ children }) => {
   const { user, loading } = React.useContext(AuthContext);
@@ -36,8 +38,10 @@ function App() {
               <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
               <Route path="/fx-forecasting" element={<PrivateRoute><FXForecasting /></PrivateRoute>} />
               <Route path="/liquidity" element={<PrivateRoute><Liquidity /></PrivateRoute>} />
+              <Route path="/portfolio" element={<PrivateRoute><Portfolio /></PrivateRoute>} />
               <Route path="/transactions" element={<PrivateRoute><Transactions /></PrivateRoute>} />
               <Route path="/evaluation" element={<PrivateRoute><Evaluation /></PrivateRoute>} />
+              <Route path="/admin" element={<PrivateRoute><Admin /></PrivateRoute>} />
             </Routes>
           </main>
         </div>

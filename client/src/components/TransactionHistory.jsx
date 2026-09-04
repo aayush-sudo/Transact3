@@ -69,9 +69,20 @@ const TransactionHistory = () => {
                     {new Date(tx.timestamp || tx.createdAt || Date.now()).toLocaleString()}
                   </td>
                   <td className="py-3 text-center">
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                      {tx.status || 'COMPLETED'}
-                    </span>
+                    {tx.status === 'SCHEDULED' ? (
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
+                          ⏳ IN {tx.delayHours || 2}H
+                        </span>
+                        <span className="text-[9px] text-gray-400">
+                          {tx.scheduledFor ? new Date(tx.scheduledFor).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Pending'}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                        {tx.status || 'COMPLETED'}
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}

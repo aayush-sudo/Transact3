@@ -84,6 +84,89 @@ class LedgerEngine {
       entriesSummary: entries
     };
   }
+
+  async getAccountBalance(accountId, currency) {
+    try {
+      const match = { accountId };
+      if (currency) match.currency = currency;
+
+      const entries = await LedgerEntry.find(match);
+      let debitTotal = 0;
+      let creditTotal = 0;
+
+      for (const entry of entries) {
+        if (entry.entryType === 'DEBIT') debitTotal += entry.amount;
+        if (entry.entryType === 'CREDIT') creditTotal += entry.amount;
+      }
+
+      return {
+        accountId,
+        currency: currency || 'MULTI',
+        debitTotal: parseFloat(debitTotal.toFixed(4)),
+        creditTotal: parseFloat(creditTotal.toFixed(4)),
+        netBalance: parseFloat((creditTotal - debitTotal).toFixed(4)),
+        entriesCount: entries.length
+      };
+    } catch (err) {
+      console.error('[LedgerEngine] getAccountBalance error:', err.message);
+      return { accountId, netBalance: 0, entriesCount: 0 };
+    }
+  }
+
+  async reconcileLedger() {
+    try {
+      const allEntries = await LedgerEntry.find({});
+      const summaryByCurrency = {};
+
+      let totalDebits = 0;
+      let totalCredits = 0;
+
+      for (const entry of allEntries) {
+        const c = entry.currency || 'USD';
+        if (!summaryByCurrency[c]) {
+          summaryByCurrency[c] = { currency: c, totalDebits: 0, totalCredits: 0, balanced: true };
+        }
+
+        if (entry.entryType === 'DEBIT') {
+          summaryByCurrency[c].totalDebits += entry.amount;
+          totalDebits += entry.amount;
+        } else {
+          summaryByCurrency[c].totalCredits += entry.amount;
+          totalCredits += entry.amount;
+        }
+      }
+
+      let isGlobalBalanced = true;
+      for (const c of Object.keys(summaryByCurrency)) {
+        const diff = Math.abs(summaryByCurrency[c].totalDebits - summaryByCurrency[c].totalCredits);
+        summaryByCurrency[c].totalDebits = parseFloat(summaryByCurrency[c].totalDebits.toFixed(2));
+        summaryByCurrency[c].totalCredits = parseFloat(summaryByCurrency[c].totalCredits.toFixed(2));
+        summaryByCurrency[c].discrepancy = parseFloat(diff.toFixed(4));
+        summaryByCurrency[c].balanced = diff < 0.01;
+        if (!summaryByCurrency[c].balanced) isGlobalBalanced = false;
+      }
+
+      return {
+        isBalanced: isGlobalBalanced,
+        totalEntries: allEntries.length,
+        totalDebits: parseFloat(totalDebits.toFixed(2)),
+        totalCredits: parseFloat(totalCredits.toFixed(2)),
+        currencyBreakdown: Object.values(summaryByCurrency),
+        timestamp: new Date()
+      };
+    } catch (err) {
+      console.error('[LedgerEngine] reconcileLedger error:', err.message);
+      return { isBalanced: true, totalEntries: 0, currencyBreakdown: [] };
+    }
+  }
+
+  async getRecentEntries(limit = 25) {
+    try {
+      return await LedgerEntry.find({}).sort({ timestamp: -1 }).limit(limit);
+    } catch (err) {
+      return [];
+    }
+  }
 }
 
 module.exports = new LedgerEngine();

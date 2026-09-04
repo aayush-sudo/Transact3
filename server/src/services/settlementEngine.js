@@ -9,6 +9,9 @@ const liquidityManager = require('./liquidityManager');
 const ledgerEngine = require('./ledgerEngine');
 const auditEngine = require('./auditEngine');
 const FXExecution = require('../models/FXExecution');
+const User = require('../models/User');
+const Portfolio = require('../models/Portfolio');
+const Transaction = require('../models/Transaction');
 
 const RAIL_MAP = {
   SWIFT_BATCH: swiftRail,
@@ -23,6 +26,7 @@ class SettlementEngine {
   async processSettlement(transactionDoc) {
     const {
       _id: transactionId,
+      sender: userId,
       quoteId,
       sourceCurrency,
       destinationCurrency,
@@ -33,7 +37,7 @@ class SettlementEngine {
       quotedFXRate
     } = transactionDoc;
 
-    // 1. Reserve Liquidity
+    // 1. Reserve Liquidity in Destination Currency Pool
     const resResult = liquidityManager.reserveLiquidity(destinationCurrency, destinationAmount, selectedRail);
     if (!resResult.success) {
       await auditEngine.logEvent({
@@ -51,14 +55,41 @@ class SettlementEngine {
     // 3. Execute Rail Settlement
     try {
       const railResult = await railAdapter.execute({
-        transactionId,
+        _id: transactionId,
+        quoteId,
+        sender: userId,
         sourceAmount,
         destinationAmount,
         sourceCurrency,
-        destinationCurrency
+        destinationCurrency,
+        selectedRail
       });
 
-      // 4. Record FX Execution details (with 2 bps simulated micro-slippage)
+      // 4. Deduct User Wallet Balance & Portfolio Holding (if DB available)
+      try {
+        if (userId && User.findById) {
+          const user = await User.findById(userId);
+          if (user) {
+            user.walletBalance = Math.max(0, (user.walletBalance || 50000) - sourceAmount);
+            await user.save();
+          }
+        }
+
+        if (userId && Portfolio.findOne) {
+          let portfolio = await Portfolio.findOne({ user: userId });
+          if (portfolio) {
+            const holdingIndex = portfolio.holdings.findIndex(h => h.currency === sourceCurrency);
+            if (holdingIndex > -1) {
+              portfolio.holdings[holdingIndex].amount = Math.max(0, portfolio.holdings[holdingIndex].amount - sourceAmount);
+              await portfolio.save();
+            }
+          }
+        }
+      } catch (userErr) {
+        console.warn('[SettlementEngine] Wallet/Portfolio update skipped:', userErr.message);
+      }
+
+      // 5. Record FX Execution details (with simulated micro-slippage)
       const executedRate = parseFloat((quotedFXRate * 0.9998).toFixed(6));
       try {
         if (FXExecution.create) {
@@ -78,8 +109,8 @@ class SettlementEngine {
         console.warn('[SettlementEngine] FXExecution DB create skipped');
       }
 
-      // 5. Write Double-Entry Clearing Ledger
-      await ledgerEngine.recordDoubleEntry({
+      // 6. Write Double-Entry Clearing Ledger
+      const ledgerResult = await ledgerEngine.recordDoubleEntry({
         transactionId,
         quoteId,
         sourceCurrency,
@@ -89,7 +120,7 @@ class SettlementEngine {
         selectedRail
       });
 
-      // 6. Write Tamper-Evident Audit Event
+      // 7. Write Tamper-Evident Audit Event
       await auditEngine.logEvent({
         transactionId: String(transactionId),
         action: 'SETTLEMENT_COMPLETED',
@@ -97,16 +128,35 @@ class SettlementEngine {
         metadata: {
           selectedRail,
           clearingReference: railResult.clearingReference,
-          settledAt: railResult.settledAt
+          settledAt: railResult.settledAt,
+          blockchainReceipt: railResult.blockchainReceipt || null
         }
       });
+
+      // 8. Update Transaction document in DB if it exists
+      try {
+        if (Transaction.findByIdAndUpdate) {
+          await Transaction.findByIdAndUpdate(transactionId, {
+            status: 'COMPLETED',
+            clearingReference: railResult.clearingReference,
+            iso20022Message: railResult.iso20022 ? railResult.iso20022.pacs008 : null,
+            blockchainReceipt: railResult.blockchainReceipt || null
+          });
+        }
+      } catch (updateErr) {
+        console.warn('[SettlementEngine] Transaction update skipped');
+      }
 
       return {
         success: true,
         settlementStatus: 'COMPLETED',
         clearingReference: railResult.clearingReference,
         settledAt: railResult.settledAt,
-        executedRate
+        executedRate,
+        iso20022: railResult.iso20022,
+        blockchainReceipt: railResult.blockchainReceipt,
+        clearingScheme: railResult.clearingScheme,
+        ledgerEntriesCount: ledgerResult.entriesCount
       };
     } catch (err) {
       // Settlement Failure -> Release Reserved Liquidity & Fallback
@@ -125,7 +175,6 @@ class SettlementEngine {
   async triggerFallback(transactionDoc, failureReason) {
     const { _id: transactionId, selectedRail } = transactionDoc;
 
-    // Fallback ranking: Pick next best available rail
     const fallbackRailOrder = ['REGIONAL_INSTANT', 'RTGS_INSTANT', 'SWIFT_BATCH'].filter(r => r !== selectedRail);
     const fallbackRail = fallbackRailOrder[0] || 'SWIFT_BATCH';
 
@@ -136,15 +185,26 @@ class SettlementEngine {
       metadata: { originalRail: selectedRail, fallbackRail, reason: failureReason }
     });
 
-    const railAdapter = RAIL_MAP[fallbackRail];
-    const railResult = await railAdapter.execute(transactionDoc);
+    const railAdapter = RAIL_MAP[fallbackRail] || swiftRail;
+    const railResult = await railAdapter.execute({ ...transactionDoc, selectedRail: fallbackRail });
+
+    try {
+      if (Transaction.findByIdAndUpdate) {
+        await Transaction.findByIdAndUpdate(transactionId, {
+          status: 'COMPLETED_VIA_FALLBACK',
+          usedFallbackRail: fallbackRail,
+          clearingReference: railResult.clearingReference
+        });
+      }
+    } catch (e) {}
 
     return {
       success: true,
       settlementStatus: 'COMPLETED_VIA_FALLBACK',
       clearingReference: railResult.clearingReference,
       usedFallbackRail: fallbackRail,
-      settledAt: railResult.settledAt
+      settledAt: railResult.settledAt,
+      iso20022: railResult.iso20022
     };
   }
 }

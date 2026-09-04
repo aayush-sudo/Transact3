@@ -6,7 +6,9 @@
     "start": "node server/src/index.js",
     "server": "npm run dev --prefix server",
     "client": "npm run dev --prefix client",
-    "dev": "concurrently \"npm run server\" \"npm run client\""
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "seed": "npm run seed --prefix server",
+    "test": "npm run test --prefix server"
   },
   "keywords": [],
   "author": "",

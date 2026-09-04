@@ -8,5 +8,7 @@ const { checkIdempotency } = require('../middleware/idempotency');
 router.post('/quote', protect, validatePaymentQuoteRequest, transactionController.createTransactionQuote);
 router.post('/send', protect, checkIdempotency, validatePaymentExecuteRequest, transactionController.executeTransaction);
 router.get('/history', protect, transactionController.getTransactionHistory);
+router.post('/:id/execute-now', protect, transactionController.executeScheduledPaymentNow);
+router.post('/:id/cancel', protect, transactionController.cancelScheduledPayment);
 
 module.exports = router;

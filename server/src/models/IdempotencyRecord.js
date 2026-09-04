@@ -11,6 +11,6 @@ const IdempotencyRecordSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
-IdempotencyRecordSchema.index({ expiresAt: 1 });
+IdempotencyRecordSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 module.exports = mongoose.model('IdempotencyRecord', IdempotencyRecordSchema);

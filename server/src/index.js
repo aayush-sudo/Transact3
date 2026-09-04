@@ -29,6 +29,9 @@ const portfolioRoutes = require('./routes/portfolioRoutes');
 const transactionRoutes = require('./routes/transactionRoutes');
 const fxRoutes = require('./routes/fxRoutes');
 const orchestrationRoutes = require('./routes/orchestrationRoutes');
+const adminRoutes = require('./routes/adminRoutes');
+const fxCronService = require('./services/fxCronService');
+const seedDatabase = require('./seeds/seed');
 
 // Mount routers
 app.use('/api/user', authRoutes);
@@ -37,13 +40,16 @@ app.use('/api/portfolio', portfolioRoutes);
 app.use('/api/transaction', transactionRoutes);
 app.use('/api/fx', fxRoutes);
 app.use('/api/orchestration', orchestrationRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
   res.status(200).json({
     status: 'OK',
     message: 'TRANSACT3 AI-Driven Multi-Rail Payment Orchestration API is running',
-    timestamp: new Date()
+    version: '2.0.0',
+    timestamp: new Date(),
+    cronStatus: fxCronService.getStatus()
   });
 });
 
@@ -52,6 +58,10 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 5001;
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`TRANSACT3 Server running on port ${PORT}`);
+  // Start background FX ingestion & volatility monitoring
+  fxCronService.start();
+  // Auto-seed initial data
+  await seedDatabase();
 });

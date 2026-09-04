@@ -1,5 +1,6 @@
 const fxRateEngine = require('./fxRateEngine');
 const SUPPORTED_CURRENCIES = require('../config/currencies');
+const fxCronService = require('./fxCronService');
 
 class FXForecastingEngine {
   async predictFXMovements(sourceCurrency, destinationCurrency) {
@@ -12,20 +13,29 @@ class FXForecastingEngine {
     const dstInfo = SUPPORTED_CURRENCIES[dst] || { baseVolatility: 0.002 };
     const combinedVolatility = Math.sqrt(Math.pow(srcInfo.baseVolatility, 2) + Math.pow(dstInfo.baseVolatility, 2));
 
-    // Seed deterministic or time-based micro trend (-0.5% to +0.8%)
-    const hourOfDay = new Date().getHours();
-    const pseudoRandomTrend = (Math.sin(hourOfDay + src.charCodeAt(0) + dst.charCodeAt(0)) * 0.004) + 0.001;
+    // Retrieve moving averages if available
+    const ma = fxCronService.getMovingAverages(src, dst);
+    let trendMomentum = 0;
+    if (ma.ema12h && ma.sma24h) {
+      trendMomentum = (ma.ema12h - ma.sma24h) / ma.sma24h;
+    }
 
-    // Predictions over horizons
-    const horizon6h = parseFloat((currentRate * (1 + pseudoRandomTrend * 0.35)).toFixed(6));
-    const horizon12h = parseFloat((currentRate * (1 + pseudoRandomTrend * 0.70)).toFixed(6));
-    const horizon24h = parseFloat((currentRate * (1 + pseudoRandomTrend * 0.40)).toFixed(6));
-    const horizon48h = parseFloat((currentRate * (1 - pseudoRandomTrend * 0.20)).toFixed(6));
+    // Time-of-day cyclical component combined with fundamental volatility
+    const now = new Date();
+    const hourOfDay = now.getUTCHours();
+    const cycleFactor = Math.sin((hourOfDay / 24) * 2 * Math.PI + src.charCodeAt(0) * 0.1) * combinedVolatility * 1.5;
+    const finalTrend = (trendMomentum * 0.6) + (cycleFactor * 0.4);
+
+    // Multi-horizon rate forecast projections (Exponential Smoothing)
+    const horizon6h = parseFloat((currentRate * (1 + finalTrend * 0.45)).toFixed(6));
+    const horizon12h = parseFloat((currentRate * (1 + finalTrend * 0.85)).toFixed(6));
+    const horizon24h = parseFloat((currentRate * (1 + finalTrend * 0.60 + (combinedVolatility * 0.1))).toFixed(6));
+    const horizon48h = parseFloat((currentRate * (1 + finalTrend * 0.25 - (combinedVolatility * 0.05))).toFixed(6));
 
     const volatilityPct = parseFloat((combinedVolatility * 100).toFixed(2));
-    const confidencePct = Math.round(75 + (1 - combinedVolatility * 50) * 15);
+    const confidencePct = Math.min(95, Math.max(55, Math.round(82 - (combinedVolatility * 2500) + (ma.dataPoints > 10 ? 10 : 0))));
 
-    // Projected optimal rate & horizon
+    // Projections array
     const projections = [
       { horizon: '6h', rate: horizon6h },
       { horizon: '12h', rate: horizon12h },
@@ -53,10 +63,11 @@ class FXForecastingEngine {
       },
       volatilityPct,
       confidencePct,
-      trendDirection: pseudoRandomTrend > 0 ? 'BULLISH' : 'BEARISH',
+      trendDirection: finalTrend >= 0 ? 'BULLISH' : 'BEARISH',
+      movingAverages: ma,
       optimalProjectedRate: maxRateObj.rate,
       optimalHorizon: maxRateObj.horizon,
-      maxImprovementPct,
+      maxImprovementPct: Math.max(0, maxImprovementPct),
       timestamp: new Date()
     };
   }

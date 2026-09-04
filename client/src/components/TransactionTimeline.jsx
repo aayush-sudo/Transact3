@@ -13,12 +13,23 @@ const STAGES = [
   'COMPLETED'
 ];
 
-const TransactionTimeline = ({ currentStatus = 'COMPLETED' }) => {
-  const currentIndex = STAGES.indexOf(currentStatus) !== -1 ? STAGES.indexOf(currentStatus) : STAGES.length - 1;
+const TransactionTimeline = ({ currentStatus = 'COMPLETED', scheduledFor = null }) => {
+  const isScheduled = currentStatus === 'SCHEDULED';
+  // If scheduled, it has reached AUTHORIZED and is pending execution window
+  const currentIndex = isScheduled
+    ? 3
+    : (STAGES.indexOf(currentStatus) !== -1 ? STAGES.indexOf(currentStatus) : STAGES.length - 1);
 
   return (
     <div className="bg-gray-800/80 backdrop-blur-md rounded-2xl p-4 border border-gray-700/60 space-y-3">
-      <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Transaction State Machine Lifecycle</h4>
+      <div className="flex justify-between items-center">
+        <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Transaction State Machine Lifecycle</h4>
+        {isScheduled && (
+          <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-500/40 font-mono font-bold animate-pulse">
+            ⏳ Scheduled & Queued for Optimal Execution
+          </span>
+        )}
+      </div>
       
       <div className="grid grid-cols-3 sm:grid-cols-9 gap-1.5">
         {STAGES.map((stage, idx) => {
