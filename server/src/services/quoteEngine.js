@@ -1,10 +1,10 @@
-const { v4: uuidv4 } = require('crypto');
 const FXQuote = require('../models/FXQuote');
-const fxRateEngine = require('./fxRateEngine');
+const { roundToPrecision } = require('../utils/mathUtils');
 
 class QuoteEngine {
   constructor() {
-    this.quoteTTLSeconds = 30; // 30 seconds expiration period
+    this.quoteTTLSeconds = 60; // 60 seconds validity window for user confirmation
+    this.memoryQuotes = new Map();
   }
 
   generateQuoteId() {
@@ -13,44 +13,67 @@ class QuoteEngine {
   }
 
   async createQuote(params) {
-    const { userId, sourceCurrency, destinationCurrency, sourceAmount, orchestrationResult } = params;
-
-    const fxData = await fxRateEngine.calculateFXQuoteAsync(sourceCurrency, destinationCurrency, sourceAmount);
+    const {
+      userId,
+      recipientId,
+      receiverEmail,
+      orchestrationResult
+    } = params;
 
     const quoteId = this.generateQuoteId();
     const expiresAt = new Date(Date.now() + this.quoteTTLSeconds * 1000);
 
-    const selectedRail = orchestrationResult ? orchestrationResult.recommendedRail.id : 'SWIFT_BATCH';
-    const railFeeUSD = orchestrationResult ? orchestrationResult.recommendedRail.estFeeUSD : 25.00;
-    const estimatedLatencyHours = orchestrationResult ? orchestrationResult.recommendedRail.estLatencyHours : 24.0;
-    const totalCostUSD = parseFloat((fxData.fxCostUSD + railFeeUSD).toFixed(2));
-    const riskScore = orchestrationResult ? orchestrationResult.riskScore : 15;
-    const timingRecommendation = orchestrationResult ? orchestrationResult.fxTiming : null;
+    const recommended = orchestrationResult.recommendedRail || { id: 'SWIFT_BATCH', est_fee_usd: 25.0, est_latency_hours: 36.0 };
+    const railFeeUSD = recommended.est_fee_usd || 1.50;
+
+    const sourceAmount = orchestrationResult.sourceAmount;
+    const sourceCurrency = orchestrationResult.sourceCurrency;
+    const destinationAmount = orchestrationResult.destinationAmount;
+    const destinationCurrency = orchestrationResult.destinationCurrency;
+    const sourceAmountUSD = orchestrationResult.sourceAmountUSD || (sourceCurrency === 'USD' ? sourceAmount : sourceAmount);
+
+    // Total sender debit in source currency
+    const totalSenderDebitUSD = roundToPrecision(
+      sourceAmountUSD + railFeeUSD,
+      2
+    );
 
     const quoteDoc = {
       quoteId,
-      userId: userId || '000000000000000000000000',
-      currencyPair: `${fxData.sourceCurrency}/${fxData.destinationCurrency}`,
-      sourceCurrency: fxData.sourceCurrency,
-      destinationCurrency: fxData.destinationCurrency,
-      sourceAmount: fxData.sourceAmount,
-      destinationAmount: fxData.destinationAmount,
-      referenceRate: fxData.referenceRate,
-      quotedRate: fxData.quotedRate,
-      spreadBps: fxData.spreadBps,
-      fxCostUSD: fxData.fxCostUSD,
-      selectedRail,
+      userId: userId || '60c72b2f9b1d8b0015f8e001',
+      recipientId: recipientId || null,
+      receiverEmail: receiverEmail || 'recipient@transact3.io',
+      currencyPair: `${sourceCurrency}/${destinationCurrency}`,
+      sourceCurrency,
+      destinationCurrency,
+      paymentMode: orchestrationResult.paymentMode || 'SEND_AMOUNT',
+      sourceAmount,
+      destinationAmount,
+      sourceAmountUSD,
+      referenceRate: orchestrationResult.fxRate,
+      quotedRate: orchestrationResult.fxRate,
+      spreadBps: orchestrationResult.spreadBps || 30,
+      fxCostUSD: orchestrationResult.fxCostUSD,
+      fxAnalysis: orchestrationResult.fxAnalysis,
+      selectedRail: recommended.id,
+      recommendedRail: recommended.id,
       railFeeUSD,
-      totalCostUSD,
-      estimatedLatencyHours,
-      riskScore,
-      timingRecommendation,
+      totalCostUSD: roundToPrecision((orchestrationResult.fxCostUSD || 0) + railFeeUSD, 2),
+      totalSenderDebitUSD,
+      estimatedLatencyHours: recommended.est_latency_hours || 0.0003,
+      riskScore: 15,
+      timingRecommendation: orchestrationResult.fxAnalysis ? orchestrationResult.fxAnalysis.recommendation : 'Execute now',
+      priority: orchestrationResult.priorityProfile || 'BALANCED',
+      evaluatedRails: orchestrationResult.evaluatedRails || [],
+      aiSavingsUSD: recommended.ai_savings_usd || 0,
       expiresAt,
       status: 'ACTIVE',
       createdAt: new Date()
     };
 
-    // Store in DB if available, or return document
+    // Store in in-memory map
+    this.memoryQuotes.set(quoteId, { ...quoteDoc });
+
     try {
       if (FXQuote.create) {
         await FXQuote.create(quoteDoc);
@@ -63,28 +86,49 @@ class QuoteEngine {
   }
 
   async verifyQuote(quoteId) {
-    let quote = null;
+    let memoryQuote = this.memoryQuotes.get(quoteId);
+    let dbQuote = null;
+
     try {
       if (FXQuote.findOne) {
-        quote = await FXQuote.findOne({ quoteId });
+        const found = await FXQuote.findOne({ quoteId });
+        if (found) {
+          dbQuote = found.toObject ? found.toObject() : found;
+        }
       }
     } catch (e) {
       console.warn('[QuoteEngine] DB find failed:', e.message);
     }
 
+    // Merge memory quote and db quote (memory quote has full uncast object)
+    const quote = memoryQuote ? { ...dbQuote, ...memoryQuote } : dbQuote;
+
     if (!quote) {
-      return { valid: false, reason: 'Quote not found' };
+      return { valid: false, reason: 'Quote not found or expired' };
     }
 
     if (new Date() > new Date(quote.expiresAt)) {
-      return { valid: false, reason: 'Quote has expired (30-second TTL exceeded)', expired: true };
+      return { valid: false, reason: 'Quote has expired (60-second execution window exceeded)', expired: true, quote };
     }
 
     if (quote.status !== 'ACTIVE') {
-      return { valid: false, reason: `Quote is no longer active (Status: ${quote.status})` };
+      return { valid: false, reason: `Quote is no longer active (Status: ${quote.status})`, quote };
     }
 
     return { valid: true, quote };
+  }
+
+  async markQuoteExecuted(quoteId) {
+    const memoryQuote = this.memoryQuotes.get(quoteId);
+    if (memoryQuote) {
+      memoryQuote.status = 'EXECUTED';
+    }
+
+    try {
+      if (FXQuote.findOneAndUpdate) {
+        await FXQuote.findOneAndUpdate({ quoteId }, { status: 'EXECUTED' });
+      }
+    } catch (e) {}
   }
 }
 

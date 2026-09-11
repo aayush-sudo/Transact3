@@ -1,122 +1,233 @@
-const SUPPORTED_CURRENCIES = require('../config/currencies');
+const RailSetting = require('../models/RailSetting');
 const RAIL_CONFIG = require('../config/railConfig');
+const SUPPORTED_CURRENCIES = require('../config/currencies');
 
 class LiquidityManager {
   constructor() {
-    // In-memory liquidity pools & rail utilization states
     this.currencyPools = new Map();
-    this.railUtilization = new Map();
-
-    this.initializePools();
+    this.cachedRailSettings = new Map();
+    this.isInitialized = false;
   }
 
-  initializePools() {
-    Object.keys(SUPPORTED_CURRENCIES).forEach((code) => {
-      this.currencyPools.set(code, SUPPORTED_CURRENCIES[code].defaultPool);
-    });
+  async initialize() {
+    try {
+      // 1. Initialize Currency Pools in memory
+      for (const [code, details] of Object.entries(SUPPORTED_CURRENCIES)) {
+        if (!this.currencyPools.has(code)) {
+          this.currencyPools.set(code, details.defaultPool || 50000000);
+        }
+      }
 
-    Object.keys(RAIL_CONFIG).forEach((railId) => {
-      // Seed default random capacity utilization between 20% and 65%
-      const initialUtilization = Math.round(20 + Math.random() * 45);
-      this.railUtilization.set(railId, initialUtilization);
-    });
+      // 2. Ensure RailSettings exist in MongoDB
+      for (const [railId, config] of Object.entries(RAIL_CONFIG)) {
+        let setting = await RailSetting.findOne({ railId });
+        if (!setting) {
+          setting = await RailSetting.create({
+            railId,
+            name: config.name,
+            description: config.description,
+            isEnabled: true,
+            baseFeeUSD: config.baseFeeUSD,
+            variableFeeBps: config.variableFeeBps,
+            avgLatencyHours: config.avgLatencyHours,
+            expectedSettlementDisplay: config.expectedSettlementDisplay,
+            simulationDurationMs: config.simulationDurationMs || 1200,
+            maxAmountUSD: config.maxAmountUSD,
+            reliabilityScore: config.reliabilityScore,
+            availableLiquidityUSD: config.capacityHourlyUSD * 0.75, // 75% initial available liquidity
+            initialLiquidityUSD: config.capacityHourlyUSD
+          });
+        }
+        this.cachedRailSettings.set(railId, setting.toObject());
+      }
+      this.isInitialized = true;
+    } catch (err) {
+      console.warn('[LiquidityManager] MongoDB initialization fallback:', err.message);
+      // In-memory fallback
+      for (const [railId, config] of Object.entries(RAIL_CONFIG)) {
+        this.cachedRailSettings.set(railId, {
+          railId,
+          name: config.name,
+          description: config.description,
+          isEnabled: true,
+          baseFeeUSD: config.baseFeeUSD,
+          variableFeeBps: config.variableFeeBps,
+          avgLatencyHours: config.avgLatencyHours,
+          expectedSettlementDisplay: config.expectedSettlementDisplay,
+          simulationDurationMs: config.simulationDurationMs || 1200,
+          maxAmountUSD: config.maxAmountUSD,
+          reliabilityScore: config.reliabilityScore,
+          availableLiquidityUSD: config.capacityHourlyUSD * 0.75,
+          initialLiquidityUSD: config.capacityHourlyUSD
+        });
+      }
+    }
   }
 
-  getCurrencyLiquidity(currencyCode) {
-    const code = currencyCode.toUpperCase();
-    const available = this.currencyPools.get(code) || 1000000;
-    const initial = (SUPPORTED_CURRENCIES[code] && SUPPORTED_CURRENCIES[code].defaultPool) || 1000000;
-    const utilizationPct = Math.round(((initial - available) / initial) * 100);
-
-    return {
-      currency: code,
-      available,
-      initialPool: initial,
-      utilizationPct: Math.max(0, utilizationPct),
-      status: available > 50000 ? 'SUFFICIENT' : 'CONSTRAINED'
-    };
+  async getRailSetting(railId) {
+    if (!this.isInitialized) await this.initialize();
+    try {
+      const setting = await RailSetting.findOne({ railId });
+      if (setting) {
+        this.cachedRailSettings.set(railId, setting.toObject());
+        return setting.toObject();
+      }
+    } catch (e) {}
+    return this.cachedRailSettings.get(railId) || RAIL_CONFIG[railId];
   }
 
-  getRailLiquidity(railId) {
-    const utilizationPct = this.railUtilization.get(railId) || 40;
-    const config = RAIL_CONFIG[railId];
+  async getAllRailSettings() {
+    if (!this.isInitialized) await this.initialize();
+    try {
+      const settings = await RailSetting.find({}).sort({ baseFeeUSD: 1 });
+      if (settings && settings.length > 0) {
+        return settings.map(s => s.toObject());
+      }
+    } catch (e) {}
+    return Array.from(this.cachedRailSettings.values());
+  }
 
-    let penalty = 0.0;
-    let status = 'OPTIMAL';
+  async setRailEnabled(railId, isEnabled) {
+    if (!this.isInitialized) await this.initialize();
+    try {
+      const updated = await RailSetting.findOneAndUpdate(
+        { railId },
+        { isEnabled: Boolean(isEnabled), lastUpdated: new Date() },
+        { new: true, upsert: true }
+      );
+      this.cachedRailSettings.set(railId, updated.toObject());
+      return updated.toObject();
+    } catch (e) {
+      const current = this.cachedRailSettings.get(railId) || {};
+      current.isEnabled = Boolean(isEnabled);
+      this.cachedRailSettings.set(railId, current);
+      return current;
+    }
+  }
 
-    if (utilizationPct >= 95) {
-      penalty = 1.00;
-      status = 'CRITICAL_CONSTRAINED';
-    } else if (utilizationPct >= 90) {
-      penalty = 0.40;
-      status = 'HIGHLY_UTILIZED';
-    } else if (utilizationPct >= 85) {
-      penalty = 0.15;
-      status = 'CAPACITY_WARNING';
+  async setRailLiquidity(railId, availableLiquidityUSD) {
+    if (!this.isInitialized) await this.initialize();
+    const amount = Math.max(0, Number(availableLiquidityUSD) || 0);
+    try {
+      const updated = await RailSetting.findOneAndUpdate(
+        { railId },
+        { availableLiquidityUSD: amount, lastUpdated: new Date() },
+        { new: true, upsert: true }
+      );
+      this.cachedRailSettings.set(railId, updated.toObject());
+      return updated.toObject();
+    } catch (e) {
+      const current = this.cachedRailSettings.get(railId) || {};
+      current.availableLiquidityUSD = amount;
+      this.cachedRailSettings.set(railId, current);
+      return current;
+    }
+  }
+
+  async resetToDefaults() {
+    for (const [railId, config] of Object.entries(RAIL_CONFIG)) {
+      const defaultAvailable = config.capacityHourlyUSD * 0.75;
+      try {
+        await RailSetting.findOneAndUpdate(
+          { railId },
+          {
+            isEnabled: true,
+            availableLiquidityUSD: defaultAvailable,
+            initialLiquidityUSD: config.capacityHourlyUSD,
+            lastUpdated: new Date()
+          },
+          { upsert: true }
+        );
+      } catch (e) {}
+      this.cachedRailSettings.set(railId, {
+        railId,
+        name: config.name,
+        description: config.description,
+        isEnabled: true,
+        baseFeeUSD: config.baseFeeUSD,
+        variableFeeBps: config.variableFeeBps,
+        avgLatencyHours: config.avgLatencyHours,
+        expectedSettlementDisplay: config.expectedSettlementDisplay,
+        simulationDurationMs: config.simulationDurationMs || 1200,
+        maxAmountUSD: config.maxAmountUSD,
+        reliabilityScore: config.reliabilityScore,
+        availableLiquidityUSD: defaultAvailable,
+        initialLiquidityUSD: config.capacityHourlyUSD
+      });
+    }
+
+    for (const [code, details] of Object.entries(SUPPORTED_CURRENCIES)) {
+      this.currencyPools.set(code, details.defaultPool || 50000000);
+    }
+    return this.getAllRailSettings();
+  }
+
+  /**
+   * Evaluate liquidity eligibility for a rail given payment amount in USD
+   */
+  async checkRailEligibility(railId, amountUSD, corridorConfig = null) {
+    const setting = await this.getRailSetting(railId);
+    if (!setting) {
+      return { isEligible: false, rejectionReason: `Unknown settlement rail ${railId}` };
+    }
+
+    if (!setting.isEnabled) {
+      return {
+        isEligible: false,
+        rejectionReason: `${setting.name} is temporarily disabled by network administrator`,
+        setting
+      };
+    }
+
+    if (amountUSD > setting.maxAmountUSD) {
+      return {
+        isEligible: false,
+        rejectionReason: `Payment amount ($${amountUSD.toLocaleString()}) exceeds maximum limit of $${setting.maxAmountUSD.toLocaleString()}`,
+        setting
+      };
+    }
+
+    if (amountUSD > setting.availableLiquidityUSD) {
+      return {
+        isEligible: false,
+        rejectionReason: `Insufficient liquidity (Required: $${amountUSD.toLocaleString()}, Available: $${Math.round(setting.availableLiquidityUSD).toLocaleString()})`,
+        setting
+      };
+    }
+
+    if (corridorConfig && corridorConfig.eligibleRails && !corridorConfig.eligibleRails.includes(railId)) {
+      return {
+        isEligible: false,
+        rejectionReason: `${setting.name} is not operational for this currency corridor`,
+        setting
+      };
     }
 
     return {
-      railId,
-      name: config ? config.name : railId,
-      utilizationPct,
-      liquidityPenalty: penalty,
-      status,
-      hourlyCapacityUSD: config ? config.capacityHourlyUSD : 10000000
+      isEligible: true,
+      rejectionReason: null,
+      setting
     };
   }
 
-  calculateDynamicPenalty(railId, amountUSD) {
-    const railInfo = this.getRailLiquidity(railId);
-    let penalty = railInfo.liquidityPenalty;
-
-    // Additional capacity check for requested transaction amount
-    const config = RAIL_CONFIG[railId];
-    if (config && amountUSD > config.maxAmountUSD) {
-      penalty += 2.0; // Heavy penalty if exceeding rail max amount
+  // Deduct liquidity upon settlement
+  async consumeLiquidity(railId, amountUSD) {
+    const setting = await this.getRailSetting(railId);
+    if (setting) {
+      const newLiquidity = Math.max(0, setting.availableLiquidityUSD - amountUSD);
+      await this.setRailLiquidity(railId, newLiquidity);
     }
-
-    return parseFloat(penalty.toFixed(3));
   }
 
-  reserveLiquidity(currencyCode, amount, railId) {
-    const code = currencyCode.toUpperCase();
-    const currentPool = this.currencyPools.get(code) || 1000000;
-
-    if (currentPool < amount) {
-      return { success: false, reason: `Insufficient liquidity pool for currency ${code}` };
+  // Release liquidity if failed
+  async restoreLiquidity(railId, amountUSD) {
+    const setting = await this.getRailSetting(railId);
+    if (setting) {
+      const newLiquidity = setting.availableLiquidityUSD + amountUSD;
+      await this.setRailLiquidity(railId, newLiquidity);
     }
-
-    this.currencyPools.set(code, currentPool - amount);
-
-    // Increment rail utilization slightly
-    const currentRailUtil = this.railUtilization.get(railId) || 40;
-    this.railUtilization.set(railId, Math.min(99, currentRailUtil + 1));
-
-    return { success: true, reservedAmount: amount, remainingPool: currentPool - amount };
-  }
-
-  releaseLiquidity(currencyCode, amount, railId) {
-    const code = currencyCode.toUpperCase();
-    const currentPool = this.currencyPools.get(code) || 1000000;
-    this.currencyPools.set(code, currentPool + amount);
-
-    const currentRailUtil = this.railUtilization.get(railId) || 40;
-    this.railUtilization.set(railId, Math.max(10, currentRailUtil - 1));
-  }
-
-  getAllStatus() {
-    const rails = {};
-    Object.keys(RAIL_CONFIG).forEach((id) => {
-      rails[id] = this.getRailLiquidity(id);
-    });
-
-    const currencies = {};
-    Object.keys(SUPPORTED_CURRENCIES).forEach((code) => {
-      currencies[code] = this.getCurrencyLiquidity(code);
-    });
-
-    return { rails, currencies };
   }
 }
 
-module.exports = new LiquidityManager();
+const manager = new LiquidityManager();
+module.exports = manager;

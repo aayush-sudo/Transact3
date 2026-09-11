@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import { CheckCircle, Circle, Loader, ArrowRight, Shield, Brain, Link2, Zap } from 'lucide-react';
 
 const STEPS = [
-  { id: 1, label: 'Initiated', icon: Zap, description: 'Transaction submitted to network' },
-  { id: 2, label: 'Validated', icon: Shield, description: 'KYC/AML checks passed' },
-  { id: 3, label: 'AI Decision', icon: Brain, description: 'AI risk model evaluated' },
-  { id: 4, label: 'Risk Check', icon: Shield, description: 'Compliance review completed' },
-  { id: 5, label: 'Blockchain Confirmed', icon: Link2, description: 'Block mined & confirmed' },
+  { id: 1, label: 'Initiated', icon: Zap, description: 'Payment submitted to orchestrator' },
+  { id: 2, label: 'Validating', icon: Shield, description: 'Compliance & account checks passed' },
+  { id: 3, label: 'AI Route Selected', icon: Brain, description: 'Multi-objective optimization evaluated' },
+  { id: 4, label: 'Rail Executed', icon: ArrowRight, description: 'ISO 20022 dispatched to settlement rail' },
+  { id: 5, label: 'Settlement & Ledger', icon: CheckCircle, description: 'Balanced double-entry ledger committed' },
 ];
 
 const TransactionStepper = ({ currentStep = 0, isProcessing = false }) => {

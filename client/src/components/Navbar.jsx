@@ -1,7 +1,7 @@
 import React, { useContext } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { LogOut, LayoutDashboard, TrendingUp, Activity, History, Award, Sparkles, Wallet, ShieldCheck } from 'lucide-react';
+import { LogOut, LayoutDashboard, Send, History, Wallet, ShieldCheck, Sparkles } from 'lucide-react';
 
 const Navbar = () => {
   const { user, logout } = useContext(AuthContext);
@@ -13,19 +13,23 @@ const Navbar = () => {
     navigate('/login');
   };
 
-  const isActive = (path) => location.pathname === path;
+  const isActive = (path) => {
+    if (path === '/' && location.pathname === '/') return true;
+    if (path !== '/' && location.pathname.startsWith(path)) return true;
+    return false;
+  };
 
   return (
-    <nav className="bg-gray-900/90 backdrop-blur-md border-b border-gray-800 sticky top-0 z-50">
+    <nav className="bg-gray-900/95 backdrop-blur-md border-b border-gray-800 sticky top-0 z-50 shadow-sm">
       <div className="container mx-auto px-6 py-3 flex justify-between items-center">
         {/* Logo */}
-        <Link to="/" className="flex items-center gap-2.5">
-          <div className="w-9 h-9 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
+        <Link to="/" className="flex items-center gap-2.5 group">
+          <div className="w-9 h-9 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20 group-hover:scale-105 transition-transform">
             <Sparkles size={18} className="text-gray-950" />
           </div>
           <div>
             <span className="text-white font-extrabold text-lg tracking-tight block leading-tight font-mono">TRANSACT3</span>
-            <span className="text-[9px] text-emerald-400 font-bold uppercase tracking-widest block">AI Payment Orchestration</span>
+            <span className="text-[9px] text-emerald-400 font-bold uppercase tracking-widest block">Cross-Border Payment Orchestration</span>
           </div>
         </Link>
 
@@ -35,61 +39,53 @@ const Navbar = () => {
               <Link
                 to="/"
                 className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
-                  isActive('/') ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                  isActive('/') && location.pathname === '/'
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
                 }`}
               >
                 <LayoutDashboard size={14} />
                 Dashboard
               </Link>
               <Link
-                to="/fx-forecasting"
+                to="/payment-router"
                 className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
-                  isActive('/fx-forecasting') ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                  isActive('/payment-router')
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
                 }`}
               >
-                <TrendingUp size={14} />
-                Forecasting
-              </Link>
-              <Link
-                to="/liquidity"
-                className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
-                  isActive('/liquidity') ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-gray-400 hover:text-white hover:bg-gray-800'
-                }`}
-              >
-                <Activity size={14} />
-                Liquidity
-              </Link>
-              <Link
-                to="/portfolio"
-                className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
-                  isActive('/portfolio') ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-gray-400 hover:text-white hover:bg-gray-800'
-                }`}
-              >
-                <Wallet size={14} />
-                Portfolio
+                <Send size={14} />
+                Payment Router
               </Link>
               <Link
                 to="/transactions"
                 className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
-                  isActive('/transactions') ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                  isActive('/transactions')
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
                 }`}
               >
                 <History size={14} />
-                Transactions
+                Transaction History
               </Link>
               <Link
-                to="/evaluation"
+                to="/wallet"
                 className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
-                  isActive('/evaluation') ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                  isActive('/wallet') || isActive('/portfolio')
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
                 }`}
               >
-                <Award size={14} />
-                Evaluation
+                <Wallet size={14} />
+                Wallet
               </Link>
               <Link
                 to="/admin"
                 className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
-                  isActive('/admin') ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                  isActive('/admin')
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
                 }`}
               >
                 <ShieldCheck size={14} />

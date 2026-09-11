@@ -3,14 +3,12 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, AuthContext } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import Dashboard from './pages/Dashboard';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import FXForecasting from './pages/FXForecasting';
-import Liquidity from './pages/Liquidity';
+import PaymentRouter from './pages/PaymentRouter';
 import Transactions from './pages/Transactions';
-import Evaluation from './pages/Evaluation';
 import Portfolio from './pages/Portfolio';
 import Admin from './pages/Admin';
+import Login from './pages/Login';
+import Register from './pages/Register';
 
 const PrivateRoute = ({ children }) => {
   const { user, loading } = React.useContext(AuthContext);
@@ -36,12 +34,12 @@ function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-              <Route path="/fx-forecasting" element={<PrivateRoute><FXForecasting /></PrivateRoute>} />
-              <Route path="/liquidity" element={<PrivateRoute><Liquidity /></PrivateRoute>} />
-              <Route path="/portfolio" element={<PrivateRoute><Portfolio /></PrivateRoute>} />
+              <Route path="/payment-router" element={<PrivateRoute><PaymentRouter /></PrivateRoute>} />
               <Route path="/transactions" element={<PrivateRoute><Transactions /></PrivateRoute>} />
-              <Route path="/evaluation" element={<PrivateRoute><Evaluation /></PrivateRoute>} />
+              <Route path="/wallet" element={<PrivateRoute><Portfolio /></PrivateRoute>} />
+              <Route path="/portfolio" element={<PrivateRoute><Portfolio /></PrivateRoute>} />
               <Route path="/admin" element={<PrivateRoute><Admin /></PrivateRoute>} />
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </main>
         </div>

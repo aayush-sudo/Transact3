@@ -22,7 +22,6 @@ class RiskEngine {
     if (isNewBeneficiary) score += 12;
 
     // 4. Rail Specific Risk Factor
-    if (railId === 'STABLECOIN_VAULT') score += 5; // Slight digital asset compliance verification score
     if (railId === 'CARD_PUSH') score += 8;
 
     score = Math.min(100, Math.max(0, Math.round(score)));

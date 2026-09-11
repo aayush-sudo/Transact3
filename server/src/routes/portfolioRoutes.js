@@ -7,4 +7,6 @@ router.route('/')
   .get(protect, getPortfolio)
   .post(protect, addHolding);
 
+router.post('/holdings', protect, addHolding);
+
 module.exports = router;

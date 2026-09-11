@@ -1,22 +1,46 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../services/api';
-import { Plus, TrendingUp, TrendingDown, DollarSign, Wallet, ShieldCheck, ArrowUpRight, RefreshCw, Loader2 } from 'lucide-react';
+import {
+  Plus,
+  DollarSign,
+  Wallet,
+  ShieldCheck,
+  RefreshCw,
+  Loader2,
+  Send,
+  CheckCircle,
+  FileText,
+  AlertCircle
+} from 'lucide-react';
 
-const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'INR', 'BRL', 'MXN', 'SGD', 'AED', 'CHF', 'CAD', 'AUD', 'HKD', 'SEK', 'ZAR'];
+const SUPPORTED_CURRENCIES = [
+  { code: 'USD', name: 'US Dollar', symbol: '$' },
+  { code: 'EUR', name: 'Euro', symbol: '€' },
+  { code: 'GBP', name: 'British Pound', symbol: '£' },
+  { code: 'INR', name: 'Indian Rupee', symbol: '₹' },
+  { code: 'AED', name: 'UAE Dirham', symbol: 'AED' },
+  { code: 'SGD', name: 'Singapore Dollar', symbol: 'S$' },
+  { code: 'AUD', name: 'Australian Dollar', symbol: 'A$' },
+  { code: 'CAD', name: 'Canadian Dollar', symbol: 'CA$' },
+  { code: 'JPY', name: 'Japanese Yen', symbol: '¥' }
+];
 
 const Portfolio = () => {
   const [portfolio, setPortfolio] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [successMsg, setSuccessMsg] = useState(null);
+  const [errorMsg, setErrorMsg] = useState(null);
 
   // Form state
   const [currency, setCurrency] = useState('USD');
-  const [amount, setAmount] = useState('');
-  const [price, setPrice] = useState('1.0');
+  const [amount, setAmount] = useState('2000');
 
   const fetchPortfolio = async () => {
     try {
+      setLoading(true);
       const res = await api.get('/portfolio');
       if (res.data.success) {
         setPortfolio(res.data.data);
@@ -34,44 +58,46 @@ const Portfolio = () => {
 
   const handleAddHolding = async (e) => {
     e.preventDefault();
-    if (!amount || Number(amount) <= 0) return;
+    const numAmount = Number(amount);
+    if (isNaN(numAmount) || numAmount <= 0) {
+      setErrorMsg('Please enter a valid deposit amount');
+      return;
+    }
+
     setSaving(true);
+    setSuccessMsg(null);
+    setErrorMsg(null);
+
     try {
-      await api.post('/portfolio', {
+      const res = await api.post('/portfolio/holdings', {
         currency,
-        amount: Number(amount),
-        averageBuyPrice: Number(price) || 1.0
+        amount: numAmount
       });
-      setShowAdd(false);
-      setAmount('');
-      await fetchPortfolio();
+
+      if (res.data.success) {
+        setSuccessMsg(res.data.message || `Deposited ${numAmount} ${currency} into wallet`);
+        setShowAdd(false);
+        setAmount('1000');
+        await fetchPortfolio();
+      }
     } catch (err) {
-      console.error(err);
+      setErrorMsg(err.response?.data?.message || 'Failed to deposit funds');
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="flex flex-col items-center gap-3">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-400" />
-        <p className="text-gray-400 text-xs font-mono">Loading Multi-Currency Portfolio...</p>
-      </div>
-    </div>
-  );
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 border-b border-gray-800 pb-4">
         <div>
-          <p className="text-xs font-bold tracking-widest text-emerald-400 uppercase mb-1">
-            TREASURY LIQUIDITY & MULTI-CURRENCY ASSETS
+          <p className="text-xs font-bold tracking-widest text-emerald-400 uppercase mb-1 font-mono">
+            MULTI-CURRENCY BALANCES & TREASURY
           </p>
           <h1 className="text-3xl font-extrabold text-white flex items-center gap-2.5">
             <Wallet className="text-emerald-400" size={28} />
-            Corporate Portfolio & Vaults
+            Multi-Currency Wallet
           </h1>
         </div>
         <div className="flex items-center gap-2">
@@ -80,155 +106,177 @@ const Portfolio = () => {
             className="p-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl border border-gray-700 text-xs font-mono transition-colors"
             title="Refresh Holdings"
           >
-            <RefreshCw size={16} />
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           </button>
           <button
-            onClick={() => setShowAdd(!showAdd)}
-            className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-gray-950 font-bold rounded-xl text-xs font-mono flex items-center gap-2 shadow-lg transition-all"
+            onClick={() => { setShowAdd(true); setSuccessMsg(null); setErrorMsg(null); }}
+            className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-gray-950 font-bold rounded-xl text-xs font-mono flex items-center gap-2 shadow-lg shadow-emerald-500/10 transition-all cursor-pointer"
           >
-            <Plus size={16} /> Deposit / Add Asset
+            <Plus size={16} /> Add Simulated Funds
           </button>
+          <Link
+            to="/payment-router"
+            className="px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-white font-bold rounded-xl text-xs font-mono flex items-center gap-2 border border-gray-700 transition-all"
+          >
+            <Send size={14} className="text-emerald-400" /> Send Funds
+          </Link>
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        <div className="bg-gradient-to-br from-emerald-950/80 to-gray-900 border border-emerald-500/30 rounded-2xl p-6 relative overflow-hidden shadow-xl">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full -translate-y-8 translate-x-8 blur-xl" />
-          <p className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-1 font-mono">Total Treasury Value</p>
-          <p className="text-3xl font-black text-white flex items-center gap-1 font-mono">
-            <DollarSign size={26} className="text-emerald-400" />
-            {portfolio?.totalValueUSD?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
-            <span className="text-xs text-gray-400 font-sans font-normal ml-1">USD Eq.</span>
-          </p>
-          <p className="text-[11px] text-gray-400 mt-2 font-mono">Real-time mid-market benchmark valuation</p>
-        </div>
-
-        <div className="bg-gray-800/80 border border-gray-700/60 rounded-2xl p-6 shadow-xl">
-          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1 font-mono">Active Currency Vaults</p>
-          <p className="text-3xl font-black text-white font-mono">
-            {portfolio?.holdings?.length || 0}
-            <span className="text-xs text-emerald-400 font-sans font-normal ml-2">Currencies</span>
-          </p>
-          <p className="text-[11px] text-gray-400 mt-2 font-mono">Global settlement liquidity accounts</p>
-        </div>
-
-        <div className="bg-gray-800/80 border border-gray-700/60 rounded-2xl p-6 shadow-xl">
-          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1 font-mono">Vault Protection</p>
-          <div className="flex items-center gap-2 mt-1">
-            <ShieldCheck size={26} className="text-emerald-400" />
-            <span className="text-lg font-bold text-white font-mono">Institutional 100% Reserve</span>
-          </div>
-          <p className="text-[11px] text-gray-400 mt-2 font-mono">Real-time double-entry clearing ledger</p>
-        </div>
-      </div>
-
-      {/* Add Holding Form */}
-      {showAdd && (
-        <div className="bg-gray-800/90 border border-emerald-500/40 rounded-2xl p-5 shadow-2xl space-y-4 animate-fadeIn">
-          <h3 className="text-sm font-bold text-white flex items-center gap-2 font-mono">
-            <Plus size={16} className="text-emerald-400" /> Add Funds or Holding to Treasury Vault
-          </h3>
-          <form onSubmit={handleAddHolding} className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
-            <div>
-              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 font-mono">Currency</label>
-              <select
-                className="w-full bg-gray-900 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-xs font-mono font-bold outline-none cursor-pointer"
-                value={currency}
-                onChange={e => setCurrency(e.target.value)}
-              >
-                {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 font-mono">Amount</label>
-              <input
-                type="number"
-                required
-                placeholder="50000"
-                className="w-full bg-gray-900 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-xs font-mono outline-none"
-                value={amount}
-                onChange={e => setAmount(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 font-mono">Cost Basis (vs USD)</label>
-              <input
-                type="number"
-                step="0.0001"
-                required
-                placeholder="1.0"
-                className="w-full bg-gray-900 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-xs font-mono outline-none"
-                value={price}
-                onChange={e => setPrice(e.target.value)}
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={saving}
-              className="py-2.5 bg-emerald-500 hover:bg-emerald-400 text-gray-950 font-bold rounded-xl text-xs font-mono shadow-md flex items-center justify-center gap-2"
-            >
-              {saving ? <Loader2 size={16} className="animate-spin" /> : 'Save Holding'}
-            </button>
-          </form>
+      {successMsg && (
+        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs p-3.5 rounded-xl flex items-center gap-2.5 font-mono animate-fadeIn">
+          <CheckCircle size={16} className="text-emerald-400 flex-shrink-0" />
+          <span>{successMsg}</span>
         </div>
       )}
 
-      {/* Holdings Table */}
-      <div className="bg-gray-800/80 border border-gray-700/60 rounded-2xl overflow-hidden shadow-xl">
-        <div className="px-6 py-4 border-b border-gray-700/60 flex justify-between items-center">
-          <h3 className="text-sm font-bold text-white font-mono uppercase tracking-wider">Multi-Currency Balance Sheet</h3>
-          <span className="text-[11px] text-gray-400 font-mono">Auto-reconciled with clearing accounts</span>
+      {errorMsg && (
+        <div className="bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs p-3.5 rounded-xl flex items-center gap-2.5 font-mono animate-fadeIn">
+          <AlertCircle size={16} className="text-rose-400 flex-shrink-0" />
+          <span>{errorMsg}</span>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-mono">
-            <thead>
-              <tr className="bg-gray-900/60 text-gray-400 border-b border-gray-700/60">
-                <th className="p-4 font-bold uppercase tracking-wider">Currency Asset</th>
-                <th className="p-4 font-bold uppercase tracking-wider">Vault Balance</th>
-                <th className="p-4 font-bold uppercase tracking-wider">Avg Acquisition Price</th>
-                <th className="p-4 font-bold uppercase tracking-wider">Current Value (USD)</th>
-                <th className="p-4 font-bold uppercase tracking-wider">Floating P&L</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-700/40">
-              {portfolio?.holdings?.length === 0 ? (
-                <tr>
-                  <td colSpan="5" className="p-8 text-center text-gray-500">
-                    No holdings in portfolio yet. Click "Deposit / Add Asset" above.
-                  </td>
-                </tr>
-              ) : (
-                portfolio?.holdings?.map((item) => (
-                  <tr key={item._id || item.currency} className="hover:bg-gray-700/30 transition-colors">
-                    <td className="p-4 font-bold text-emerald-400 flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-[10px] text-emerald-400">
-                        {item.currency.substring(0, 2)}
-                      </div>
-                      {item.currency}
-                    </td>
-                    <td className="p-4 text-white font-bold">
-                      {item.amount?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                    <td className="p-4 text-gray-400">
-                      ${item.averageBuyPrice?.toFixed(4)}
-                    </td>
-                    <td className="p-4 text-white font-semibold">
-                      ${item.currentValueUSD?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                    <td className="p-4">
-                      <span className={`inline-flex items-center gap-1 font-bold ${item.profitLoss >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {item.profitLoss >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                        ${Math.abs(item.profitLoss || 0).toFixed(2)}
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+      )}
+
+      {/* Summary Banner */}
+      <div className="bg-gradient-to-br from-emerald-950/80 via-gray-900 to-gray-950 border border-emerald-500/30 rounded-2xl p-6 relative overflow-hidden shadow-xl">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <p className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-1 font-mono">
+              Total Consolidated Treasury Value
+            </p>
+            <p className="text-3xl font-black text-white font-mono flex items-center gap-1">
+              <DollarSign size={26} className="text-emerald-400" />
+              {portfolio?.totalValueUSD?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'} USD
+            </p>
+            <p className="text-xs text-gray-400 mt-1">
+              Reconciled across 9 active fiat currencies with double-entry clearing records.
+            </p>
+          </div>
+
+          <button
+            onClick={() => setShowAdd(true)}
+            className="px-5 py-2.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-mono font-bold flex items-center gap-2"
+          >
+            <Plus size={14} /> Quick Deposit
+          </button>
         </div>
       </div>
+
+      {/* Holdings Cards Grid */}
+      <div className="space-y-3">
+        <div className="flex justify-between items-center">
+          <h3 className="text-sm font-bold text-white font-mono">Currency Balances (9 Supported Currencies)</h3>
+          <span className="text-xs text-gray-400 font-mono">Real-Time Holdings</span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {portfolio?.holdings?.map((h) => (
+            <div
+              key={h.currency}
+              className="bg-gray-900/80 border border-gray-800 rounded-2xl p-5 space-y-3 hover:border-gray-700 transition-colors shadow-lg"
+            >
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="text-lg font-black text-white font-mono">{h.currency}</span>
+                  <span className="text-[11px] text-gray-400 block font-sans">
+                    {SUPPORTED_CURRENCIES.find(c => c.code === h.currency)?.name || h.currency}
+                  </span>
+                </div>
+                <span className="text-xs font-mono bg-gray-950 px-2.5 py-1 rounded-lg text-gray-400 border border-gray-800">
+                  ≈ ${h.currentValueUSD?.toLocaleString()} USD
+                </span>
+              </div>
+
+              <div className="border-t border-gray-800/80 pt-2 flex justify-between items-end">
+                <div>
+                  <span className="text-[10px] text-gray-500 uppercase font-mono block">Available Balance</span>
+                  <p className="text-xl font-black text-emerald-400 font-mono">
+                    {h.amount?.toLocaleString()} {h.currency}
+                  </p>
+                </div>
+                <button
+                  onClick={() => { setCurrency(h.currency); setShowAdd(true); }}
+                  className="p-2 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-lg text-xs font-mono transition-colors"
+                  title={`Deposit ${h.currency}`}
+                >
+                  <Plus size={14} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Add Simulated Funds Modal (Section 6) */}
+      {showAdd && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 font-mono">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="border-b border-gray-800 pb-3 flex justify-between items-center">
+              <div>
+                <span className="text-[10px] text-emerald-400 uppercase font-bold tracking-widest block">Simulated Wallet Deposit</span>
+                <h3 className="text-base font-black text-white">Add Simulated Funds</h3>
+              </div>
+              <button
+                onClick={() => setShowAdd(false)}
+                className="text-gray-400 hover:text-white p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-400 font-sans leading-relaxed">
+              Deposits are simulated. A double-entry ledger record (<code className="text-emerald-400 font-mono">DEPOSIT / CREDIT</code>) will be created to maintain full financial auditability.
+            </p>
+
+            <form onSubmit={handleAddHolding} className="space-y-4">
+              <div className="space-y-1.5 text-xs">
+                <label className="text-gray-300 font-bold uppercase block">Currency</label>
+                <select
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  className="w-full bg-gray-950 border border-gray-700 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-emerald-500"
+                >
+                  {SUPPORTED_CURRENCIES.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.code} - {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5 text-xs">
+                <label className="text-gray-300 font-bold uppercase block">Deposit Amount</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="2000"
+                  className="w-full bg-gray-950 border border-gray-700 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAdd(false)}
+                  className="w-1/2 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="w-1/2 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-gray-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
+                >
+                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                  Confirm Deposit
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

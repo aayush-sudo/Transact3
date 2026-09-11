@@ -1,5 +1,18 @@
 const mongoose = require('mongoose');
 
+const TRANSACTION_STATUSES = [
+  'CREATED',
+  'VALIDATING',
+  'ANALYZING',
+  'ROUTE_SELECTED',
+  'AWAITING_CONFIRMATION',
+  'PROCESSING',
+  'SETTLING',
+  'COMPLETED',
+  'COMPLETED_VIA_FALLBACK',
+  'FAILED'
+];
+
 const TransactionSchema = new mongoose.Schema({
   quoteId: {
     type: String,
@@ -14,9 +27,18 @@ const TransactionSchema = new mongoose.Schema({
     ref: 'User',
     required: true,
   },
+  recipient: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
   receiverEmail: {
     type: String,
     required: true,
+  },
+  paymentMode: {
+    type: String,
+    enum: ['SEND_AMOUNT', 'RECIPIENT_GETS'],
+    default: 'SEND_AMOUNT',
   },
   sourceCurrency: {
     type: String,
@@ -48,6 +70,11 @@ const TransactionSchema = new mongoose.Schema({
   executedFXRate: {
     type: Number,
   },
+  fxSource: {
+    type: String,
+    enum: ['LIVE_API', 'CACHED', 'SIMULATED'],
+    default: 'LIVE_API',
+  },
   fxSpreadBps: {
     type: Number,
     required: true,
@@ -56,29 +83,39 @@ const TransactionSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
-  fxForecast: {
-    horizon6h: Number,
-    horizon12h: Number,
-    horizon24h: Number,
-    horizon48h: Number,
+  fxAnalysis: {
+    currentRate: Number,
+    sma24h: Number,
+    ema24h: Number,
     volatility: Number,
-    confidence: Number,
-  },
-  fxTimingDecision: {
-    recommendation: {
-      type: String,
-      enum: ['EXECUTE_NOW', 'DEFER_1H', 'DEFER_6H', 'DEFER_12H', 'DEFER_24H'],
-      default: 'EXECUTE_NOW',
-    },
-    expectedSavingsPct: Number,
-    explanation: String,
+    volatilityClassification: String,
+    recommendation: String,
+    isSufficientHistory: Boolean,
   },
   selectedRail: {
     type: String,
-    enum: ['SWIFT_BATCH', 'RTGS_INSTANT', 'REGIONAL_INSTANT', 'STABLECOIN_VAULT', 'NETTING_LEDGER', 'CARD_PUSH'],
+    enum: ['REGIONAL_INSTANT', 'NETTING_LEDGER', 'RTGS_INSTANT', 'CARD_PUSH', 'SWIFT_BATCH'],
     required: true,
   },
+  recommendedRail: {
+    type: String,
+    enum: ['REGIONAL_INSTANT', 'NETTING_LEDGER', 'RTGS_INSTANT', 'CARD_PUSH', 'SWIFT_BATCH'],
+  },
+  selectionMode: {
+    type: String,
+    enum: ['RECOMMENDED', 'MANUAL_OVERRIDE'],
+    default: 'RECOMMENDED',
+  },
+  routingPreference: {
+    type: String,
+    enum: ['BALANCED', 'CHEAPEST', 'FASTEST'],
+    default: 'BALANCED',
+  },
   railFeeUSD: {
+    type: Number,
+    required: true,
+  },
+  totalSenderDebitUSD: {
     type: Number,
     required: true,
   },
@@ -86,9 +123,10 @@ const TransactionSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
-  currencyLiquidityRequired: Number,
-  currencyLiquidityAvailable: Number,
-  railUtilizationPct: Number,
+  simulationDurationMs: {
+    type: Number,
+    default: 1500,
+  },
   riskScore: {
     type: Number,
     required: true,
@@ -108,10 +146,6 @@ const TransactionSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
-  fxSlippageBps: {
-    type: Number,
-    default: 0,
-  },
   aiSavingsUSD: {
     type: Number,
     default: 0,
@@ -122,60 +156,13 @@ const TransactionSchema = new mongoose.Schema({
   iso20022Message: {
     type: Object,
   },
-  blockchainReceipt: {
-    txHash: String,
-    blockNumber: Number,
-    gasUsed: Number,
-    contractAddress: String,
-    network: String,
-  },
-  cutOffApplied: {
-    isWeekendOrAfterHours: { type: Boolean, default: false },
-    extraLatencyHours: { type: Number, default: 0 },
-    latePenaltyUSD: { type: Number, default: 0 }
-  },
   usedFallbackRail: {
     type: String,
   },
-  executionMode: {
-    type: String,
-    enum: ['IMMEDIATE', 'SCHEDULED'],
-    default: 'IMMEDIATE',
-  },
-  scheduledFor: {
-    type: Date,
-  },
-  delayHours: {
-    type: Number,
-    default: 0,
-  },
-  expectedYieldSavingsUSD: {
-    type: Number,
-    default: 0,
-  },
   status: {
     type: String,
-    enum: [
-      'INITIATED',
-      'VALIDATED',
-      'QUOTED',
-      'AUTHORIZED',
-      'SCHEDULED',
-      'FX_PENDING',
-      'FX_EXECUTED',
-      'RAIL_SELECTED',
-      'LIQUIDITY_RESERVED',
-      'SETTLEMENT_PENDING',
-      'SETTLED',
-      'COMPLETED',
-      'COMPLETED_VIA_FALLBACK',
-      'REJECTED',
-      'EXPIRED',
-      'FAILED',
-      'CANCELLED',
-      'MANUAL_REVIEW'
-    ],
-    default: 'INITIATED',
+    enum: TRANSACTION_STATUSES,
+    default: 'CREATED',
   },
   timestamp: {
     type: Date,
@@ -187,3 +174,4 @@ TransactionSchema.index({ sender: 1, timestamp: -1 });
 TransactionSchema.index({ quoteId: 1 });
 
 module.exports = mongoose.model('Transaction', TransactionSchema);
+module.exports.TRANSACTION_STATUSES = TRANSACTION_STATUSES;

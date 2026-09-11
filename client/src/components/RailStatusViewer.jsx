@@ -42,7 +42,7 @@ const RailStatusViewer = () => {
           </div>
           <div>
             <h3 className="text-base font-bold text-white">Multi-Rail Liquidity & Settlement Capacity Monitor</h3>
-            <p className="text-xs text-gray-400">Real-time throughput and utilization across 6 simulated settlement pipelines</p>
+            <p className="text-xs text-gray-400">Real-time throughput and utilization across 5 simulated settlement pipelines</p>
           </div>
         </div>
 

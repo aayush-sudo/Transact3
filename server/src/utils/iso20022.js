@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ISO 20022 Financial Messaging Engine for Institutional Cross-Border Settlement
  */
 
@@ -19,7 +19,7 @@ class ISO20022Engine {
         CreationDateTime: creationTime,
         NumberOfTransactions: '1',
         SettlementInformation: {
-          SettlementMethod: transaction.selectedRail === 'STABLECOIN_VAULT' ? 'CLRG_SMART_CONTRACT' : 'CLRG',
+          SettlementMethod: 'CLRG',
           ClearingSystem: {
             Proprietary: transaction.selectedRail || 'SWIFT_BATCH'
           }

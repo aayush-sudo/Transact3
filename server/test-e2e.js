@@ -42,7 +42,7 @@ async function runTests() {
     quotedFXRate: 0.917,
     fxCostUSD: 30.00,
     fxSpreadBps: 30,
-    selectedRail: 'STABLECOIN_VAULT',
+    selectedRail: 'REGIONAL_INSTANT',
     railFeeUSD: 1.50,
     estimatedLatencyHours: 0.0008,
     riskScore: 18,
@@ -53,9 +53,6 @@ async function runTests() {
 
   const settlement = await settlementEngine.processSettlement(txDoc);
   console.log(`✅ 11-Stage Settlement Execution: PASS (Status: ${settlement.settlementStatus}, ClearingRef: ${settlement.clearingReference})`);
-  if (settlement.blockchainReceipt) {
-    console.log(`   ↳ Web3 Vault TxHash: ${settlement.blockchainReceipt.txHash.substring(0, 20)}...`);
-  }
   if (settlement.iso20022) {
     console.log(`   ↳ ISO 20022 Message: ${settlement.iso20022.pacs008.messageType} generated successfully`);
   }

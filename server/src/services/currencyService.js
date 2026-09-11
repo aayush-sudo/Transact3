@@ -1,65 +1,81 @@
 const axios = require('axios');
 
-const getExchangeRates = async (baseCurrency = 'USD') => {
-  try {
-    const API_KEY = process.env.EXCHANGE_RATE_API_KEY;
-    const url = `https://v6.exchangerate-api.com/v6/${API_KEY}/latest/${baseCurrency}`;
-    
-    const response = await axios.get(url);
-    if (response.data && response.data.result === 'success') {
-      // OVERRIDE: Force the live API to return 94.85 for INR to match the user's expected demo value
-      if (response.data.conversion_rates) {
-        const rates = response.data.conversion_rates;
-        if (baseCurrency === 'USD') {
-          rates['INR'] = 94.85;
-        } else if (baseCurrency === 'INR') {
-          rates['USD'] = 1 / 94.85;
-        } else if (rates['USD']) {
-          // If base is another currency (like EUR), calculate INR rate through USD
-          rates['INR'] = rates['USD'] * 94.85;
-        }
-      }
-      return response.data;
-    } else {
-      throw new Error('Failed to fetch exchange rates');
-    }
-  } catch (error) {
-    console.error('Exchange API Error:', error.message);
-    // Return mock data if API key is missing or invalid
-    return mockLatestRates(baseCurrency);
-  }
-};
+// In-memory cache for FX rates with 60s TTL
+const rateCache = new Map();
+const CACHE_TTL_MS = 60 * 1000;
 
-const MOCK_USD_RATES = {
-  USD: 1,
+const DEFAULT_USD_RATES = {
+  USD: 1.0,
   EUR: 0.92,
   GBP: 0.79,
-  JPY: 151.5,
-  INR: 94.85, // Updated to match user's expected correct rate
+  INR: 87.20,
+  AED: 3.6725,
+  SGD: 1.345,
   AUD: 1.52,
   CAD: 1.36,
-  CHF: 0.90,
-  CNY: 7.23,
-  SGD: 1.35
+  JPY: 152.0
 };
 
-const mockLatestRates = (base) => {
-  const rates = {};
-  const baseRateToUSD = MOCK_USD_RATES[base] || 1;
-  
-  for (const [currency, rateToUSD] of Object.entries(MOCK_USD_RATES)) {
-    rates[currency] = Number((rateToUSD / baseRateToUSD).toFixed(4));
+const getExchangeRates = async (baseCurrency = 'USD') => {
+  const base = (baseCurrency || 'USD').toUpperCase();
+  const cacheKey = `RATES_${base}`;
+  const cached = rateCache.get(cacheKey);
+
+  if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
+    return {
+      result: 'success',
+      base_code: base,
+      conversion_rates: cached.rates,
+      source: 'CACHED',
+      timestamp: new Date(cached.timestamp),
+      is_mock: cached.is_mock
+    };
   }
 
+  const API_KEY = process.env.EXCHANGE_RATE_API_KEY;
+  if (API_KEY && API_KEY !== 'your_api_key_here') {
+    try {
+      const url = `https://v6.exchangerate-api.com/v6/${API_KEY}/latest/${base}`;
+      const response = await axios.get(url, { timeout: 4000 });
+      if (response.data && response.data.result === 'success' && response.data.conversion_rates) {
+        const rates = response.data.conversion_rates;
+        rateCache.set(cacheKey, { rates, timestamp: Date.now(), is_mock: false });
+        return {
+          result: 'success',
+          base_code: base,
+          conversion_rates: rates,
+          source: 'LIVE_API',
+          timestamp: new Date(),
+          is_mock: false
+        };
+      }
+    } catch (error) {
+      console.warn(`[CurrencyService] Live API call failed (${error.message}). Falling back to simulated rates.`);
+    }
+  }
+
+  // Realistic simulated rates derived from realistic baseline
+  const rates = {};
+  const baseToUSD = DEFAULT_USD_RATES[base] || 1.0;
+  for (const [curr, usdRate] of Object.entries(DEFAULT_USD_RATES)) {
+    rates[curr] = Number((usdRate / baseToUSD).toFixed(4));
+  }
+
+  rateCache.set(cacheKey, { rates, timestamp: Date.now(), is_mock: true });
   return {
     result: 'success',
     base_code: base,
     conversion_rates: rates,
+    source: 'SIMULATED',
+    timestamp: new Date(),
     is_mock: true
   };
 };
 
-const getHistoricalRates = async (baseCurrency, targetCurrency, days = 7) => {
+const getHistoricalRates = async (baseCurrency, targetCurrency, days = 14) => {
+  const base = (baseCurrency || 'USD').toUpperCase();
+  const target = (targetCurrency || 'EUR').toUpperCase();
+
   try {
     const endDate = new Date();
     const startDate = new Date();
@@ -68,58 +84,54 @@ const getHistoricalRates = async (baseCurrency, targetCurrency, days = 7) => {
     const endStr = endDate.toISOString().split('T')[0];
     const startStr = startDate.toISOString().split('T')[0];
 
-    const url = `https://api.frankfurter.dev/v1/${startStr}..${endStr}?base=${baseCurrency}&symbols=${targetCurrency}`;
-    const response = await axios.get(url);
+    const url = `https://api.frankfurter.dev/v1/${startStr}..${endStr}?base=${base}&symbols=${target}`;
+    const response = await axios.get(url, { timeout: 3500 });
 
-    if (response.data && response.data.rates) {
+    if (response.data && response.data.rates && Object.keys(response.data.rates).length > 0) {
       return {
         result: 'success',
-        base_code: baseCurrency,
+        base_code: base,
+        target_code: target,
         conversion_rates: response.data.rates,
+        source: 'LIVE_API',
         is_mock: false
       };
     }
-    throw new Error('Invalid response from Frankfurter API');
+    throw new Error('Invalid or empty response from Frankfurter API');
   } catch (error) {
-    console.error('Exchange History API Error:', error.message);
-    // Fallback to fetching the real current rate and mocking history if API fails
-    const latestRates = await getExchangeRates(baseCurrency);
-    const anchorRate = latestRates.conversion_rates[targetCurrency] || 1.0;
-    return mockHistoricalData(baseCurrency, targetCurrency, days, anchorRate);
+    const latestRates = await getExchangeRates(base);
+    const anchorRate = (latestRates.conversion_rates && latestRates.conversion_rates[target]) || 1.0;
+    return mockHistoricalData(base, target, days, anchorRate);
   }
 };
 
 const mockHistoricalData = (base, target, days, anchorRate) => {
-  const dates = [];
   const rates = {};
-  
-  // We want the MOST RECENT day to be exactly the anchorRate
-  // So we generate the random walk backwards!
   let currentRate = anchorRate;
-  const trend = (Math.random() - 0.5) * 0.005 * anchorRate; // Scale trend by anchor
-  
+  const trend = (Math.random() - 0.48) * 0.001 * anchorRate;
+
   for (let i = 0; i < days; i++) {
     const d = new Date();
     d.setDate(d.getDate() - i);
     const dateStr = d.toISOString().split('T')[0];
-    
-    rates[dateStr] = { [target]: currentRate };
-    
-    // Calculate the previous day's rate (stepping backwards in time)
-    // Scale the volatility to the magnitude of the currency (e.g. INR is 83, USD is 1)
-    const volatility = anchorRate * 0.005; 
-    currentRate = Math.max(0.01, currentRate - (Math.random() * volatility * 2 - volatility) - trend); 
+
+    rates[dateStr] = { [target]: Number(currentRate.toFixed(4)) };
+    const volatility = anchorRate * 0.003;
+    currentRate = Math.max(0.0001, currentRate - ((Math.random() * 2 - 1) * volatility) - trend);
   }
-  
+
   return {
     result: 'success',
     base_code: base,
+    target_code: target,
     conversion_rates: rates,
+    source: 'SIMULATED',
     is_mock: true
   };
 };
 
 module.exports = {
   getExchangeRates,
-  getHistoricalRates
+  getHistoricalRates,
+  DEFAULT_USD_RATES
 };

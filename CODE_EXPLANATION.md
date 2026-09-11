@@ -30,12 +30,11 @@ Transact3/
 │       │   ├── Transaction.js     # Cross-border transaction schema
 │       │   ├── FXQuote.js         # Active FX quote reservation schema
 │       │   └── LedgerEntry.js     # Double-entry audit ledger schema
-│       ├── rails/                 # 6 Payment Rail Adapters
+│       ├── rails/                 # 5 Payment Rail Adapters
 │       │   ├── railAdapter.js     # Base adapter interface (validate, cost, latency)
 │       │   ├── swiftRail.js       # SWIFT Classic Batch adapter
 │       │   ├── rtgsRail.js        # RTGS High-Value clearing adapter
 │       │   ├── instantRail.js     # Regional Instant Network adapter (FedNow/SEPA/UPI)
-│       │   ├── stablecoinRail.js  # Web3 USDC/EURC liquidity vault adapter
 │       │   ├── nettingRail.js     # Bilateral Intra-Bank Netting adapter
 │       │   └── cardPushRail.js    # Visa Direct / Mastercard Send adapter
 │       ├── services/              # Core Business Logic & Optimization Engines
@@ -47,22 +46,20 @@ Transact3/
 │       │   ├── liquidityManager.js     # Dynamic pool utilization & penalty calculator
 │       │   └── evaluationEngine.js     # Model performance benchmarking (MAE, RMSE)
 │       ├── utils/
-│       │   ├── blockchain.js      # SHA-256 Proof-of-Work audit blockchain
-│       │   └── riskEngine.js      # Fraud velocity & volume risk scoring
+│       │   ├── auditLogger.js     # SHA-256 tamper-evident cryptographic hash audit chaining
+│       │   └── mathUtils.js       # Precise financial arithmetic and bps calculation
 │       ├── controllers/           # API Endpoint Request Handlers
 │       │   ├── authController.js
 │       │   ├── currencyController.js
 │       │   ├── portfolioController.js
 │       │   ├── transactionController.js
-│       │   └── orchestrationController.js
+│       │   └── adminController.js
 │       └── routes/                # Express REST API Route Handlers
 │           ├── authRoutes.js
 │           ├── currencyRoutes.js
 │           ├── portfolioRoutes.js
 │           ├── transactionRoutes.js
-│           ├── blockchainRoutes.js
-│           ├── fxRoutes.js
-│           └── orchestrationRoutes.js
+│           └── adminRoutes.js
 └── client/                        # React 19 + Vite Frontend App (Port 5173)
     ├── package.json               # Client dependencies (lucide-react, chart.js, axios)
     ├── vite.config.js             # Vite development server config
@@ -105,13 +102,12 @@ $$\text{Utility Score} = (w_{\text{reliability}} \cdot \text{Reliability}_R) - \
 ---
 
 ### 3. Payment Rail Adapters ([server/src/rails/](file:///c:/Users/nanir/Desktop/college/project/LY%20project/Transact3/server/src/rails/))
-All 6 payment rail adapters inherit from `BaseRailAdapter` ([railAdapter.js](file:///c:/Users/nanir/Desktop/college/project/LY%20project/Transact3/server/src/rails/railAdapter.js)):
+All 5 payment rail adapters inherit from `BaseRailAdapter` ([railAdapter.js](file:///c:/Users/nanir/Desktop/college/project/LY%20project/Transact3/server/src/rails/railAdapter.js)):
 1. **`swiftRail.js`**: Baseline correspondent banking (36-hr avg latency, \$25 base fee + 10 bps).
 2. **`rtgsRail.js`**: Real-Time Gross Settlement (0.25-hr latency, \$18 base fee + 5 bps).
 3. **`instantRail.js`**: Domestic instant clearings (1-sec latency, \$1.50 base fee + 2 bps).
-4. **`stablecoinRail.js`**: Web3 USDC/EURC liquidity vault (3-sec latency, \$0.50 base fee + 1 bps).
-5. **`nettingRail.js`**: Book transfer netting (Instant latency, \$0.00 base fee).
-6. **`cardPushRail.js`**: Account-to-card push payments (9-min latency, \$3.50 base fee + 15 bps).
+4. **`nettingRail.js`**: Book transfer netting (Instant latency, \$0.00 base fee).
+5. **`cardPushRail.js`**: Account-to-card push payments (9-min latency, \$3.50 base fee + 15 bps).
 
 ---
 
@@ -125,29 +121,30 @@ When a payment is authorized, it progresses through 11 discrete stages:
 6. `FX_EXECUTED` → Conversion completed.
 7. `RAIL_SELECTED` → Preferred rail assigned.
 8. `LIQUIDITY_RESERVED` → Rail capacity subtracted.
-9. `SETTLEMENT_PENDING` → Pipeline dispatch.
-10. `SETTLED` → Clearing reference issued.
-11. `COMPLETED` → Ledger entry & PoW block mined.
+9. `SETTLEMENT_PENDING` → Pipeline dispatch via rail adapter.
+10. `SETTLED` → Clearing reference issued & recipient wallet credited.
+11. `COMPLETED` → Double-entry balanced ledger entry & SHA-256 audit chained.
 
 ---
 
-### 5. Proof-of-Work Blockchain Audit Trail ([server/src/utils/blockchain.js](file:///c:/Users/nanir/Desktop/college/project/LY%20project/Transact3/server/src/utils/blockchain.js))
-Implements a SHA-256 Proof-of-Work blockchain ledger:
-* Each block contains `index`, `timestamp`, `transactions` array, `previousHash`, `nonce`, and `hash`.
-* `minePendingTransactions()` mines pending settlement records into immutable blocks, accessible via `GET /api/blockchain`.
+### 5. SHA-256 Tamper-Evident Audit Log ([server/src/utils/auditLogger.js](file:///c:/Users/nanir/Desktop/college/project/LY%20project/Transact3/server/src/utils/auditLogger.js))
+Implements a cryptographically chained SHA-256 audit log:
+* Each audit entry contains `sequence`, `timestamp`, `eventType`, `transactionId`, `data`, `previousHash`, and `hash`.
+* `verifyAuditChain()` dynamically validates hash linkage and payload integrity from sequence #1 to latest.
 
 ---
 
 ## 🖥️ Frontend React Architecture Breakdown
 
-### 1. Main Dashboard ([client/src/App.jsx](file:///c:/Users/nanir/Desktop/college/project/LY%20project/Transact3/client/src/App.jsx))
-Assembles the top navigation, active tab switcher (Orchestrator, Rail Status, FX Analytics, Evaluation Benchmarks), and header state.
+### 1. Main Dashboard ([client/src/pages/Dashboard.jsx](file:///c:/Users/nanir/Desktop/college/project/LY%20project/Transact3/client/src/pages/Dashboard.jsx))
+Presents core user metrics: Total Balance ($ USD), Completed Payments, Total Rail Fees Paid, Historical Savings vs SWIFT, Multi-Currency Holdings breakdown, and Recent Activity feed.
 
-### 2. Multi-Rail Router UI ([client/src/components/MultiRailRouter.jsx](file:///c:/Users/nanir/Desktop/college/project/LY%20project/Transact3/client/src/components/MultiRailRouter.jsx))
-* Handles user inputs (Amount, Source Currency, Destination Currency, Recipient Email).
-* Priority profile selector buttons (`BALANCED`, `COST`, `SPEED`).
-* Calls `POST /api/fx/quote` to compute quotes and rank rails via [RailRanking.jsx](file:///c:/Users/nanir/Desktop/college/project/LY%20project/Transact3/client/src/components/RailRanking.jsx).
-* Calls `POST /api/transaction/send` to execute settlement and render receipts via [TransactionTimeline.jsx](file:///c:/Users/nanir/Desktop/college/project/LY%20project/Transact3/client/src/components/TransactionTimeline.jsx) and [TCAAnalytics.jsx](file:///c:/Users/nanir/Desktop/college/project/LY%20project/Transact3/client/src/components/TCAAnalytics.jsx).
+### 2. Payment Router UI ([client/src/pages/PaymentRouter.jsx](file:///c:/Users/nanir/Desktop/college/project/LY%20project/Transact3/client/src/pages/PaymentRouter.jsx))
+* Handles user inputs (Amount, Source Currency, Destination Currency, Recipient Selector, Payment Mode A vs B).
+* Priority profile selector buttons (`BALANCED`, `CHEAPEST`, `FASTEST`).
+* Fetches live binding quotes from `POST /api/transaction/quote`.
+* Displays real-time comparative matrix across all 5 settlement rails with eligibility badges, fees, times, and clear rejection reasons.
+* Supports Manual Override with clear tracking and prompt execution via `POST /api/transaction/confirm`.
 
 ---
 
@@ -158,9 +155,17 @@ Assembles the top navigation, active tab switcher (Orchestrator, Rail Status, FX
 | `GET` | `/api/health` | API health check status |
 | `POST` | `/api/user/register` | Create user account |
 | `POST` | `/api/user/login` | Authenticate user & receive JWT |
+| `GET` | `/api/user/recipients` | List registered recipients for transfers |
 | `GET` | `/api/currency/rates/:pair` | Get current spot exchange rate |
-| `GET` | `/api/portfolio` | Get user multi-currency wallet holdings |
-| `POST` | `/api/fx/quote` | Generate AI payment quote & multi-rail ranking |
-| `POST` | `/api/transaction/send` | Execute 11-stage cross-border payment settlement |
-| `GET` | `/api/blockchain` | Get full SHA-256 blockchain ledger |
-| `GET` | `/api/mine` | Mine pending transactions into a new block |
+| `GET` | `/api/portfolio` | Get user multi-currency wallet holdings & history |
+| `POST` | `/api/portfolio/deposit` | Simulate deposit into wallet with ledger recording |
+| `POST` | `/api/transaction/quote` | Generate 60s binding quote & evaluate 5 rails |
+| `POST` | `/api/transaction/confirm` | Atomic settlement execution, wallet update & ledger |
+| `GET` | `/api/transaction/history` | User transaction history with TCA savings |
+| `GET` | `/api/transaction/:id` | Full transaction details with ledger & audit records |
+| `GET` | `/api/admin/metrics` | System-wide payment volume, savings & fees |
+| `GET` | `/api/admin/rails` | Rail statuses, liquidity capacities, and pool toggles |
+| `POST` | `/api/admin/rails/:railId/toggle` | Enable / disable payment rail |
+| `POST` | `/api/admin/rails/:railId/liquidity` | Adjust available liquidity pool capacity |
+| `GET` | `/api/admin/audit-chain` | Complete SHA-256 audit log with cryptographic validation |
+| `GET` | `/api/admin/reconcile` | System-wide double-entry ledger balance verification |

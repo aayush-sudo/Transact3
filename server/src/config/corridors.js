@@ -3,7 +3,7 @@
  */
 const SUPPORTED_CURRENCIES = require('./currencies');
 
-const ALL_RAILS = ['SWIFT_BATCH', 'RTGS_INSTANT', 'REGIONAL_INSTANT', 'STABLECOIN_VAULT', 'NETTING_LEDGER', 'CARD_PUSH'];
+const ALL_RAILS = ['SWIFT_BATCH', 'RTGS_INSTANT', 'REGIONAL_INSTANT', 'NETTING_LEDGER', 'CARD_PUSH'];
 
 const CORRIDOR_CONFIG = {
   // Common corridor limits & rail eligibility rules
@@ -18,13 +18,13 @@ const CORRIDOR_CONFIG = {
     'USD-INR': { eligibleRails: ALL_RAILS, maxAmountUSD: 5000000, baseSpreadBps: 35 },
     'EUR-GBP': { eligibleRails: ALL_RAILS, maxAmountUSD: 5000000, baseSpreadBps: 20 },
     'USD-JPY': { eligibleRails: ALL_RAILS, maxAmountUSD: 10000000, baseSpreadBps: 25 },
-    'USD-BRL': { eligibleRails: ['SWIFT_BATCH', 'RTGS_INSTANT', 'REGIONAL_INSTANT', 'STABLECOIN_VAULT', 'CARD_PUSH'], maxAmountUSD: 2000000, baseSpreadBps: 55 },
+    'USD-BRL': { eligibleRails: ['SWIFT_BATCH', 'RTGS_INSTANT', 'REGIONAL_INSTANT', 'CARD_PUSH'], maxAmountUSD: 2000000, baseSpreadBps: 55 },
     'USD-MXN': { eligibleRails: ALL_RAILS, maxAmountUSD: 3000000, baseSpreadBps: 45 },
-    'EUR-BRL': { eligibleRails: ['SWIFT_BATCH', 'RTGS_INSTANT', 'STABLECOIN_VAULT', 'CARD_PUSH'], maxAmountUSD: 1500000, baseSpreadBps: 60 },
+    'EUR-BRL': { eligibleRails: ['SWIFT_BATCH', 'RTGS_INSTANT', 'CARD_PUSH'], maxAmountUSD: 1500000, baseSpreadBps: 60 },
     'USD-CAD': { eligibleRails: ALL_RAILS, maxAmountUSD: 5000000, baseSpreadBps: 25 },
     'USD-SGD': { eligibleRails: ALL_RAILS, maxAmountUSD: 5000000, baseSpreadBps: 30 },
     'USD-AED': { eligibleRails: ALL_RAILS, maxAmountUSD: 5000000, baseSpreadBps: 30 },
-    'USD-ZAR': { eligibleRails: ['SWIFT_BATCH', 'RTGS_INSTANT', 'STABLECOIN_VAULT', 'CARD_PUSH'], maxAmountUSD: 1000000, baseSpreadBps: 70 },
+    'USD-ZAR': { eligibleRails: ['SWIFT_BATCH', 'RTGS_INSTANT', 'CARD_PUSH'], maxAmountUSD: 1000000, baseSpreadBps: 70 },
   }
 };
 

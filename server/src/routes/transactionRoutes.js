@@ -2,13 +2,12 @@ const express = require('express');
 const router = express.Router();
 const transactionController = require('../controllers/transactionController');
 const { protect } = require('../middleware/auth');
-const { validatePaymentQuoteRequest, validatePaymentExecuteRequest } = require('../middleware/validation');
 const { checkIdempotency } = require('../middleware/idempotency');
 
-router.post('/quote', protect, validatePaymentQuoteRequest, transactionController.createTransactionQuote);
-router.post('/send', protect, checkIdempotency, validatePaymentExecuteRequest, transactionController.executeTransaction);
+router.post('/quote', protect, transactionController.createTransactionQuote);
+router.post('/confirm', protect, checkIdempotency, transactionController.confirmAndExecuteTransaction);
+router.post('/send', protect, checkIdempotency, transactionController.confirmAndExecuteTransaction);
 router.get('/history', protect, transactionController.getTransactionHistory);
-router.post('/:id/execute-now', protect, transactionController.executeScheduledPaymentNow);
-router.post('/:id/cancel', protect, transactionController.cancelScheduledPayment);
+router.get('/:id', protect, transactionController.getTransactionById);
 
 module.exports = router;

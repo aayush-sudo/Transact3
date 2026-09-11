@@ -1,7 +1,9 @@
 const iso20022Engine = require('../utils/iso20022');
+const { calculateRailFee } = require('../utils/mathUtils');
 
 /**
- * Enhanced Base Rail Adapter with Dynamic Cut-Offs & ISO 20022 Generation
+ * Base Rail Adapter for Simulated Payment Rails
+ * Consistent interface with simulated settlement and ISO 20022 generation
  */
 class BaseRailAdapter {
   constructor(config) {
@@ -10,20 +12,17 @@ class BaseRailAdapter {
     this.config = config;
   }
 
-  /**
-   * Check if current time falls into a cut-off window (e.g. Friday 17:00 UTC to Sunday midnight)
-   */
   isCutOffActive(now = new Date()) {
     const day = now.getUTCDay(); // 0 = Sunday, 5 = Friday, 6 = Saturday
     const hour = now.getUTCHours();
 
-    // Friday after 17:00 UTC or Saturday or Sunday
-    if ((day === 5 && hour >= 17) || day === 6 || day === 0) {
+    // Weekend Banking Blackout Window for legacy/batch clearing (SWIFT)
+    if (this.id === 'SWIFT_BATCH' && ((day === 5 && hour >= 17) || day === 6 || day === 0)) {
       return {
         isCutOff: true,
-        reason: 'Weekend Banking Blackout Window (Fedwire/TARGET2/SWIFT Batches Closed)',
+        reason: 'Weekend Correspondent Banking Blackout Window (SWIFT Batches Closed)',
         extraLatencyHours: day === 5 ? (72 - (hour - 17)) : day === 6 ? 48 : 24,
-        latePenaltyUSD: 25.00
+        latePenaltyUSD: 10.00
       };
     }
 
@@ -45,48 +44,70 @@ class BaseRailAdapter {
   }
 
   estimateCost(amountUSD, options = {}) {
-    let fee = this.config.baseFeeUSD + (amountUSD * this.config.variableFeePct);
-    return parseFloat(fee.toFixed(2));
-  }
-
-  estimateLatency(options = {}) {
-    return this.config.avgLatencyHours;
-  }
-
-  checkLiquidity(amountUSD, railUtilizationPct) {
-    if (railUtilizationPct >= 99) {
-      return { available: false, capacityPct: railUtilizationPct, reason: 'Rail capacity exhausted (>99%)' };
+    const feeDetails = calculateRailFee(amountUSD, this.config.baseFeeUSD, this.config.variableFeeBps);
+    let total = feeDetails.totalFeeUSD;
+    const cutOff = this.isCutOffActive(options.currentTime || new Date());
+    if (cutOff.isCutOff) {
+      total += cutOff.latePenaltyUSD;
     }
-    return { available: true, capacityPct: railUtilizationPct };
+    return parseFloat(total.toFixed(2));
   }
 
-  async authorize(transactionData) {
+  getFeeBreakdown(amountUSD, options = {}) {
+    const feeDetails = calculateRailFee(amountUSD, this.config.baseFeeUSD, this.config.variableFeeBps);
+    let total = feeDetails.totalFeeUSD;
+    const cutOff = this.isCutOffActive(options.currentTime || new Date());
+    if (cutOff.isCutOff) {
+      total += cutOff.latePenaltyUSD;
+    }
     return {
-      authorized: true,
-      authorizationCode: `AUTH-${this.id}-${Date.now().toString(36).toUpperCase()}`,
-      timestamp: new Date()
+      fixedFeeUSD: feeDetails.fixedFeeUSD,
+      variableFeeUSD: feeDetails.variableFeeUSD,
+      totalFeeUSD: parseFloat(total.toFixed(2))
     };
   }
 
-  async execute(transactionData) {
-    const amountUSD = transactionData.sourceAmountUSD || transactionData.sourceAmount || 1000;
-    const cost = this.estimateCost(amountUSD);
-    const latency = this.estimateLatency();
+  estimateLatency(options = {}) {
+    const cutOff = this.isCutOffActive(options.currentTime || new Date());
+    if (cutOff.isCutOff) {
+      return parseFloat((this.config.avgLatencyHours + cutOff.extraLatencyHours).toFixed(1));
+    }
+    return this.config.avgLatencyHours;
+  }
+
+  async executePayment(payment) {
+    const amountUSD = payment.sourceAmountUSD || payment.sourceAmount || 1000;
+    const feeObj = this.estimateCost(amountUSD);
+    const latencyHours = this.estimateLatency();
+    const cutOff = this.isCutOffActive();
 
     const clearingRef = `CLR-${this.id.substring(0, 4)}-${Math.floor(100000 + Math.random() * 900000)}`;
-    const enrichedTx = { ...transactionData, clearingReference: clearingRef, selectedRail: this.id };
+    const enrichedTx = { ...payment, clearingReference: clearingRef, selectedRail: this.id };
 
     const isoMessage = iso20022Engine.generatePacs008(enrichedTx);
     const statusReport = iso20022Engine.generatePacs002(enrichedTx, 'ACSC');
 
     return {
       success: true,
+      executionStatus: 'SETTLED',
       railId: this.id,
       railName: this.name,
       clearingReference: clearingRef,
-      settledAt: new Date(Date.now() + Math.round(latency * 3600 * 1000)),
-      feeUSD: cost,
-      latencyHours: latency,
+      railReference: clearingRef,
+      expectedSettlementDisplay: this.config.expectedSettlementDisplay,
+      expectedSettlementDuration: this.config.expectedSettlementDisplay,
+      simulationDurationMs: this.config.simulationDurationMs || 1200,
+      settledAt: new Date(Date.now() + Math.round(latencyHours * 3600 * 1000)),
+      feeUSD: feeObj.totalFeeUSD,
+      fixedFeeUSD: feeObj.fixedFeeUSD,
+      variableFeeUSD: feeObj.variableFeeUSD,
+      latencyHours,
+      processingMetadata: {
+        networkType: 'Simulated Clearing Network',
+        railId: this.id,
+        cutOffWarning: cutOff.isCutOff ? cutOff.reason : null,
+        simulatedDelayMs: this.config.simulationDurationMs
+      },
       iso20022: {
         pacs008: isoMessage,
         pacs002: statusReport
@@ -94,21 +115,9 @@ class BaseRailAdapter {
     };
   }
 
-  getStatus() {
-    return {
-      id: this.id,
-      name: this.name,
-      reliabilityScore: this.config.reliabilityScore,
-      maxAmountUSD: this.config.maxAmountUSD
-    };
-  }
-
-  handleFailure(error) {
-    return {
-      recovered: false,
-      railId: this.id,
-      error: error.message || 'Settlement failed on rail'
-    };
+  // Backwards-compatible alias
+  async execute(payment) {
+    return this.executePayment(payment);
   }
 }
 
