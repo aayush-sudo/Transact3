@@ -18,8 +18,16 @@ class LiquidityManager {
         }
       }
 
-      // 2. Ensure RailSettings exist in MongoDB
-      for (const [railId, config] of Object.entries(RAIL_CONFIG)) {
+      // 2. Remove any obsolete RTGS records from database
+      await RailSetting.deleteMany({ railId: { $in: ['RTGS_SETTLEMENT', 'RTGS_INSTANT'] } });
+      this.cachedRailSettings.delete('RTGS_SETTLEMENT');
+      this.cachedRailSettings.delete('RTGS_INSTANT');
+
+      // 3. Ensure RailSettings exist in MongoDB for the 4 canonical routes
+      const railIds = RAIL_CONFIG.CANONICAL_RAIL_IDS || Object.keys(RAIL_CONFIG);
+      for (const railId of railIds) {
+        const config = RAIL_CONFIG[railId];
+        if (!config || typeof config !== 'object') continue;
         let setting = await RailSetting.findOne({ railId });
         if (!setting) {
           setting = await RailSetting.create({
@@ -45,6 +53,7 @@ class LiquidityManager {
       console.warn('[LiquidityManager] MongoDB initialization fallback:', err.message);
       // In-memory fallback
       for (const [railId, config] of Object.entries(RAIL_CONFIG)) {
+        if (railId.startsWith('RTGS')) continue;
         this.cachedRailSettings.set(railId, {
           railId,
           name: config.name,
@@ -79,12 +88,12 @@ class LiquidityManager {
   async getAllRailSettings() {
     if (!this.isInitialized) await this.initialize();
     try {
-      const settings = await RailSetting.find({}).sort({ baseFeeUSD: 1 });
+      const settings = await RailSetting.find({ railId: { $nin: ['RTGS_SETTLEMENT', 'RTGS_INSTANT'] } }).sort({ baseFeeUSD: 1 });
       if (settings && settings.length > 0) {
         return settings.map(s => s.toObject());
       }
     } catch (e) {}
-    return Array.from(this.cachedRailSettings.values());
+    return Array.from(this.cachedRailSettings.values()).filter(r => !r.railId?.startsWith('RTGS'));
   }
 
   async setRailEnabled(railId, isEnabled) {
@@ -125,7 +134,12 @@ class LiquidityManager {
   }
 
   async resetToDefaults() {
+    await RailSetting.deleteMany({ railId: { $in: ['RTGS_SETTLEMENT', 'RTGS_INSTANT'] } });
+    this.cachedRailSettings.delete('RTGS_SETTLEMENT');
+    this.cachedRailSettings.delete('RTGS_INSTANT');
+
     for (const [railId, config] of Object.entries(RAIL_CONFIG)) {
+      if (railId.startsWith('RTGS') || typeof config !== 'object') continue;
       const defaultAvailable = config.capacityHourlyUSD * 0.75;
       try {
         await RailSetting.findOneAndUpdate(

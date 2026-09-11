@@ -17,7 +17,11 @@ import {
   DollarSign,
   ChevronDown,
   Info,
-  Check
+  Check,
+  FileText,
+  ShieldAlert,
+  Copy,
+  Layers
 } from 'lucide-react';
 import api from '../services/api';
 import TransactionSimulationModal from './TransactionSimulationModal';
@@ -67,6 +71,13 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
   const [error, setError] = useState(null);
   const [overrideWarning, setOverrideWarning] = useState(null);
 
+  // RegTech AML & Graph Routing State
+  const [amlCompliance, setAmlCompliance] = useState(null);
+  const [graphRoute, setGraphRoute] = useState(null);
+  const [showXmlModal, setShowXmlModal] = useState(false);
+  const [copiedXml, setCopiedXml] = useState(false);
+  const [complianceAcknowledged, setComplianceAcknowledged] = useState(false);
+
   // 16-Step Interactive Simulation Modal
   const [showSimulationModal, setShowSimulationModal] = useState(false);
 
@@ -101,6 +112,7 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
     setTxResult(null);
     setShowConfirmScreen(false);
     setOverrideWarning(null);
+    setComplianceAcknowledged(false);
 
     try {
       const { data } = await api.post('/transaction/quote', {
@@ -115,6 +127,8 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
       if (data.success) {
         setQuoteData(data.data.quote);
         setOrchestration(data.data.orchestration);
+        setAmlCompliance(data.data.amlCompliance);
+        setGraphRoute(data.data.graphRoute);
 
         const recRail = data.data.orchestration?.recommendedRail;
         if (recRail) {
@@ -382,11 +396,99 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
             </div>
           )}
 
-          {/* 5-Rail Comparison Matrix */}
+          {/* RegTech AML Compliance & Dijkstra Graph Route Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* 1. RegTech AML & Sanction Clearance Card */}
+            {amlCompliance && (
+              <div className="bg-gray-950/80 border border-gray-800 rounded-xl p-3.5 space-y-2 font-mono">
+                <div className="flex justify-between items-center border-b border-gray-800/60 pb-2">
+                  <div className="flex items-center gap-2">
+                    {amlCompliance.decision === 'PASS' ? (
+                      <ShieldCheck size={16} className="text-emerald-400" />
+                    ) : (
+                      <ShieldAlert size={16} className="text-amber-400" />
+                    )}
+                    <span className="text-xs font-bold text-white">RegTech AML / Sanction Screening</span>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                    amlCompliance.decision === 'PASS'
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                      : amlCompliance.decision === 'MANUAL_REVIEW'
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                      : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                  }`}>
+                    {amlCompliance.decision}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div>
+                    <span className="text-[10px] text-gray-500 uppercase block">Screened Entity</span>
+                    <span className="text-gray-200 truncate block font-sans">{amlCompliance.query_name || receiverEmail}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-gray-500 uppercase block">Sanction Risk Score</span>
+                    <span className={`font-bold ${amlCompliance.risk_score < 0.65 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      {Math.round(amlCompliance.risk_score * 100)}% ({amlCompliance.matched_target ? `Nearest: ${amlCompliance.matched_target}` : 'No Match'})
+                    </span>
+                  </div>
+                </div>
+                <div className="text-[10px] text-gray-400 border-t border-gray-800/60 pt-1.5 flex justify-between">
+                  <span>Algorithms: Jaro-Winkler · Levenshtein · Soundex</span>
+                  <span className="text-emerald-400 font-bold">OFAC / UN Cleared</span>
+                </div>
+              </div>
+            )}
+
+            {/* 2. Dijkstra Multi-Hop FX Graph Route Card */}
+            {graphRoute && (
+              <div className="bg-gray-950/80 border border-gray-800 rounded-xl p-3.5 space-y-2 font-mono">
+                <div className="flex justify-between items-center border-b border-gray-800/60 pb-2">
+                  <div className="flex items-center gap-2">
+                    <Layers size={16} className="text-indigo-400" />
+                    <span className="text-xs font-bold text-white">Dijkstra Multi-Hop FX Route</span>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
+                    {graphRoute.is_multi_hop ? `${graphRoute.hop_count} Hops (Bridge)` : 'Direct Single Hop'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 py-0.5">
+                  <span className="text-xs font-bold text-emerald-400">Path:</span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {graphRoute.path?.map((node, i) => (
+                      <React.Fragment key={node}>
+                        <span className="px-2 py-0.5 bg-gray-900 border border-gray-700 rounded text-xs text-white font-bold">
+                          {node}
+                        </span>
+                        {i < graphRoute.path.length - 1 && (
+                          <ArrowRight size={12} className="text-indigo-400" />
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-[11px] border-t border-gray-800/60 pt-1.5">
+                  <div>
+                    <span className="text-[10px] text-gray-500 uppercase block">Effective Rate</span>
+                    <span className="text-white font-bold">{graphRoute.effective_rate}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-gray-500 uppercase block">Net Conversion Fee</span>
+                    <span className="text-gray-300">{graphRoute.net_fee_bps} bps ({graphRoute.net_fee_percentage}%)</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-gray-500 uppercase block">Path Latency</span>
+                    <span className="text-indigo-300">~{graphRoute.estimated_latency_seconds}s</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 4-Rail Comparison Matrix */}
           <div className="space-y-3">
             <div className="flex justify-between items-center">
               <div>
-                <h3 className="text-sm font-bold text-white font-mono">5 Settlement Rails Comparison</h3>
+                <h3 className="text-sm font-bold text-white font-mono">4 Settlement Rails Comparison</h3>
                 <p className="text-[11px] text-gray-400">Click any eligible rail to manually override recommendation</p>
               </div>
               {selectionMode === 'MANUAL_OVERRIDE' && (
@@ -536,7 +638,7 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
                 <span className="text-gray-300">1 {quoteData.sourceCurrency} = {quoteData.quotedRate} {quoteData.destinationCurrency}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-gray-800/60">
-                <span className="text-gray-400">Selected Rail</span>
+                <span className="text-gray-400">Selected Settlement Rail</span>
                 <span className="text-white font-bold">{selectedRailObject.name}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-gray-800/60">
@@ -545,14 +647,74 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
                   {selectionMode}
                 </span>
               </div>
-              <div className="flex justify-between py-1 border-b border-gray-800/60">
-                <span className="text-gray-400">Estimated Rail Fee</span>
-                <span className="text-gray-300">${selectedRailObject.est_fee_usd?.toFixed(2)} USD</span>
+
+              {/* Granular TCA Cost Breakdown */}
+              <div className="bg-gray-950/70 p-2.5 rounded-xl border border-gray-800 space-y-1.5 text-[11px]">
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Route Clearing Fee:</span>
+                  <span className="text-white font-bold">${selectedRailObject.est_fee_usd?.toFixed(2)} USD</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">FX Spread Cost ({quoteData.spreadBps || 30} bps):</span>
+                  <span className="text-amber-400 font-bold">${(quoteData.fxCostUSD || 0).toFixed(2)} USD</span>
+                </div>
+                <div className="flex justify-between border-t border-gray-800/80 pt-1">
+                  <span className="text-gray-300 font-semibold">Total Estimated Cost:</span>
+                  <span className="text-emerald-400 font-bold">${((selectedRailObject.est_fee_usd || 0) + (quoteData.fxCostUSD || 0)).toFixed(2)} USD</span>
+                </div>
+                {quoteData.aiSavingsUSD > 0 && (
+                  <div className="flex justify-between text-emerald-400 text-[10px] font-bold">
+                    <span>SWIFT Benchmark Savings:</span>
+                    <span>+${quoteData.aiSavingsUSD.toFixed(2)} USD</span>
+                  </div>
+                )}
               </div>
+
               <div className="flex justify-between py-1 border-b border-gray-800/60">
                 <span className="text-gray-400">Expected Settlement Duration</span>
-                <span className="text-emerald-400">{selectedRailObject.expected_settlement_display || `${selectedRailObject.est_latency_hours}h`}</span>
+                <span className="text-emerald-400">
+                  {selectedRailObject.id?.startsWith('SWIFT')
+                    ? '~36 hours (simulated estimate)'
+                    : selectedRailObject.expected_settlement_display || `${selectedRailObject.est_latency_hours}h`}
+                </span>
               </div>
+
+              {/* RegTech AML Compliance Notification in Modal */}
+              {amlCompliance?.decision === 'REJECT' && (
+                <div className="bg-rose-500/15 border border-rose-500/40 p-3 rounded-xl text-rose-300 text-xs space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-rose-400">
+                    <AlertTriangle size={14} />
+                    <span>Compliance Block: Sanction Match Detected</span>
+                  </div>
+                  <p className="text-[11px] text-gray-300">
+                    Screening matched {amlCompliance.matched_target || 'SDN list'} ({Math.round(amlCompliance.risk_score * 100)}% similarity). Transaction cannot be settled.
+                  </p>
+                </div>
+              )}
+
+              {amlCompliance?.decision === 'MANUAL_REVIEW' && (
+                <div className="bg-amber-500/15 border border-amber-500/40 p-3 rounded-xl text-amber-200 text-xs space-y-2">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-400">
+                    <AlertTriangle size={14} />
+                    <span>Compliance Warning: Manual Review Flag</span>
+                  </div>
+                  <p className="text-[11px] text-gray-300">
+                    Fuzzy screening flagged potential phonetic similarity ({Math.round(amlCompliance.risk_score * 100)}%) against {amlCompliance.matched_target || 'sanction records'}.
+                  </p>
+                  <label className="flex items-start gap-2 cursor-pointer pt-1 border-t border-amber-500/30">
+                    <input
+                      type="checkbox"
+                      checked={complianceAcknowledged}
+                      onChange={(e) => setComplianceAcknowledged(e.target.checked)}
+                      className="mt-0.5 rounded border-amber-400 text-amber-500 focus:ring-0"
+                    />
+                    <span className="text-[11px] text-amber-300 font-sans font-medium leading-snug">
+                      I have reviewed this compliance alert and confirm this simulated transfer is compliant to proceed.
+                    </span>
+                  </label>
+                </div>
+              )}
+
               <div className="flex justify-between py-2 bg-emerald-950/20 px-3 rounded-xl text-sm font-black border border-emerald-500/20">
                 <span className="text-gray-200">Total Sender Debit</span>
                 <span className="text-emerald-400">
@@ -574,8 +736,12 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
               <button
                 type="button"
                 onClick={handleExecutePayment}
-                disabled={executing}
-                className="w-1/2 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-gray-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
+                disabled={
+                  executing ||
+                  amlCompliance?.decision === 'REJECT' ||
+                  (amlCompliance?.decision === 'MANUAL_REVIEW' && !complianceAcknowledged)
+                }
+                className="w-1/2 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-gray-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
               >
                 {executing ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                 Confirm & Settle
@@ -622,14 +788,74 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
             <TCAAnalytics tca={txResult.tca} aiSavingsUSD={txResult.transaction?.aiSavingsUSD || 0} />
           )}
 
-          {/* View in Transaction History Link */}
-          <div className="flex justify-end pt-2">
+          {/* View in Transaction History & XML Link */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setShowXmlModal(true)}
+              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-xl text-xs font-mono font-bold flex items-center gap-2 border border-gray-700 transition-all cursor-pointer"
+            >
+              <FileText size={14} className="text-emerald-400" />
+              View ISO 20022 pacs.008 XML
+            </button>
+
             <a
               href="/transactions"
               className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-bold underline"
             >
               View Full Double-Entry Ledger & Audit Log →
             </a>
+          </div>
+        </div>
+      )}
+
+      {/* ISO 20022 XML Modal */}
+      {showXmlModal && txResult && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 font-mono">
+            <div className="flex justify-between items-center border-b border-gray-800 pb-3">
+              <div>
+                <span className="text-[10px] text-emerald-400 uppercase font-bold tracking-widest block">
+                  Financial Interoperability Message
+                </span>
+                <h3 className="text-base font-black text-white">ISO 20022 pacs.008.001.10 XML</h3>
+              </div>
+              <button
+                onClick={() => setShowXmlModal(false)}
+                className="text-gray-400 hover:text-white p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <pre className="bg-gray-950 p-4 rounded-xl border border-gray-800 text-[11px] text-emerald-300 overflow-x-auto max-h-96 font-mono leading-relaxed">
+              {txResult.isoXml || txResult.transaction?.isoXmlMessage || '<!-- pacs.008.001.10 generated on settlement -->'}
+            </pre>
+
+            <div className="flex justify-between items-center pt-2">
+              <span className="text-[11px] text-gray-400">Standard: pacs.008.001.10 Customer Credit Transfer</span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(txResult.isoXml || txResult.transaction?.isoXmlMessage || '');
+                    setCopiedXml(true);
+                    setTimeout(() => setCopiedXml(false), 2000);
+                  }}
+                  className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-xs text-white rounded-lg flex items-center gap-1.5 border border-gray-700 cursor-pointer"
+                >
+                  <Copy size={13} />
+                  {copiedXml ? 'Copied!' : 'Copy XML'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowXmlModal(false)}
+                  className="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-xs text-gray-950 font-bold rounded-lg cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

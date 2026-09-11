@@ -3,7 +3,7 @@ const RAIL_CONFIG = require('../config/railConfig');
 
 class NettingRail extends BaseRailAdapter {
   constructor() {
-    super(RAIL_CONFIG.NETTING_LEDGER);
+    super(RAIL_CONFIG.BILATERAL_NETTING || RAIL_CONFIG.NETTING_LEDGER);
   }
 
   isCutOffActive() {

@@ -180,7 +180,7 @@ const TransactionSimulationModal = ({
 
       // Step 6: Rail Eligibility Check
       setStepStatuses(prev => { const s = [...prev]; s[5] = 'IN_PROGRESS'; return s; });
-      addAuditLog(`5 settlement rails evaluated: SWIFT, RTGS, INSTANT, NETTING, CARD PUSH`);
+      addAuditLog(`4 settlement rails evaluated: SWIFT, INSTANT, NETTING, CARD PUSH`);
       await delay(STEP_DELAYS[5]);
       setStepStatuses(prev => { const s = [...prev]; s[5] = 'COMPLETED'; return s; });
       setCurrentStepIndex(6);
@@ -194,8 +194,8 @@ const TransactionSimulationModal = ({
       if (topRail?.liquidityPenalty > 5.0 || topRail?.status === 'DISABLED' || topRail?.status === 'CRITICAL_CONSTRAINED') {
         setIsFallbackScenario(true);
         const nextFallback = orch.fallbackRails?.find(r => r.liquidityPenalty <= 5.0 && r.status !== 'DISABLED') || orch.fallbackRails?.[0];
-        setFallbackReason(`${topRail.name} rejected due to ${topRail.status === 'DISABLED' ? 'Rail Override Disable' : 'Insufficient Liquidity Capacity'}. Dynamic fallback selected: ${nextFallback?.name || 'RTGS'}`);
-        addAuditLog(`⚠️ Liquidity Constraint on ${topRail.name}. Re-routing to ${nextFallback?.name || 'RTGS'}`);
+        setFallbackReason(`${topRail.name} rejected due to ${topRail.status === 'DISABLED' ? 'Rail Override Disable' : 'Insufficient Liquidity Capacity'}. Dynamic fallback selected: ${nextFallback?.name || 'SWIFT'}`);
+        addAuditLog(`⚠️ Liquidity Constraint on ${topRail.name}. Re-routing to ${nextFallback?.name || 'SWIFT'}`);
         if (nextFallback) selectedRailToExecute = nextFallback.id;
       } else {
         addAuditLog(`Liquidity verified for eligible rails. ${topRail?.name} capacity healthy.`);
@@ -480,7 +480,6 @@ const TransactionSimulationModal = ({
                             <p className="text-gray-400 font-bold text-[10px] uppercase">Active Settlement Pipelines:</p>
                             <div className="grid grid-cols-2 gap-1 text-[11px]">
                               <span className="text-emerald-400">✓ SWIFT (AVAILABLE)</span>
-                              <span className="text-emerald-400">✓ RTGS (AVAILABLE)</span>
                               <span className="text-emerald-400">✓ INSTANT (AVAILABLE)</span>
                               <span className="text-emerald-400">✓ NETTING (AVAILABLE)</span>
                               <span className="text-emerald-400">✓ CARD PUSH (AVAILABLE)</span>

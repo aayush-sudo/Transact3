@@ -3,7 +3,7 @@ const RAIL_CONFIG = require('../config/railConfig');
 
 class SwiftRail extends BaseRailAdapter {
   constructor() {
-    super(RAIL_CONFIG.SWIFT_BATCH);
+    super(RAIL_CONFIG.SWIFT_CORRESPONDENT || RAIL_CONFIG.SWIFT_BATCH);
   }
 
   estimateLatency(options = {}) {

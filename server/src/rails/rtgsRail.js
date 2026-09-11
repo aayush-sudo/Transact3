@@ -3,7 +3,7 @@ const RAIL_CONFIG = require('../config/railConfig');
 
 class RtgsRail extends BaseRailAdapter {
   constructor() {
-    super(RAIL_CONFIG.RTGS_INSTANT);
+    super(RAIL_CONFIG.RTGS_SETTLEMENT || RAIL_CONFIG.RTGS_INSTANT);
   }
 
   isRtgsWindowOpen(now = new Date()) {

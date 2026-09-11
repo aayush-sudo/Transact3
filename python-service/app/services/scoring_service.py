@@ -4,9 +4,9 @@ from app.models.schemas import RailCandidate, ScoredRail, RouteAnalyzeResponse
 from app.services.ml_prediction_interface import ml_layer, MLPredictionFeatureVector
 
 WEIGHTS = {
-    "BALANCED": {"cost": 0.40, "speed": 0.40, "reliability": 0.20},
-    "CHEAPEST": {"cost": 0.75, "speed": 0.10, "reliability": 0.15},
-    "FASTEST":  {"cost": 0.15, "speed": 0.70, "reliability": 0.15}
+    "BALANCED": {"cost": 0.35, "speed": 0.30, "reliability": 0.20, "risk": 0.10, "liquidity": 0.05},
+    "CHEAPEST": {"cost": 0.70, "speed": 0.10, "reliability": 0.15, "risk": 0.05, "liquidity": 0.00},
+    "FASTEST":  {"cost": 0.10, "speed": 0.70, "reliability": 0.15, "risk": 0.05, "liquidity": 0.00}
 }
 
 class ScoringService:
@@ -28,26 +28,25 @@ class ScoringService:
         max_fee = max([c.est_fee_usd for c in candidates], default=50.0)
         max_latency = max([c.est_latency_hours for c in candidates], default=36.0)
 
-        # Baseline denominators to avoid zero-division
         fee_norm_denom = max(max_fee, 25.0)
         speed_norm_denom = max(max_latency, 36.0)
 
         scored_rails: List[ScoredRail] = []
 
         for rail in candidates:
-            # If not eligible, assign rejection penalty
+            # If not eligible, exclude from candidate selection
             if not rail.is_eligible:
                 scored_rails.append(ScoredRail(
                     id=rail.id,
                     name=rail.name,
                     is_eligible=False,
-                    rejection_reason=rail.rejection_reason or "Not eligible",
+                    rejection_reason=rail.rejection_reason or "Operational limit or corridor restriction",
                     est_fee_usd=rail.est_fee_usd,
                     est_latency_hours=rail.est_latency_hours,
                     reliability_score=rail.reliability_score,
                     expected_settlement_display=rail.expected_settlement_display,
-                    norm_cost=1.0,
-                    norm_speed=1.0,
+                    norm_cost=0.0,
+                    norm_speed=0.0,
                     norm_reliability=rail.reliability_score,
                     liquidity_penalty=10.0,
                     deterministic_score=-1.0,
@@ -57,24 +56,28 @@ class ScoringService:
                 ))
                 continue
 
-            # Inverted normalization: Lower fee is better (1.0 = lowest fee, 0.0 = highest fee)
+            # Inverted normalization: Lower fee is better
             norm_cost = max(0.0, min(1.0, 1.0 - (rail.est_fee_usd / fee_norm_denom)))
 
-            # Inverted normalization: Lower latency is better (1.0 = fastest/instant, 0.0 = slowest)
+            # Inverted normalization: Lower latency is better
             norm_speed = max(0.0, min(1.0, 1.0 - (rail.est_latency_hours / speed_norm_denom)))
 
-            norm_reliability = rail.reliability_score
+            norm_reliability = max(0.0, min(1.0, rail.reliability_score))
+            norm_risk = norm_reliability  # Higher reliability = lower risk
+            
+            # Liquidity adequacy (1.0 if liquidity > 2x amount)
+            req_liq = max(1.0, amount * 2.0)
+            norm_liquidity = max(0.0, min(1.0, rail.available_liquidity_usd / req_liq))
 
-            # Liquidity utilization penalty
-            liquidity_penalty = 0.0
-            if rail.available_liquidity_usd < amount * 1.5:
-                liquidity_penalty = 0.15
+            liquidity_penalty = 0.15 if rail.available_liquidity_usd < amount * 1.5 else 0.0
 
-            # Multi-objective utility calculation
+            # Multi-objective utility calculation with all 5 factors
             deterministic_score = (
                 (w["cost"] * norm_cost) +
                 (w["speed"] * norm_speed) +
-                (w["reliability"] * norm_reliability) -
+                (w["reliability"] * norm_reliability) +
+                (w.get("risk", 0.0) * norm_risk) +
+                (w.get("liquidity", 0.0) * norm_liquidity) -
                 liquidity_penalty
             )
             deterministic_score = round(max(0.0, min(1.0, deterministic_score)), 4)
@@ -90,7 +93,6 @@ class ScoringService:
                 liquidity_available_usd=rail.available_liquidity_usd
             )
             ml_adjustment = ml_layer.predict_adjustment(features, deterministic_score)
-
             final_score = round(max(0.0, min(1.0, deterministic_score + ml_adjustment)), 4)
 
             scored_rails.append(ScoredRail(
@@ -112,7 +114,7 @@ class ScoringService:
                 rank=1
             ))
 
-        # Sort eligible rails by final score descending, followed by ineligible rails
+        # Sort eligible rails by final score descending
         eligible_rails = [r for r in scored_rails if r.is_eligible]
         ineligible_rails = [r for r in scored_rails if not r.is_eligible]
 
@@ -125,18 +127,17 @@ class ScoringService:
             r.rank = len(eligible_rails) + idx + 1
 
         all_ranked = eligible_rails + ineligible_rails
-
         recommended = eligible_rails[0] if len(eligible_rails) > 0 else None
 
         explanation = ""
         if recommended:
-            explanation = (
-                f"Selected {recommended.name} as the best route under the '{pref}' policy "
-                f"(Score: {recommended.final_score:.2f}, Fee: ${recommended.est_fee_usd:.2f}, "
-                f"Settlement: {recommended.expected_settlement_display or f'{recommended.est_latency_hours}h'}). "
-                f"Optimal multi-objective alignment for cost weight ({int(w['cost']*100)}%) "
-                f"and speed weight ({int(w['speed']*100)}%)."
-            )
+            bullets = [
+                f"Selected {recommended.name} under '{pref}' routing policy (Final Utility Score: {recommended.final_score:.2f}).",
+                f"Cost: ${recommended.est_fee_usd:.2f} (Weight: {int(w['cost']*100)}%, Cost Index: {recommended.norm_cost:.2f}).",
+                f"Speed: {recommended.expected_settlement_display} (Weight: {int(w['speed']*100)}%, Speed Index: {recommended.norm_speed:.2f}).",
+                f"Reliability & Risk: {int(recommended.reliability_score*100)}% SLA confidence score."
+            ]
+            explanation = " • ".join(bullets)
         else:
             explanation = "No payment rail met liquidity, amount limit, and corridor operational constraints."
 

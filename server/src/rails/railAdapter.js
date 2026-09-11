@@ -17,7 +17,7 @@ class BaseRailAdapter {
     const hour = now.getUTCHours();
 
     // Weekend Banking Blackout Window for legacy/batch clearing (SWIFT)
-    if (this.id === 'SWIFT_BATCH' && ((day === 5 && hour >= 17) || day === 6 || day === 0)) {
+    if ((this.id === 'SWIFT_CORRESPONDENT' || this.id === 'SWIFT_BATCH') && ((day === 5 && hour >= 17) || day === 6 || day === 0)) {
       return {
         isCutOff: true,
         reason: 'Weekend Correspondent Banking Blackout Window (SWIFT Batches Closed)',

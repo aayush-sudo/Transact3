@@ -16,7 +16,7 @@ const SCHEME_MAP = {
 
 class InstantRail extends BaseRailAdapter {
   constructor() {
-    super(RAIL_CONFIG.REGIONAL_INSTANT);
+    super(RAIL_CONFIG.INSTANT_PAYMENT_LINK || RAIL_CONFIG.REGIONAL_INSTANT);
   }
 
   isCutOffActive() {

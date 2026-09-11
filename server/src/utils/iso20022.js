@@ -137,6 +137,58 @@ class ISO20022Engine {
       }
     };
   }
+
+  /**
+   * pacs.008.001.10: Financial Institutional Customer Credit Transfer (XML Output)
+   */
+  generatePacs008Xml(transaction) {
+    const msgId = `MSG${Date.now()}-${Math.floor(100000 + Math.random() * 900000)}`;
+    const endToEndId = `E2E-TX-${transaction._id || transaction.quoteId || Date.now()}`;
+    const uetr = transaction.clearingReference || `UETR-${Math.random().toString(36).substring(2, 12).toUpperCase()}`;
+    const creationTime = new Date().toISOString();
+    const sourceAmt = Number(transaction.sourceAmount || 0).toFixed(2);
+    const destAmt = Number(transaction.destinationAmount || 0).toFixed(2);
+    const rate = Number(transaction.quotedFXRate || transaction.referenceFXRate || 1.0).toFixed(4);
+    const rail = transaction.selectedRail || 'REGIONAL_INSTANT';
+    const receiver = transaction.receiverEmail || 'Recipient';
+
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.10">
+  <FIToFICstmrCdtTrf>
+    <GrpHdr>
+      <MsgId>${msgId}</MsgId>
+      <CreDtTm>${creationTime}</CreDtTm>
+      <NbOfTxs>1</NbOfTxs>
+      <SttlmInf>
+        <SttlmMtd>CLRG</SttlmMtd>
+        <ClrSys>
+          <Prtry>${rail}</Prtry>
+        </ClrSys>
+      </SttlmInf>
+    </GrpHdr>
+    <CdtTrfTxInf>
+      <PmtId>
+        <EndToEndId>${endToEndId}</EndToEndId>
+        <UETR>${uetr}</UETR>
+      </PmtId>
+      <IntrBkSttlmAmt Ccy="${transaction.sourceCurrency || 'USD'}">${sourceAmt}</IntrBkSttlmAmt>
+      <InstdAmt Ccy="${transaction.destinationCurrency || 'EUR'}">${destAmt}</InstdAmt>
+      <XchgRateInf>
+        <XchgRate>${rate}</XchgRate>
+      </XchgRateInf>
+      <Dbtr>
+        <Nm>Transact3 Client Account</Nm>
+      </Dbtr>
+      <Cdtr>
+        <Nm>${receiver}</Nm>
+      </Cdtr>
+      <RmtInf>
+        <Ustrd>Transact3 Intelligent Multi-Rail Settlement: ${rail}</Ustrd>
+      </RmtInf>
+    </CdtTrfTxInf>
+  </FIToFICstmrCdtTrf>
+</Document>`.trim();
+  }
 }
 
 module.exports = new ISO20022Engine();

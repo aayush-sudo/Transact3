@@ -106,11 +106,11 @@ const Admin = () => {
     }
   };
 
-  const handleQuickSimulation = async (action, railId = 'REGIONAL_INSTANT', availableUSD = null) => {
+  const handleQuickSimulation = async (action, railId = 'INSTANT_PAYMENT_LINK', availableUSD = null) => {
     try {
       await api.post('/admin/simulation-controls', { action, railId, availableUSD });
       if (action === 'RESET') {
-        setActionMsg('Demo state reset: All 5 settlement rails enabled with full liquidity.');
+        setActionMsg('Demo state reset: All 4 settlement rails enabled with full liquidity.');
       } else if (action === 'LOW_LIQUIDITY') {
         setActionMsg(`Simulated Low Liquidity on ${railId} ($${availableUSD}). Next payment will trigger dynamic re-routing!`);
       } else if (action === 'DISABLE_RAIL') {
@@ -207,7 +207,7 @@ const Admin = () => {
               : 'text-gray-400 hover:text-white bg-gray-900 border border-gray-800'
           }`}
         >
-          <Settings size={14} /> 5 Settlement Rails & Liquidity
+          <Settings size={14} /> 4 Settlement Rails & Liquidity
         </button>
         <button
           onClick={() => setActiveTab('transactions')}
@@ -241,7 +241,7 @@ const Admin = () => {
         </button>
       </div>
 
-      {/* TAB 1: 5 Settlement Rails & Persistent Liquidity */}
+      {/* TAB 1: 4 Settlement Rails & Persistent Liquidity */}
       {activeTab === 'rails' && (
         <div className="space-y-4 animate-fadeIn font-mono">
           <div className="grid grid-cols-1 gap-3">

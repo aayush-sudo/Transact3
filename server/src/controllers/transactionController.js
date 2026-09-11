@@ -10,14 +10,20 @@ const liquidityManager = require('../services/liquidityManager');
 const auditEngine = require('../services/auditEngine');
 const tcaEngine = require('../services/tcaEngine');
 const portfolioController = require('./portfolioController');
+const amlService = require('../services/amlService');
+const graphRouterService = require('../services/graphRouterService');
+const iso20022 = require('../utils/iso20022');
 const { isCurrencySupported } = require('../config/currencies');
 const { roundToPrecision } = require('../utils/mathUtils');
 
 const RAIL_ADAPTERS_MAP = {
+  INSTANT_PAYMENT_LINK: require('../rails/instantRail'),
   REGIONAL_INSTANT: require('../rails/instantRail'),
+  BILATERAL_NETTING: require('../rails/nettingRail'),
   NETTING_LEDGER: require('../rails/nettingRail'),
-  RTGS_INSTANT: require('../rails/rtgsRail'),
+  CARD_PAYOUT: require('../rails/cardPushRail'),
   CARD_PUSH: require('../rails/cardPushRail'),
+  SWIFT_CORRESPONDENT: require('../rails/swiftRail'),
   SWIFT_BATCH: require('../rails/swiftRail')
 };
 
@@ -78,7 +84,20 @@ exports.createTransactionQuote = async (req, res, next) => {
       });
     }
 
-    // 4. Run Multi-Rail Orchestration Evaluation
+    // 4. RegTech AML & Sanctions Fuzzy Screening
+    const amlCheck = await amlService.screenName(recipientUser.name || cleanReceiverEmail);
+    if (amlCheck.decision === 'REJECT') {
+      return res.status(403).json({
+        success: false,
+        message: `AML Sanction Clearance Failed: Recipient matched sanction target '${amlCheck.matched_target}' (${Math.round(amlCheck.risk_score * 100)}% risk). Transfer blocked under OFAC / UN compliance regulations.`,
+        data: { amlCheck }
+      });
+    }
+
+    // 5. Smart Multi-Hop FX Graph Routing (Dijkstra)
+    const graphRoute = await graphRouterService.findOptimalRoute(sourceCurrency, destinationCurrency);
+
+    // 6. Run Multi-Rail Orchestration Evaluation
     const orchestrationResult = await orchestrationEngine.routePayment({
       sourceCurrency,
       destinationCurrency,
@@ -87,7 +106,7 @@ exports.createTransactionQuote = async (req, res, next) => {
       priority
     });
 
-    // 5. Create binding quote
+    // 7. Create binding quote
     const quote = await quoteEngine.createQuote({
       userId: senderId,
       recipientId: recipientUser._id,
@@ -100,6 +119,8 @@ exports.createTransactionQuote = async (req, res, next) => {
       data: {
         quote,
         orchestration: orchestrationResult,
+        graphRoute,
+        amlCompliance: amlCheck,
         senderBalance: {
           currency: sourceCurrency,
           available: currentBalance
@@ -327,6 +348,65 @@ exports.getTransactionById = async (req, res, next) => {
         transaction,
         ledgerEntries,
         auditLogs
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    Screen legal name / entity against OFAC & UN Sanction lists
+// @route   POST /api/compliance/screen
+// @access  Public / Private
+exports.screenCompliance = async (req, res, next) => {
+  try {
+    const { name, thresholdReject = 0.85, thresholdReview = 0.65 } = req.body;
+    if (!name) {
+      return res.status(400).json({ success: false, message: 'Name is required for screening' });
+    }
+    const result = await amlService.screenName(name, thresholdReject, thresholdReview);
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    Calculate optimal Dijkstra multi-hop graph path
+// @route   POST /api/routing/graph-path
+// @access  Public / Private
+exports.getGraphPath = async (req, res, next) => {
+  try {
+    const { sourceCurrency = 'USD', destinationCurrency = 'INR', maxLatencySeconds = 300 } = req.body;
+    const result = await graphRouterService.findOptimalRoute(sourceCurrency, destinationCurrency, maxLatencySeconds);
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    Get ISO 20022 pacs.008 XML for transaction
+// @route   GET /api/transaction/:id/iso20022
+// @access  Private
+exports.getTransactionIsoXml = async (req, res, next) => {
+  try {
+    const transaction = await Transaction.findById(req.params.id);
+    if (!transaction) {
+      return res.status(404).json({ success: false, message: 'Transaction not found' });
+    }
+
+    const xml = transaction.isoXmlMessage || iso20022.generatePacs008Xml(transaction);
+    if (req.query.format === 'raw') {
+      res.setHeader('Content-Type', 'application/xml');
+      return res.send(xml);
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        transactionId: transaction._id,
+        clearingReference: transaction.clearingReference,
+        standard: 'ISO 20022 pacs.008.001.10',
+        xml
       }
     });
   } catch (err) {

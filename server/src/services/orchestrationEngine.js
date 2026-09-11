@@ -1,5 +1,4 @@
 const swiftRail = require('../rails/swiftRail');
-const rtgsRail = require('../rails/rtgsRail');
 const instantRail = require('../rails/instantRail');
 const nettingRail = require('../rails/nettingRail');
 const cardPushRail = require('../rails/cardPushRail');
@@ -15,15 +14,14 @@ const { roundToPrecision, safeAdd, safeDivide, safeMultiply } = require('../util
 const ALL_RAIL_ADAPTERS = [
   instantRail,
   nettingRail,
-  rtgsRail,
   cardPushRail,
   swiftRail
 ];
 
 const PREFERENCE_WEIGHTS = {
-  BALANCED: { cost: 0.40, speed: 0.40, reliability: 0.20 },
-  CHEAPEST: { cost: 0.75, speed: 0.10, reliability: 0.15 },
-  FASTEST:  { cost: 0.15, speed: 0.70, reliability: 0.15 }
+  BALANCED: { cost: 0.35, speed: 0.30, reliability: 0.20, risk: 0.10, liquidity: 0.05 },
+  CHEAPEST: { cost: 0.70, speed: 0.10, reliability: 0.15, risk: 0.05, liquidity: 0.00 },
+  FASTEST:  { cost: 0.10, speed: 0.70, reliability: 0.15, risk: 0.05, liquidity: 0.00 }
 };
 
 class MultiRailOrchestrationEngine {
@@ -81,7 +79,7 @@ class MultiRailOrchestrationEngine {
     const spreadBps = corridorConfig.baseSpreadBps || 30;
     const fxCostUSD = roundToPrecision(sourceAmountUSD * (spreadBps / 10000), 2);
 
-    // 4. Evaluate ALL 5 rails without skipping
+    // 4. Evaluate ALL 4 rails without skipping
     const railCandidatesForFastAPI = [];
     const evaluatedRails = [];
 
@@ -146,7 +144,7 @@ class MultiRailOrchestrationEngine {
             description: c.description,
             icon: c.icon,
             is_eligible: false,
-            rejection_reason: c.rejection_reason,
+            rejection_reason: c.rejection_reason || 'Operational limit or corridor restriction',
             est_fee_usd: c.est_fee_usd,
             fixed_fee_usd: c.fixed_fee_usd,
             variable_fee_usd: c.variable_fee_usd,
@@ -166,10 +164,18 @@ class MultiRailOrchestrationEngine {
 
         const normCost = Math.max(0.0, Math.min(1.0, 1.0 - (c.est_fee_usd / maxFee)));
         const normSpeed = Math.max(0.0, Math.min(1.0, 1.0 - (c.est_latency_hours / maxLatency)));
-        const normReliability = c.reliability_score;
+        const normReliability = Math.max(0.0, Math.min(1.0, c.reliability_score));
+        const normRisk = normReliability;
+        const reqLiq = Math.max(1.0, sourceAmountUSD * 2.0);
+        const normLiquidity = Math.max(0.0, Math.min(1.0, c.available_liquidity_usd / reqLiq));
         const penalty = c.available_liquidity_usd < sourceAmountUSD * 1.5 ? 0.15 : 0.0;
 
-        const score = (weights.cost * normCost) + (weights.speed * normSpeed) + (weights.reliability * normReliability) - penalty;
+        const score = (weights.cost * normCost) + 
+                      (weights.speed * normSpeed) + 
+                      (weights.reliability * normReliability) +
+                      ((weights.risk || 0.0) * normRisk) +
+                      ((weights.liquidity || 0.0) * normLiquidity) - 
+                      penalty;
         const finalScore = roundToPrecision(Math.max(0.0, Math.min(1.0, score)), 4);
 
         return {
@@ -203,7 +209,7 @@ class MultiRailOrchestrationEngine {
       const recommended = eligible[0] || null;
       let explanation = "";
       if (recommended) {
-        explanation = `Selected ${recommended.name} as the best route under '${pref}' policy (Score: ${recommended.final_score.toFixed(2)}, Fee: $${recommended.est_fee_usd.toFixed(2)}, Settlement: ${recommended.expected_settlement_display}). Balances cost (${Math.round(weights.cost * 100)}%) and speed (${Math.round(weights.speed * 100)}%).`;
+        explanation = `Selected ${recommended.name} under '${pref}' routing policy (Final Utility Score: ${recommended.final_score.toFixed(2)}) • Cost: $${recommended.est_fee_usd.toFixed(2)} (Weight: ${Math.round(weights.cost * 100)}%) • Speed: ${recommended.expected_settlement_display} (Weight: ${Math.round(weights.speed * 100)}%) • SLA Reliability: ${Math.round(recommended.reliability_score * 100)}%.`;
       } else {
         explanation = "No payment rail met operational and liquidity constraints.";
       }
@@ -232,7 +238,7 @@ class MultiRailOrchestrationEngine {
     const recommended = finalEvaluatedRails.find(r => r.is_eligible) || null;
 
     // SWIFT baseline comparison for TCA
-    const swiftCandidate = finalEvaluatedRails.find(r => r.id === 'SWIFT_BATCH') || { est_fee_usd: 25.0 + (sourceAmountUSD * 0.0010) };
+    const swiftCandidate = finalEvaluatedRails.find(r => r.id === 'SWIFT_CORRESPONDENT' || r.id === 'SWIFT_BATCH') || { est_fee_usd: 25.0 + (sourceAmountUSD * 0.0010) };
     const recommendedFee = recommended ? recommended.est_fee_usd : 0;
     const aiSavingsUSD = Math.max(0, roundToPrecision(swiftCandidate.est_fee_usd - recommendedFee, 2));
 

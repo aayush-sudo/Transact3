@@ -36,9 +36,9 @@ class EvaluationEngine {
     let swiftTotalCost = 0;
     let swiftTotalLatency = 0;
 
-    // 3. Evaluate Baseline: RTGS-Only
-    let rtgsTotalCost = 0;
-    let rtgsTotalLatency = 0;
+    // 3. Evaluate Baseline: Instant-Only
+    let instantTotalCost = 0;
+    let instantTotalLatency = 0;
 
     // 4. Evaluate Baseline: Greedy Lowest-Cost
     let greedyTotalCost = 0;
@@ -57,7 +57,7 @@ class EvaluationEngine {
         aiTotalCost += rec.totalCostUSD;
         aiTotalLatency += rec.estLatencyHours;
 
-        if (rec.id !== 'SWIFT_BATCH' && rec.liquidityPenalty === 0) {
+        if (rec.id !== 'SWIFT_CORRESPONDENT' && rec.id !== 'SWIFT_BATCH' && rec.liquidityPenalty === 0) {
           aiBottlenecksAvoided++;
         }
 
@@ -67,10 +67,10 @@ class EvaluationEngine {
         swiftTotalCost += (swiftFee + swiftFxCost);
         swiftTotalLatency += 36.0;
 
-        // RTGS-Only Baseline calculation
-        const rtgsFee = 18.00 + (tx.amount * 0.0005);
-        rtgsTotalCost += (rtgsFee + swiftFxCost);
-        rtgsTotalLatency += 0.25;
+        // Instant-Only Baseline calculation
+        const instantFee = 1.50 + (tx.amount * 0.0002);
+        instantTotalCost += (instantFee + swiftFxCost);
+        instantTotalLatency += 0.0003;
 
         // Greedy Lowest Cost Baseline calculation
         const lowestRail = aiRoute.evaluatedRails.reduce((min, r) => r.totalCostUSD < min.totalCostUSD ? r : min, aiRoute.evaluatedRails[0]);
@@ -89,8 +89,8 @@ class EvaluationEngine {
     const swiftAvgCost = parseFloat((swiftTotalCost / batchSize).toFixed(2));
     const swiftAvgLatency = parseFloat((swiftTotalLatency / batchSize).toFixed(2));
 
-    const rtgsAvgCost = parseFloat((rtgsTotalCost / batchSize).toFixed(2));
-    const rtgsAvgLatency = parseFloat((rtgsTotalLatency / batchSize).toFixed(2));
+    const instantAvgCost = parseFloat((instantTotalCost / batchSize).toFixed(2));
+    const instantAvgLatency = parseFloat((instantTotalLatency / batchSize).toFixed(4));
 
     const greedyAvgCost = parseFloat((greedyTotalCost / batchSize).toFixed(2));
     const greedyAvgLatency = parseFloat((greedyTotalLatency / batchSize).toFixed(2));
@@ -105,7 +105,7 @@ class EvaluationEngine {
       strategies: {
         aiJointRouter: { name: 'AI Multi-Rail Joint Router', avgCostUSD: aiAvgCost, avgLatencyHours: aiAvgLatency, totalCostUSD: parseFloat(aiTotalCost.toFixed(2)) },
         swiftOnly: { name: 'SWIFT-Only Baseline', avgCostUSD: swiftAvgCost, avgLatencyHours: swiftAvgLatency, totalCostUSD: parseFloat(swiftTotalCost.toFixed(2)) },
-        rtgsOnly: { name: 'RTGS-Only Baseline', avgCostUSD: rtgsAvgCost, avgLatencyHours: rtgsAvgLatency, totalCostUSD: parseFloat(rtgsTotalCost.toFixed(2)) },
+        instantOnly: { name: 'Instant-Only Baseline', avgCostUSD: instantAvgCost, avgLatencyHours: instantAvgLatency, totalCostUSD: parseFloat(instantTotalCost.toFixed(2)) },
         greedyCost: { name: 'Greedy Lowest-Cost Router', avgCostUSD: greedyAvgCost, avgLatencyHours: greedyAvgLatency, totalCostUSD: parseFloat(greedyTotalCost.toFixed(2)) }
       },
       improvements: {
@@ -118,7 +118,7 @@ class EvaluationEngine {
       },
       paretoDataPoints: [
         { strategy: 'SWIFT Only', cost: swiftAvgCost, latency: swiftAvgLatency },
-        { strategy: 'RTGS Only', cost: rtgsAvgCost, latency: rtgsAvgLatency },
+        { strategy: 'Instant Only', cost: instantAvgCost, latency: instantAvgLatency },
         { strategy: 'Greedy Cost', cost: greedyAvgCost, latency: greedyAvgLatency },
         { strategy: 'AI Joint Router', cost: aiAvgCost, latency: aiAvgLatency }
       ]

@@ -5,7 +5,10 @@ const RailSettingSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
-    enum: ['REGIONAL_INSTANT', 'NETTING_LEDGER', 'RTGS_INSTANT', 'CARD_PUSH', 'SWIFT_BATCH']
+    enum: [
+      'SWIFT_CORRESPONDENT', 'INSTANT_PAYMENT_LINK', 'RTGS_SETTLEMENT', 'BILATERAL_NETTING', 'CARD_PAYOUT',
+      'REGIONAL_INSTANT', 'NETTING_LEDGER', 'RTGS_INSTANT', 'CARD_PUSH', 'SWIFT_BATCH'
+    ]
   },
   name: {
     type: String,

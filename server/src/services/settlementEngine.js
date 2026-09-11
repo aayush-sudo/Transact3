@@ -1,5 +1,4 @@
 const swiftRail = require('../rails/swiftRail');
-const rtgsRail = require('../rails/rtgsRail');
 const instantRail = require('../rails/instantRail');
 const nettingRail = require('../rails/nettingRail');
 const cardPushRail = require('../rails/cardPushRail');
@@ -13,10 +12,13 @@ const User = require('../models/User');
 const { roundToPrecision } = require('../utils/mathUtils');
 
 const RAIL_MAP = {
+  INSTANT_PAYMENT_LINK: instantRail,
   REGIONAL_INSTANT: instantRail,
+  BILATERAL_NETTING: nettingRail,
   NETTING_LEDGER: nettingRail,
-  RTGS_INSTANT: rtgsRail,
+  CARD_PAYOUT: cardPushRail,
   CARD_PUSH: cardPushRail,
+  SWIFT_CORRESPONDENT: swiftRail,
   SWIFT_BATCH: swiftRail
 };
 

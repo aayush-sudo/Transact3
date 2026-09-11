@@ -94,12 +94,18 @@ const TransactionSchema = new mongoose.Schema({
   },
   selectedRail: {
     type: String,
-    enum: ['REGIONAL_INSTANT', 'NETTING_LEDGER', 'RTGS_INSTANT', 'CARD_PUSH', 'SWIFT_BATCH'],
+    enum: [
+      'SWIFT_CORRESPONDENT', 'INSTANT_PAYMENT_LINK', 'RTGS_SETTLEMENT', 'BILATERAL_NETTING', 'CARD_PAYOUT',
+      'REGIONAL_INSTANT', 'NETTING_LEDGER', 'RTGS_INSTANT', 'CARD_PUSH', 'SWIFT_BATCH'
+    ],
     required: true,
   },
   recommendedRail: {
     type: String,
-    enum: ['REGIONAL_INSTANT', 'NETTING_LEDGER', 'RTGS_INSTANT', 'CARD_PUSH', 'SWIFT_BATCH'],
+    enum: [
+      'SWIFT_CORRESPONDENT', 'INSTANT_PAYMENT_LINK', 'RTGS_SETTLEMENT', 'BILATERAL_NETTING', 'CARD_PAYOUT',
+      'REGIONAL_INSTANT', 'NETTING_LEDGER', 'RTGS_INSTANT', 'CARD_PUSH', 'SWIFT_BATCH'
+    ],
   },
   selectionMode: {
     type: String,
@@ -155,6 +161,14 @@ const TransactionSchema = new mongoose.Schema({
   },
   iso20022Message: {
     type: Object,
+  },
+  isoXmlMessage: {
+    type: String,
+  },
+  sagaStatus: {
+    type: String,
+    enum: ['INITIATED', 'AML_SCREENING', 'AML_REJECTED', 'FUNDS_LOCKED', 'RAIL_DISPATCH', 'SETTLED', 'FAILED_ROLLBACK', 'FAILED_ABORTED'],
+    default: 'INITIATED',
   },
   usedFallbackRail: {
     type: String,

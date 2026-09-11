@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowUpDown, CheckCircle, ShieldCheck, FileText, ChevronRight, X, Loader2, Info } from 'lucide-react';
+import { ArrowUpDown, CheckCircle, ShieldCheck, FileText, ChevronRight, X, Loader2, Info, Copy } from 'lucide-react';
 import api from '../services/api';
 
 const TransactionHistory = () => {
@@ -8,6 +8,9 @@ const TransactionHistory = () => {
   const [selectedTx, setSelectedTx] = useState(null);
   const [txDetails, setTxDetails] = useState(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [showXmlModal, setShowXmlModal] = useState(false);
+  const [isoXml, setIsoXml] = useState('');
+  const [copiedXml, setCopiedXml] = useState(false);
 
   const fetchTransactions = async () => {
     try {
@@ -232,8 +235,79 @@ const TransactionHistory = () => {
                     )}
                   </div>
                 </div>
+
+                {/* ISO 20022 pacs.008 XML Button */}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const res = await api.get(`/transaction/${selectedTx._id}/iso20022`);
+                      if (res.data?.success) {
+                        setIsoXml(res.data.data.xml);
+                        setShowXmlModal(true);
+                      }
+                    } catch (e) {
+                      alert('Could not retrieve ISO 20022 XML message for this transaction');
+                    }
+                  }}
+                  className="w-full py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-xl text-xs font-mono font-bold flex items-center justify-center gap-2 border border-gray-700 transition-all cursor-pointer"
+                >
+                  <FileText size={15} className="text-emerald-400" />
+                  View Standard ISO 20022 pacs.008 XML
+                </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ISO 20022 XML Modal */}
+      {showXmlModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 font-mono">
+            <div className="flex justify-between items-center border-b border-gray-800 pb-3">
+              <div>
+                <span className="text-[10px] text-emerald-400 uppercase font-bold tracking-widest block">
+                  Financial Messaging Standard
+                </span>
+                <h3 className="text-base font-black text-white">ISO 20022 pacs.008.001.10 XML Message</h3>
+              </div>
+              <button
+                onClick={() => setShowXmlModal(false)}
+                className="text-gray-400 hover:text-white p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <pre className="bg-gray-950 p-4 rounded-xl border border-gray-800 text-[11px] text-emerald-300 overflow-x-auto max-h-96 font-mono leading-relaxed">
+              {isoXml || '<!-- Loading XML message -->'}
+            </pre>
+
+            <div className="flex justify-between items-center pt-2">
+              <span className="text-[11px] text-gray-400">Target: Bank Interoperability Clearing</span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(isoXml);
+                    setCopiedXml(true);
+                    setTimeout(() => setCopiedXml(false), 2000);
+                  }}
+                  className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-xs text-white rounded-lg flex items-center gap-1.5 border border-gray-700 cursor-pointer"
+                >
+                  <Copy size={13} />
+                  {copiedXml ? 'Copied!' : 'Copy XML'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowXmlModal(false)}
+                  className="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-xs text-gray-950 font-bold rounded-lg cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

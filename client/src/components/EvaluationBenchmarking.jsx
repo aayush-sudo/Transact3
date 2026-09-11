@@ -128,7 +128,7 @@ const EvaluationBenchmarking = () => {
           <Award size={40} className="mx-auto text-emerald-400 opacity-60" />
           <h4 className="text-base font-bold text-white">Run System Benchmark Suite</h4>
           <p className="text-xs text-gray-400 max-w-md mx-auto">
-            Click "Run Benchmark" to execute synthetic batch payments across all 6 rails and compare the AI Joint Router against SWIFT-only, RTGS-only, and Greedy Cost baselines.
+            Click "Run Benchmark" to execute synthetic batch payments across all 4 rails and compare the AI Joint Router against SWIFT-only, Instant-only, and Greedy Cost baselines.
           </p>
         </div>
       )}

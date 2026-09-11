@@ -3,7 +3,7 @@ const RAIL_CONFIG = require('../config/railConfig');
 
 class CardPushRail extends BaseRailAdapter {
   constructor() {
-    super(RAIL_CONFIG.CARD_PUSH);
+    super(RAIL_CONFIG.CARD_PAYOUT || RAIL_CONFIG.CARD_PUSH);
   }
 
   isCutOffActive() {
