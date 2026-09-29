@@ -145,35 +145,35 @@ const TransactionSimulationModal = ({
 
       // Step 3: Wallet / Balance Check
       setStepStatuses(prev => { const s = [...prev]; s[2] = 'IN_PROGRESS'; return s; });
-      addAuditLog(`Wallet balance verified for ${params.sourceCurrency}.`);
+      const { data: quoteRes } = await api.post('/transaction/quote', {
+        sourceCurrency: params.sourceCurrency,
+        destinationCurrency: params.destinationCurrency,
+        amount: params.amount,
+        paymentMode: 'SEND_AMOUNT',
+        priority: params.priority,
+        receiverEmail: params.receiverEmail
+      });
+      if (!quoteRes.success) throw new Error(quoteRes.message || 'Failed to create payment quote');
+
+      const quote = quoteRes.data.quote;
+      const orch = quoteRes.data.orchestration;
+      setQuoteData(quote);
+      setOrchestrationData(orch);
+      addAuditLog(`Server validated the payment request and recipient ${quote.receiverEmail}.`);
       await delay(STEP_DELAYS[2]);
       setStepStatuses(prev => { const s = [...prev]; s[2] = 'COMPLETED'; return s; });
       setCurrentStepIndex(3);
 
       // Step 4: FX Rate Fetch
       setStepStatuses(prev => { const s = [...prev]; s[3] = 'IN_PROGRESS'; return s; });
-      
-      // Call backend API for real quote & orchestration logic
-      const { data: quoteRes } = await api.post('/fx/quote', {
-        sourceCurrency: params.sourceCurrency,
-        destinationCurrency: params.destinationCurrency,
-        amount: params.amount,
-        priority: params.priority
-      });
-
-      if (!quoteRes.success) throw new Error(quoteRes.message || 'Failed to fetch FX quote');
-
-      setQuoteData(quoteRes.data);
-      const orch = quoteRes.orchestration;
-      setOrchestrationData(orch);
-      addAuditLog(`FX rate retrieved: 1 ${params.sourceCurrency} = ${quoteRes.data.quotedRate} ${params.destinationCurrency}`);
+      addAuditLog(`FX rate retrieved: 1 ${params.sourceCurrency} = ${quote.quotedRate} ${params.destinationCurrency}`);
       await delay(STEP_DELAYS[3]);
       setStepStatuses(prev => { const s = [...prev]; s[3] = 'COMPLETED'; return s; });
       setCurrentStepIndex(4);
 
       // Step 5: FX Timing Analysis
       setStepStatuses(prev => { const s = [...prev]; s[4] = 'IN_PROGRESS'; return s; });
-      addAuditLog(`FX timing engine recommendation: ${orch.fxTiming?.recommendation || 'EXECUTE_NOW'}`);
+      addAuditLog(`FX timing engine recommendation: ${quote.timingRecommendation || 'NEUTRAL'}`);
       await delay(STEP_DELAYS[4]);
       setStepStatuses(prev => { const s = [...prev]; s[4] = 'COMPLETED'; return s; });
       setCurrentStepIndex(5);
@@ -229,17 +229,10 @@ const TransactionSimulationModal = ({
       // Step 11: Payment Execution
       setStepStatuses(prev => { const s = [...prev]; s[10] = 'IN_PROGRESS'; return s; });
       
-      const { data: execRes } = await api.post('/transaction/send', {
-        quoteId: quoteRes.data.quoteId,
-        receiverEmail: params.receiverEmail,
-        sourceCurrency: params.sourceCurrency,
-        destinationCurrency: params.destinationCurrency,
-        amount: params.amount,
-        priority: params.priority,
+      const { data: execRes } = await api.post('/transaction/confirm', {
+        quoteId: quote.quoteId,
         selectedRail: selectedRailToExecute,
-        selectedRailId: selectedRailToExecute,
-        executionMode: 'IMMEDIATE',
-        idempotencyKey: `PAY-SIM-${Date.now()}`
+        idempotencyKey: `PAY-SIM-${quote.quoteId}`
       });
 
       if (!execRes.success) throw new Error(execRes.message || 'Execution failed');
@@ -266,7 +259,7 @@ const TransactionSimulationModal = ({
 
       // Step 14: TCA Calculation
       setStepStatuses(prev => { const s = [...prev]; s[13] = 'IN_PROGRESS'; return s; });
-      addAuditLog(`TCA computed: Saved $${orch.aiSavingsUSD || '37.00'} USD vs traditional SWIFT baseline.`);
+      addAuditLog(`Backend recorded total transaction costs of $${execRes.data.transaction.totalCostUSD} USD.`);
       await delay(STEP_DELAYS[13]);
       setStepStatuses(prev => { const s = [...prev]; s[13] = 'COMPLETED'; return s; });
       setCurrentStepIndex(14);

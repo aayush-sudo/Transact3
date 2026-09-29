@@ -31,7 +31,7 @@ exports.getFXForecast = async (req, res, next) => {
 
 exports.getRailsStatus = async (req, res, next) => {
   try {
-    const status = liquidityManager.getAllStatus();
+    const status = await liquidityManager.getAllRailSettings();
     res.status(200).json({ success: true, data: status });
   } catch (err) {
     next(err);

@@ -80,17 +80,19 @@ const Navbar = () => {
                 <Wallet size={14} />
                 Wallet
               </Link>
-              <Link
-                to="/admin"
-                className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
-                  isActive('/admin')
-                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
-                }`}
-              >
-                <ShieldCheck size={14} />
-                Admin
-              </Link>
+              {user.role === 'ADMIN' && (
+                <Link
+                  to="/admin"
+                  className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
+                    isActive('/admin')
+                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                      : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                  }`}
+                >
+                  <ShieldCheck size={14} />
+                  Admin
+                </Link>
+              )}
 
               <div className="flex items-center gap-3 ml-2 pl-2 border-l border-gray-800">
                 <span className="text-xs text-gray-300 font-mono hidden sm:inline">Hi, {user.name}</span>

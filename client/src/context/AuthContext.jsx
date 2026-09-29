@@ -16,12 +16,11 @@ export const AuthProvider = ({ children }) => {
           const res = await api.get('/user/me');
           setUser(res.data.data);
         } else {
-          // Dev default user for seamless demo experience
-          setUser({ _id: '60c72b2f9b1d8b0015f8e001', name: 'Demo Treasury Manager', email: 'treasury@transact3.io', role: 'USER' });
+          setUser(null);
         }
       } catch (err) {
-        console.error(err);
-        setUser({ _id: '60c72b2f9b1d8b0015f8e001', name: 'Demo Treasury Manager', email: 'treasury@transact3.io', role: 'USER' });
+        localStorage.removeItem('token');
+        setUser(null);
       } finally {
         setLoading(false);
       }
@@ -30,21 +29,16 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
-    try {
-      const res = await api.post('/user/login', { email, password });
-      localStorage.setItem('token', res.data.token);
-      setUser({ _id: res.data._id, name: res.data.name, email: res.data.email, walletBalance: res.data.walletBalance });
-      return res.data;
-    } catch (err) {
-      setUser({ _id: '60c72b2f9b1d8b0015f8e001', name: 'Demo Treasury Manager', email: 'treasury@transact3.io', role: 'USER' });
-      return { success: true };
-    }
+    const res = await api.post('/user/login', { email, password });
+    localStorage.setItem('token', res.data.token);
+    setUser({ _id: res.data._id, name: res.data.name, email: res.data.email, role: res.data.role, walletBalance: res.data.walletBalance });
+    return res.data;
   };
 
   const register = async (name, email, password) => {
     const res = await api.post('/user/register', { name, email, password });
     localStorage.setItem('token', res.data.token);
-    setUser({ _id: res.data._id, name: res.data.name, email: res.data.email, walletBalance: res.data.walletBalance });
+    setUser({ _id: res.data._id, name: res.data.name, email: res.data.email, role: res.data.role, walletBalance: res.data.walletBalance });
     return res.data;
   };
 

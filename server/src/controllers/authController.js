@@ -58,6 +58,7 @@ exports.registerUser = async (req, res) => {
       _id: user._id,
       name: user.name,
       email: user.email,
+      role: user.role,
       walletBalance: user.walletBalance,
       token: generateToken(user._id),
     });
@@ -104,6 +105,7 @@ exports.loginUser = async (req, res) => {
       _id: user._id,
       name: user.name,
       email: user.email,
+      role: user.role,
       walletBalance: user.walletBalance,
       token: generateToken(user._id),
     });

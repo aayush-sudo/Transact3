@@ -16,6 +16,12 @@ const checkIdempotency = async (req, res, next) => {
       const existing = await IdempotencyRecord.findOne({ idempotencyKey });
       if (existing) {
         if (new Date() < new Date(existing.expiresAt)) {
+          if (String(existing.userId) !== String(req.user?._id || req.user?.id) || existing.requestHash !== requestHash) {
+            return res.status(409).json({
+              success: false,
+              message: 'Idempotency key was already used for a different request'
+            });
+          }
           return res.status(existing.statusCode).json(existing.responseBody);
         }
       }

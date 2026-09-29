@@ -45,11 +45,7 @@ class LedgerEngine {
       }
     ];
 
-    try {
-      await LedgerEntry.insertMany(entries);
-    } catch (e) {
-      console.warn('[LedgerEngine] Deposit ledger persistence skipped:', e.message);
-    }
+    await LedgerEntry.insertMany(entries);
 
     return {
       success: true,
@@ -106,7 +102,7 @@ class LedgerEngine {
         transactionId,
         quoteId,
         userId: senderId,
-        accountId: `USER-WALLET-${senderId}-${srcCurr}`,
+        accountId: `USER-WALLET-${senderId}-USD`,
         accountName: `Sender Wallet (${senderEmail})`,
         currency: 'USD',
         amount: safeFeeUSD,
@@ -175,11 +171,7 @@ class LedgerEngine {
       }
     ];
 
-    try {
-      await LedgerEntry.insertMany(entries);
-    } catch (e) {
-      console.warn('[LedgerEngine] Settlement ledger persistence skipped:', e.message);
-    }
+    await LedgerEntry.insertMany(entries);
 
     return {
       success: true,

@@ -21,6 +21,11 @@ const UserSchema = new mongoose.Schema({
     minlength: 6,
     select: false, // Don't return password by default
   },
+  role: {
+    type: String,
+    enum: ['USER', 'ADMIN'],
+    default: 'USER',
+  },
   walletBalance: {
     type: Number,
     default: 0,

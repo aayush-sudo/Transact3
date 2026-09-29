@@ -153,18 +153,37 @@ exports.confirmAndExecuteTransaction = async (req, res, next) => {
     const senderEmail = req.user ? req.user.email : 'sender@transact3.io';
 
     // 1. Verify Quote
-    const quoteResult = await quoteEngine.verifyQuote(quoteId);
+    const quoteResult = await quoteEngine.verifyQuote(quoteId, senderId);
     if (!quoteResult.valid) {
-      return res.status(400).json({
+      return res.status(quoteResult.unauthorized ? 403 : 400).json({
         success: false,
         message: quoteResult.reason || 'Invalid or expired payment quote. Please analyze payment again.'
       });
     }
     const quote = quoteResult.quote;
 
+    if (!quote.recipientId || !quote.receiverEmail) {
+      return res.status(400).json({
+        success: false,
+        message: 'Payment quote does not have a verified recipient'
+      });
+    }
+
     // 2. Resolve selected rail & Check Manual Override Eligibility
     const railToUse = requestedRail || selectedRailId || quote.selectedRail || 'REGIONAL_INSTANT';
     const selectionMode = railToUse === quote.recommendedRail ? 'RECOMMENDED' : 'MANUAL_OVERRIDE';
+    const railAdapter = RAIL_ADAPTERS_MAP[railToUse];
+    if (!railAdapter) {
+      return res.status(400).json({ success: false, message: `Unsupported settlement rail: ${railToUse}` });
+    }
+
+    const quotedRail = quote.evaluatedRails.find(rail => rail.id === railToUse);
+    if (!quotedRail || !quotedRail.is_eligible) {
+      return res.status(400).json({
+        success: false,
+        message: `${railToUse} was not eligible in this payment quote`
+      });
+    }
 
     // Strict eligibility check on the chosen rail
     const eligibility = await liquidityManager.checkRailEligibility(railToUse, quote.sourceAmountUSD || quote.sourceAmount);
@@ -175,23 +194,55 @@ exports.confirmAndExecuteTransaction = async (req, res, next) => {
       });
     }
 
-    const railAdapter = RAIL_ADAPTERS_MAP[railToUse] || RAIL_ADAPTERS_MAP['REGIONAL_INSTANT'];
     const sourceAmountUSD = Number(quote.sourceAmountUSD) || (quote.sourceCurrency === 'USD' ? Number(quote.sourceAmount) : Number(quote.sourceAmount));
     const railFeeBreakdown = railAdapter.getFeeBreakdown(sourceAmountUSD);
     const activeRailFeeUSD = railFeeBreakdown.totalFeeUSD;
     const activeLatencyHours = railAdapter.estimateLatency();
     const totalSenderDebitUSD = roundToPrecision(sourceAmountUSD + activeRailFeeUSD, 2);
-    const receiverEmail = quote.receiverEmail || req.body.receiverEmail || 'recipient@transact3.io';
-    const recipientId = quote.recipientId || senderId;
+    const receiverEmail = quote.receiverEmail;
+    const recipientId = quote.recipientId;
 
     // 3. Re-verify Sender Balance (Principal + Fee)
     const currentBalance = await portfolioController.checkUserBalance(senderId, quote.sourceCurrency);
-    const requiredSourceAmount = quote.sourceAmount;
+    const requiredSourceAmount = Number(quote.sourceAmount) + (quote.sourceCurrency === 'USD' ? activeRailFeeUSD : 0);
     if (currentBalance < requiredSourceAmount) {
       return res.status(400).json({
         success: false,
         message: `Insufficient ${quote.sourceCurrency} balance: Available ${currentBalance}, required ${requiredSourceAmount}`
       });
+    }
+    if (quote.sourceCurrency !== 'USD' && activeRailFeeUSD > 0) {
+      const usdBalance = await portfolioController.checkUserBalance(senderId, 'USD');
+      if (usdBalance < activeRailFeeUSD) {
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient USD balance for the ${activeRailFeeUSD} USD rail fee: Available ${usdBalance}`
+        });
+      }
+    }
+
+    let idempotencyClaimed = false;
+    if (idempotencyKey) {
+      const requestHash = req.idempotencyData?.requestHash || '';
+      try {
+        await IdempotencyRecord.create({
+          idempotencyKey,
+          userId: senderId,
+          requestHash,
+          responseBody: { success: false, pending: true, message: 'Payment confirmation is already in progress' },
+          statusCode: 409,
+          expiresAt: new Date(Date.now() + 24 * 3600 * 1000)
+        });
+        idempotencyClaimed = true;
+      } catch (error) {
+        if (error.code !== 11000) throw error;
+        const existing = await IdempotencyRecord.findOne({ idempotencyKey });
+        if (!existing) throw error;
+        if (String(existing.userId) !== String(senderId) || existing.requestHash !== requestHash) {
+          return res.status(409).json({ success: false, message: 'Idempotency key was already used for a different request' });
+        }
+        return res.status(existing.statusCode).json(existing.responseBody);
+      }
     }
 
     // 4. Create Transaction document in DB (Status: PROCESSING)
@@ -232,7 +283,15 @@ exports.confirmAndExecuteTransaction = async (req, res, next) => {
     });
 
     // 5. Execute Full Settlement Lifecycle
-    const settlementResult = await settlementEngine.processSettlement(transactionDoc);
+    let settlementResult;
+    try {
+      settlementResult = await settlementEngine.processSettlement(transactionDoc);
+    } catch (error) {
+      if (idempotencyClaimed) {
+        await IdempotencyRecord.deleteOne({ idempotencyKey, userId: senderId });
+      }
+      throw error;
+    }
 
     // 6. Mark Quote Executed
     await quoteEngine.markQuoteExecuted(quote.quoteId);
@@ -273,16 +332,13 @@ exports.confirmAndExecuteTransaction = async (req, res, next) => {
     // 9. Store in Idempotency Record if key provided
     if (idempotencyKey) {
       try {
-        if (IdempotencyRecord.create) {
-          await IdempotencyRecord.create({
-            idempotencyKey,
-            requestHash: req.idempotencyData ? req.idempotencyData.requestHash : 'hash',
-            statusCode: 201,
-            responseBody: responsePayload,
-            expiresAt: new Date(Date.now() + 24 * 3600 * 1000)
-          });
-        }
-      } catch (idemErr) {}
+        await IdempotencyRecord.findOneAndUpdate(
+          { idempotencyKey, userId: senderId },
+          { statusCode: 201, responseBody: responsePayload, transactionId: transactionDoc._id }
+        );
+      } catch (idemErr) {
+        console.error('[Idempotency] Settled payment result could not be persisted:', idemErr.message);
+      }
     }
 
     res.status(201).json(responsePayload);

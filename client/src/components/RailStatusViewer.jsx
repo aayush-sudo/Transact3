@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, ShieldCheck, RefreshCw } from 'lucide-react';
+import { Activity, RefreshCw } from 'lucide-react';
 import api from '../services/api';
 
 const RailStatusViewer = () => {
@@ -31,7 +31,7 @@ const RailStatusViewer = () => {
     );
   }
 
-  const rails = railStatus ? Object.values(railStatus.rails) : [];
+  const rails = Array.isArray(railStatus) ? railStatus : [];
 
   return (
     <div className="bg-gray-800/80 backdrop-blur-md rounded-2xl p-5 border border-gray-700/60 shadow-xl space-y-4">
@@ -42,7 +42,7 @@ const RailStatusViewer = () => {
           </div>
           <div>
             <h3 className="text-base font-bold text-white">Multi-Rail Liquidity & Settlement Capacity Monitor</h3>
-            <p className="text-xs text-gray-400">Real-time throughput and utilization across 5 simulated settlement pipelines</p>
+            <p className="text-xs text-gray-400">Available liquidity across 4 simulated settlement routes</p>
           </div>
         </div>
 
@@ -53,24 +53,32 @@ const RailStatusViewer = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {rails.map((rail) => {
-          const utilPct = rail.utilizationPct;
+          const capacityUSD = Math.max(0, Number(rail.initialLiquidityUSD) || 0);
+          const availableUSD = Math.max(0, Number(rail.availableLiquidityUSD) || 0);
+          const utilPct = capacityUSD > 0
+            ? Math.min(100, Math.round(((capacityUSD - availableUSD) / capacityUSD) * 100))
+            : 0;
+          const status = !rail.isEnabled ? 'DISABLED' : utilPct >= 90 ? 'LOW LIQUIDITY' : 'ACTIVE';
           let utilColor = 'bg-emerald-500';
           let textColor = 'text-emerald-400';
+          let statusColor = 'bg-emerald-500/20 text-emerald-300';
 
-          if (utilPct >= 90) {
+          if (!rail.isEnabled || utilPct >= 90) {
             utilColor = 'bg-rose-500';
             textColor = 'text-rose-400';
+            statusColor = 'bg-rose-500/20 text-rose-300';
           } else if (utilPct >= 85) {
             utilColor = 'bg-amber-500';
             textColor = 'text-amber-400';
+            statusColor = 'bg-amber-500/20 text-amber-300';
           }
 
           return (
             <div key={rail.railId} className="bg-gray-900/60 rounded-xl p-3.5 border border-gray-700/40 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-gray-200">{rail.name}</span>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded font-mono ${utilPct >= 85 ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'}`}>
-                  {rail.status}
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded font-mono ${statusColor}`}>
+                  {status}
                 </span>
               </div>
 
@@ -85,8 +93,8 @@ const RailStatusViewer = () => {
               </div>
 
               <div className="flex justify-between text-[11px] text-gray-400 font-mono pt-1">
-                <span>Dynamic Penalty: {rail.liquidityPenalty > 0 ? `+${rail.liquidityPenalty}` : '0.00'}</span>
-                <span>Hourly Cap: ${(rail.hourlyCapacityUSD / 1000000).toFixed(1)}M</span>
+                <span>Available: ${availableUSD.toLocaleString()}</span>
+                <span>Pool: ${capacityUSD.toLocaleString()}</span>
               </div>
             </div>
           );

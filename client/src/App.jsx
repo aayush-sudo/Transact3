@@ -23,6 +23,12 @@ const PrivateRoute = ({ children }) => {
   return user ? children : <Navigate to="/login" />;
 };
 
+const AdminRoute = ({ children }) => {
+  const { user, loading } = React.useContext(AuthContext);
+  if (loading) return null;
+  return user?.role === 'ADMIN' ? children : <Navigate to="/" replace />;
+};
+
 function App() {
   return (
     <AuthProvider>
@@ -38,7 +44,7 @@ function App() {
               <Route path="/transactions" element={<PrivateRoute><Transactions /></PrivateRoute>} />
               <Route path="/wallet" element={<PrivateRoute><Portfolio /></PrivateRoute>} />
               <Route path="/portfolio" element={<PrivateRoute><Portfolio /></PrivateRoute>} />
-              <Route path="/admin" element={<PrivateRoute><Admin /></PrivateRoute>} />
+              <Route path="/admin" element={<PrivateRoute><AdminRoute><Admin /></AdminRoute></PrivateRoute>} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </main>

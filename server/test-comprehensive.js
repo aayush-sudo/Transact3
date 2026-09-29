@@ -203,6 +203,15 @@ async function runComprehensiveTests() {
     const auditChain = await auditEngine.verifyAuditChain();
     assert(auditChain.isValid === true, `Cryptographic SHA-256 Audit Chain verified valid across ${auditChain.totalBlocks} blocks`);
 
+    const auditEntry = await AuditLog.findOne({}).sort({ timestamp: 1, _id: 1 });
+    const originalAction = auditEntry.action;
+    await AuditLog.updateOne({ _id: auditEntry._id }, { action: `${originalAction}_TAMPERED` });
+    const tamperedChain = await auditEngine.verifyAuditChain();
+    assert(tamperedChain.isValid === false, 'Audit verification detects modified event content');
+    await AuditLog.updateOne({ _id: auditEntry._id }, { action: originalAction });
+    const restoredChain = await auditEngine.verifyAuditChain();
+    assert(restoredChain.isValid === true, 'Audit verification passes after restoring original event content');
+
     console.log('\n============================================================');
     console.log(`🎉 TEST SUMMARY: ${passed} PASSED, ${failed} FAILED`);
     console.log('============================================================\n');

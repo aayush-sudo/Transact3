@@ -2,7 +2,7 @@
 
 Transact3 is a full-stack simulated cross-border payment orchestration platform designed to eliminate the major inefficiencies in international finance: opaque FX markups, punitive flat correspondent bank fees, slow batch settlements, weekend cutoffs, and rigid single-rail lock-in.
 
-Instead of forcing all payments through a single rail (such as legacy SWIFT), Transact3 functions as an intelligent cross-border meta-router. It dynamically evaluates, ranks, and routes each transfer across **5 distinct settlement rails** using multi-objective optimization (cost, speed, reliability, and liquidity availability), executes real atomic wallet transfers across 9 major currencies, enforces balanced double-entry accounting, and maintains a tamper-evident SHA-256 cryptographic audit chain.
+Instead of forcing all payments through a single rail (such as legacy SWIFT), Transact3 functions as an educational cross-border meta-router. It ranks transfers across **4 configured simulated route adapters** using multi-objective optimization (cost, speed, reliability, and liquidity availability), updates simulated wallet balances across 9 currencies, and records double-entry ledger and SHA-256 audit evidence. No external payment network is contacted and no real funds move.
 
 ---
 
@@ -22,41 +22,40 @@ The Transact3 platform is structured into clean, decoupled tiers:
 │  - Auth & Recipient Management      - 60-Second Binding Quotes         │
 │  - Multi-Currency Wallet Engine     - Atomic Settlement Pipeline       │
 │  - Balanced Double-Entry Ledger     - SHA-256 Chained Audit Logger     │
-│  - In-Memory / Persistent MongoDB   - Live Dynamic Fallbacks           │
+│  - Persistent MongoDB               - Simulated Rail Fallbacks         │
 └───────────────────┬────────────────────────────────┬───────────────────┘
                     │ REST (Port 8000)               │ Adapter Pattern
                     ▼                                ▼
 ┌──────────────────────────────────────┐  ┌──────────────────────────────┐
-│       Python / FastAPI Service       │  │   5 Simulated Payment Rails  │
+│       Python / FastAPI Service       │  │  4 Simulated Route Adapters │
 │  - Multi-Objective Pareto Scoring    │  │  - SWIFT Classic Batch       │
-│  - FX Stats: SMA, EMA & Volatility   │  │  - RTGS High-Value           │
-│  - Analytical Execution Guidance     │  │  - Regional Instant          │
+│  - FX Stats: SMA, EMA & Volatility   │  │  - Correspondent Banking     │
+│  - Analytical Execution Guidance     │  │  - Instant Payment           │
 │  - Transaction Cost Analysis (TCA)   │  │  - Bilateral Netting         │
-│  - Extensible ML Prediction Hook     │  │  - Card Push Network         │
+│  - Deterministic Scoring              │  │  - Card Payout                │
 └──────────────────────────────────────┘  └──────────────────────────────┘
 ```
 
 1. **React Frontend (`client/`)**: Modern responsive web application built with Tailwind CSS and Lucide icons. Includes 5 clean sections:
    - **Dashboard**: High-level personal transfer volume, savings vs SWIFT, fees paid, multi-currency balances, and recent payments.
-   - **Payment Router**: Payment orchestration console supporting Mode A ("Send Amount") and Mode B ("Recipient Gets"), live recipient picker, 5-rail comparative matrix with eligibility badges and rejection reasons, and manual override capabilities.
+   - **Payment Router**: Payment orchestration console supporting Mode A ("Send Amount") and Mode B ("Recipient Gets"), live recipient picker, 4-route comparative matrix with eligibility badges and rejection reasons, and manual override capabilities.
    - **Transaction History**: Audit trail with expandable transaction drawer revealing ISO 20022 clearing refs, execution durations, savings vs SWIFT, double-entry ledger entries, and cryptographic hashes.
    - **Wallet (Portfolio)**: 9-currency balance viewer with simulated deposit modal that generates balanced double-entry ledger records.
    - **Admin Portal**: System-wide operations dashboard with rail enable/disable switches, liquidity pool replenishment, system ledger reconciliation, and SHA-256 audit chain verification.
-2. **Node.js / Express Backend (`server/`)**: Primary business engine managing authentication, wallet debits/credits, binding quote generation, state machine transitions, ISO 20022 simulation, double-entry ledger records, and MongoDB persistence (with automatic `mongodb-memory-server` fallback for zero-friction local execution).
-3. **Python / FastAPI Intelligence Service (`python-service/`)**: Microservice providing analytical calculation for multi-objective route scoring, technical indicators (SMA, EMA, 24h rolling volatility), execution timing classifications (`EXECUTE_NOW`, `NEUTRAL`, `CONSIDER_DEFER`), and TCA metrics. If offline, the Express backend seamlessly falls back to identical native JavaScript math implementations.
+2. **Node.js / Express Backend (`server/`)**: Primary business engine managing JWT authentication, wallet debits/credits, binding quote generation, simulated settlement, double-entry ledger records, and MongoDB persistence. The API integration test uses an isolated in-memory database; the documented demo uses persistent MongoDB.
+3. **Python / FastAPI Intelligence Service (`python-service/`)**: Optional service providing deterministic multi-objective route scoring, technical indicators (SMA, EMA, 24h rolling volatility), execution timing classifications, and TCA metrics. The ML predictor is currently a pass-through hook with zero adjustment; no trained ML model is included. Express uses deterministic fallback scoring if FastAPI is offline.
 4. **Data Persistence (MongoDB)**: Mongoose schemas for `User`, `Transaction`, `LedgerEntry`, `RailSetting`, and `AuditLog`.
 
 ---
 
-## 🛣️ The 5 Settlement Rails
+## 🛣️ The 4 Simulated Route Adapters
 
-Transact3 models the real-world operational and economic characteristics of five settlement networks:
+Transact3 models the operational characteristics of four route types. These adapters return simulated results and are not connections to the named payment networks:
 
 | Rail ID | Rail Name | Settlement Mechanism | Base Fee (USD) | Variable (bps) | Typical Settlement Time | Simulation Duration |
 | :--- | :--- | :--- | :---: | :---: | :---: | :---: |
 | **`REGIONAL_INSTANT`** | Regional Instant Network | Direct domestic instant clearing (FedNow, SEPA Instant, UPI) | **$1.50** | **2 bps** (0.02%) | ~1 second | 1,200 ms |
 | **`NETTING_LEDGER`** | Bilateral Intra-Bank Netting | Intra-bank ledger offset between mutual correspondent books | **$0.00** | **0 bps** (0.00%) | Instant | 800 ms |
-| **`RTGS_INSTANT`** | RTGS High-Value Clearing | Gross real-time central bank wire settlement (CHIPS, TARGET2) | **$18.00** | **5 bps** (0.05%) | ~15 minutes | 2,500 ms |
 | **`CARD_PUSH`** | Card Push Network | Direct debit-to-card rail (Visa Direct, Mastercard Send) | **$3.50** | **15 bps** (0.15%) | ~9 minutes | 1,800 ms |
 | **`SWIFT_BATCH`** | SWIFT Classic Batch | Correspondent banking multi-hop serial batch messaging | **$25.00** | **10 bps** (0.10%) | 24 to 48 hours | 4,000 ms |
 
@@ -64,7 +63,6 @@ Transact3 models the real-world operational and economic characteristics of five
 - **Regional Instant**: Maximum transfer limit of $100,000 USD equivalent.
 - **Card Push**: Maximum transfer limit of $25,000 USD equivalent.
 - **Bilateral Netting**: Requires matching balance sheet pairs; available when configured on active corridor.
-- **RTGS**: Designed for high-value wholesale transfers; minimum recommendation threshold $10,000 USD.
 - **SWIFT**: Universally eligible fallback rail supporting all corridors up to $10,000,000 USD.
 
 ---
@@ -73,17 +71,19 @@ Transact3 models the real-world operational and economic characteristics of five
 
 When a transfer quote is requested, the system computes an evaluation score for every eligible rail across normalized dimensions:
 
-$$\text{Utility Score} = w_{\text{cost}} \cdot (1 - \text{NormCost}) + w_{\text{speed}} \cdot (1 - \text{NormSpeed}) + w_{\text{rel}} \cdot \text{Reliability} - \text{LiquidityPenalty}$$
+$$\text{Score} = w_c N_c + w_s N_s + w_r N_r + w_q N_q + w_l N_l - P_l$$
+
+The normalized terms represent cost, speed, reliability, risk (currently derived from reliability), and liquidity adequacy. A liquidity penalty applies when available pool liquidity is below 1.5 times the payment amount.
 
 ### User Optimization Profiles
-- **`BALANCED`** (Default): $w_{\text{cost}} = 0.40$, $w_{\text{speed}} = 0.40$, $w_{\text{rel}} = 0.20$
-- **`CHEAPEST`**: $w_{\text{cost}} = 0.70$, $w_{\text{speed}} = 0.15$, $w_{\text{rel}} = 0.15$
-- **`FASTEST`**: $w_{\text{cost}} = 0.15$, $w_{\text{speed}} = 0.70$, $w_{\text{rel}} = 0.15$
+- **`BALANCED`** (Default): cost 0.35, speed 0.30, reliability 0.20, risk 0.10, liquidity 0.05
+- **`CHEAPEST`**: cost 0.70, speed 0.10, reliability 0.15, risk 0.05, liquidity 0.00
+- **`FASTEST`**: cost 0.10, speed 0.70, reliability 0.15, risk 0.05, liquidity 0.00
 
 ### Dynamic Liquidity Saturation Penalty
-As a rail's hourly pool utilization surpasses 80%, an exponential penalty is applied to downrank congested rails before exhaustion:
+The current scorer uses a fixed adequacy penalty rather than an exponential saturation curve:
 
-$$\text{LiquidityPenalty} = \begin{cases} 0 & \text{if } U < 0.80 \\ 0.35 \cdot \left(\frac{U - 0.80}{0.20}\right)^2 & \text{if } U \ge 0.80 \end{cases}$$
+$$P_l = \begin{cases} 0.15 & \text{if available liquidity} < 1.5 \times \text{payment amount} \\ 0 & \text{otherwise} \end{cases}$$
 
 If a rail's pool is fully depleted or toggled off by an administrator, its eligibility is revoked (`isEligible: false`) with an explicit rejection reason (e.g., *"Rail disabled by administrator"* or *"Transfer exceeds available liquidity ($250.00 left)"*), prompting the routing engine to dynamically elevate the next best eligible rail.
 
@@ -113,7 +113,7 @@ Transact3 includes a persistent liquidity pool system tracked in MongoDB via the
 - **Controlled Failure Demonstration**:
   1. Open the Admin Portal and disable `REGIONAL_INSTANT` or drain its liquidity to $10.
   2. Request a quote for a $1,000 USD transfer.
-  3. The router immediately disqualifies Regional Instant, explains the rejection, and dynamically routes to the next best alternative (e.g. `CARD_PUSH` or `RTGS_INSTANT`).
+   3. The router immediately disqualifies Regional Instant, explains the rejection, and dynamically routes to the next eligible simulated alternative (e.g. `CARD_PUSH` or `SWIFT_BATCH`).
 
 ---
 
@@ -190,12 +190,18 @@ pip install fastapi uvicorn
 **Backend (`server/.env`)**:
 ```env
 PORT=5001
-MONGODB_URI=mongodb://localhost:27017/transact3
-JWT_SECRET=supersecretjwtkey_transact3_production_grade
-FASTAPI_SERVICE_URL=http://localhost:8000
+MONGO_URI=mongodb://127.0.0.1:27017/transact3
+JWT_SECRET=replace_with_a_local_secret
+FASTAPI_URL=http://127.0.0.1:8000
 NODE_ENV=development
 ```
-*(Note: If MongoDB is not running locally, the server automatically boots an in-memory MongoDB instance via `mongodb-memory-server` without any configuration).*
+Start the persistent MongoDB service from the repository root before starting the API:
+
+```bash
+docker compose up -d mongo
+```
+
+`server/.env.example` contains these local defaults. Copy its values into `server/.env` and use a private `JWT_SECRET`. The memory database is reserved for automated tests and disposable local runs.
 
 **Frontend (`client/.env`)**:
 ```env
@@ -211,6 +217,8 @@ npm run dev
 # Server listens at http://localhost:5001
 # Automatically seeds demo users: Alice (alice@transact3.com) and Bob (bob@transact3.com)
 ```
+
+Demo logins: Alice (`alice@transact3.com`), Bob (`bob@transact3.com`), and Treasury Admin (`treasury@transact3.io`) all use `Password123!`. These seeded credentials are for local demonstration only.
 
 **Terminal 2 — Python FastAPI Intelligence Service** *(Optional — Express will use native JS fallback if skipped)*:
 ```bash
@@ -228,45 +236,28 @@ npm run dev
 
 ---
 
-## 🧪 Comprehensive Automated Testing
+## 🧪 Automated Verification
 
-Transact3 includes a comprehensive end-to-end integration test suite verifying 23 distinct assertions across all core features:
+Run the API-level proof of concept from the repository root:
+
+```bash
+npm test
+```
+
+This starts the real Express server against an isolated temporary MongoDB and exercises authenticated login, quote ownership, Alice-to-Bob settlement, fee checks, idempotent replay/conflict, and balance persistence after an API restart. It moves no real funds.
+
+The additional service regression suite covers routing preferences, liquidity rerouting, wallet settlement, ledger reconciliation, and audit tamper detection:
 
 ```bash
 cd server
 node test-comprehensive.js
 ```
 
-### Test Coverage Summary:
-- ✅ **Authentication**: User registration, login, and JWT issuance.
-- ✅ **Recipients**: Active recipient fetching excluding self.
-- ✅ **Deposits & Wallets**: Atomic multi-currency balance credit.
-- ✅ **Ledger Invariant**: Double-entry balanced verification for deposits ($\Sigma \text{Debits} == \Sigma \text{Credits}$).
-- ✅ **FX Intelligence**: Mid-market rates, SMA, EMA, volatility, and timing recommendations.
-- ✅ **Mode A & Mode B Quotes**: 60-second binding quotes, forward calculation, and backward exact-receive calculation.
-- ✅ **Multi-Objective Routing**: `CHEAPEST` vs `FASTEST` Pareto ranking verification.
-- ✅ **Liquidity & Controlled Failure**: Disqualification of rails with depleted liquidity pools with descriptive rejection reason.
-- ✅ **Dynamic Re-Routing**: Dynamic promotion of next best rail when primary rail is unavailable.
-- ✅ **Atomic Settlement Execution**: Full sender debit (principal + fee), recipient credit (destination amount), rail simulation, and liquidity deduction.
-- ✅ **Ledger Balance**: Double-entry balanced verification for payment settlement.
-- ✅ **Audit Integrity**: Cryptographic SHA-256 chain continuity verification.
-
 ---
 
-## 🔮 Machine Learning Integration Hook
+## Routing Intelligence Status
 
-A production-ready ML extension hook is defined in [`python-service/app/services/ml_prediction_interface.py`](python-service/app/services/ml_prediction_interface.py):
-
-```python
-class MLRoutingPredictor:
-    def predict_optimal_rail(self, features: PaymentRoutingFeatures) -> MLPredictionResult:
-        # Accepts normalized feature vectors:
-        # [amount_usd, hour_of_week, corridor_volatility, pool_saturation_ratio, user_priority_weight]
-        # Ready for drop-in loading of trained XGBoost, LightGBM, or PyTorch models.
-        ...
-```
-
-The service is pre-architected to hot-swap rule-based heuristic scoring with trained ML model inference without disrupting API schemas or backend routing handlers.
+Rail ranking currently uses deterministic weighted scoring. The Python `MLPredictionLayer` in [`python-service/app/services/ml_prediction_interface.py`](python-service/app/services/ml_prediction_interface.py) is a conceptual pass-through and returns a zero score adjustment; no trained model or learned predictions are part of this proof of concept.
 
 ---
 

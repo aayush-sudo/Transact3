@@ -168,7 +168,7 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
       const { data } = await api.post('/transaction/confirm', {
         quoteId: quoteData.quoteId,
         selectedRail: selectedRailId || quoteData.selectedRail,
-        idempotencyKey: `PAY-${quoteData.quoteId}-${Date.now()}`
+        idempotencyKey: `PAY-${quoteData.quoteId}`
       });
 
       if (data.success) {
@@ -228,6 +228,10 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
           </button>
         </div>
       </div>
+
+      <p className="text-xs text-amber-200/90 bg-amber-400/10 border border-amber-300/20 rounded-lg px-3 py-2">
+        Demonstration mode: transfers update simulated wallets only; no bank or card network is contacted.
+      </p>
 
       {error && (
         <div className="bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs p-3.5 rounded-xl flex items-center gap-2.5 font-mono">
@@ -865,14 +869,16 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
         <TransactionSimulationModal
           isOpen={showSimulationModal}
           onClose={() => setShowSimulationModal(false)}
-          sourceCurrency={sourceCurrency}
-          destinationCurrency={destinationCurrency}
-          amount={Number(amount)}
-          receiverEmail={receiverEmail}
-          priority={priority}
-          onCompleted={(res) => {
-            setTxResult(res);
-            if (onTransactionComplete) onTransactionComplete(res);
+          initialParams={{
+            sourceCurrency,
+            destinationCurrency,
+            amount: Number(amount),
+            receiverEmail,
+            priority
+          }}
+          onSuccess={(result) => {
+            setTxResult(result);
+            if (onTransactionComplete) onTransactionComplete(result);
           }}
         />
       )}

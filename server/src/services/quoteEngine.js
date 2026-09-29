@@ -85,7 +85,7 @@ class QuoteEngine {
     return quoteDoc;
   }
 
-  async verifyQuote(quoteId) {
+  async verifyQuote(quoteId, userId) {
     let memoryQuote = this.memoryQuotes.get(quoteId);
     let dbQuote = null;
 
@@ -105,6 +105,14 @@ class QuoteEngine {
 
     if (!quote) {
       return { valid: false, reason: 'Quote not found or expired' };
+    }
+
+    if (!userId || String(quote.userId) !== String(userId)) {
+      return {
+        valid: false,
+        unauthorized: true,
+        reason: 'Payment quote does not belong to the authenticated user'
+      };
     }
 
     if (new Date() > new Date(quote.expiresAt)) {

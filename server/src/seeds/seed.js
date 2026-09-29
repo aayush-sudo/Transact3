@@ -104,9 +104,13 @@ const seedDatabase = async () => {
         name: 'Treasury Admin',
         email: 'treasury@transact3.io',
         password: 'Password123!',
-        walletBalance: 250000
+        walletBalance: 250000,
+        role: 'ADMIN'
       });
       console.log('[Seed] Created Treasury Admin: treasury@transact3.io');
+    } else if (demoUser.role !== 'ADMIN') {
+      demoUser.role = 'ADMIN';
+      await demoUser.save();
     }
 
     let portfolio = await Portfolio.findOne({ user: demoUser._id });
