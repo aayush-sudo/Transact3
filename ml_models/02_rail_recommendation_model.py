@@ -5,7 +5,10 @@ Transact3 - Model 2: Optimal Payment Rail Recommendation Model
 Algorithm: RandomForestClassifier (scikit-learn)
 Artifact:  saved_models/rail_model.joblib
 
-Trains across 2 Epochs / Runs on 50,000 multi-attribute cross-border routing scenarios.
+Consolidated to 3 REAL-WORLD, API-INTEGRATABLE PAYMENT RAILS:
+1. WISE_LOCAL_NETWORK : Wise Platform Local Payout API (ACH, SEPA, UPI, Faster Payments)
+2. SWIFT_WIRE         : SWIFT GPI / Currencycloud / Stripe Correspondent Wire API
+3. CARD_PUSH_PAYOUT   : Visa Direct / Mastercard Send Real-Time Card Push API
 """
 
 import os
@@ -28,12 +31,11 @@ if sys.platform == "win32":
 MODEL_DIR = os.path.join(os.path.dirname(__file__), "saved_models")
 MODEL_PATH = os.path.join(MODEL_DIR, "rail_model.joblib")
 
+# 3 Real-World, API-Accessible Payment Rails
 RAIL_CLASSES = [
-    "REGIONAL_INSTANT",
-    "BILATERAL_NETTING",
-    "CARD_PAYOUT",
-    "RTGS_SETTLEMENT",
-    "SWIFT_CORRESPONDENT"
+    "WISE_LOCAL_NETWORK",   # Wise Platform API (Low-cost local bank payout: SEPA, ACH, UPI)
+    "SWIFT_WIRE",           # SWIFT GPI / Currencycloud Wire API (High-value, universal reach)
+    "CARD_PUSH_PAYOUT"      # Visa Direct / Mastercard Send API (Instant 24/7 card push)
 ]
 
 FEATURE_COLUMNS = [
@@ -50,7 +52,10 @@ FEATURE_COLUMNS = [
 
 def synthesize_routing_dataset(n_samples: int = 50000) -> pd.DataFrame:
     """
-    Synthesizes complete global payment routing scenarios across all 5 rail physics.
+    Synthesizes routing decisions between 3 real-world, API-accessible cross-border rails:
+    1. WISE_LOCAL_NETWORK: Best for CHEAPEST/BALANCED transfers <= $30,000 during banking hours.
+    2. SWIFT_WIRE: Best for high-value wholesale transfers ($30,000+), exotic corridors, or RELIABLE priority.
+    3. CARD_PUSH_PAYOUT: Best for FASTEST small-ticket payouts (<= $5,000), 24/7 weekends/after-hours.
     """
     np.random.seed(42)
     records = []
@@ -64,23 +69,20 @@ def synthesize_routing_dataset(n_samples: int = 50000) -> pd.DataFrame:
         fx_vol = float(np.random.uniform(0.1, 2.0))
         liquidity = float(np.random.uniform(0.3, 1.0))
 
-        if amount >= 150000 and is_major and is_weekend == 0:
-            label = "RTGS_SETTLEMENT"
-        elif pref == "CHEAPEST" and 5000 <= amount <= 300000 and liquidity > 0.6:
-            label = "BILATERAL_NETTING"
-        elif pref == "FASTEST" and is_major and amount <= 30000:
-            label = "REGIONAL_INSTANT"
-        elif is_weekend == 1 and pref == "FASTEST" and amount <= 5000:
-            label = "CARD_PAYOUT"
-        elif amount <= 15000 and is_major and pref != "RELIABLE":
-            label = "REGIONAL_INSTANT"
-        elif is_major == 0 or amount > 250000:
-            label = "SWIFT_CORRESPONDENT"
+        # Real-World API Rail Economics:
+        if amount >= 30000 or is_major == 0 or pref == "RELIABLE":
+            # High-value wholesale wire or exotic non-direct corridors -> SWIFT
+            label = "SWIFT_WIRE"
+        elif (is_weekend == 1 and pref == "FASTEST" and amount <= 7500) or (pref == "FASTEST" and amount <= 4000):
+            # Weekend rush or urgent consumer/freelancer payout -> Visa Direct Push-to-Card
+            label = "CARD_PUSH_PAYOUT"
+        elif pref in ["CHEAPEST", "BALANCED"] and amount <= 30000 and is_major == 1:
+            # Low fee domestic clearing network via Wise Platform API
+            label = "WISE_LOCAL_NETWORK"
+        elif amount <= 15000 and is_major == 1:
+            label = "WISE_LOCAL_NETWORK"
         else:
-            if pref == "CHEAPEST":
-                label = "BILATERAL_NETTING" if amount > 5000 else "REGIONAL_INSTANT"
-            else:
-                label = "REGIONAL_INSTANT" if amount <= 50000 else "SWIFT_CORRESPONDENT"
+            label = "SWIFT_WIRE"
 
         records.append({
             "amount": amount,
@@ -101,13 +103,18 @@ def synthesize_routing_dataset(n_samples: int = 50000) -> pd.DataFrame:
 def train_rail_model():
     print("=" * 80)
     print(" [MODEL 2] OPTIMAL PAYMENT RAIL RECOMMENDATION MODEL")
+    print("           REAL-WORLD API RAILS: WISE vs SWIFT vs VISA DIRECT")
     print("           TRAINING ACROSS 2 EPOCHS / RUNS (50,000 SCENARIOS)")
     print("=" * 80)
     total_start = time.time()
 
-    print("\n[1] Generating 50,000 comprehensive multi-attribute payment routing records...")
+    print("\n[1] Generating 50,000 multi-attribute cross-border routing scenarios...")
     df = synthesize_routing_dataset(50000)
-    print(f"    -> Generated: {len(df):,} records across 5 rail classes.")
+    print(f"    -> Generated: {len(df):,} records across 3 real API rails.")
+    
+    print("\n    -> Real-World Rail Distribution:")
+    for rail, count in df["optimal_rail"].value_counts().items():
+        print(f"       * {rail:<20}: {count:>6,} ({count/len(df)*100:.1f}%)")
 
     # Split 80/20
     X = df[FEATURE_COLUMNS].copy()
@@ -217,20 +224,21 @@ def train_rail_model():
 
     # Demonstration Inferences
     print("\n" + "=" * 80)
-    print(" [INFERENCE DEMO] Payment Rail Recommendation Output")
+    print(" [INFERENCE DEMO] Payment Rail Recommendation Output (Real APIs)")
     print("=" * 80)
 
     test_cases = [
-        {"amount": 3500.0, "corridor": "USD/EUR", "pref": "FASTEST", "is_weekend": True},
-        {"amount": 45000.0, "corridor": "USD/INR", "pref": "CHEAPEST", "is_weekend": False},
-        {"amount": 350000.0, "corridor": "USD/EUR", "pref": "BALANCED", "is_weekend": False},
-        {"amount": 12000.0, "corridor": "USD/ZAR", "pref": "RELIABLE", "is_weekend": False}
+        {"amount": 1500.0, "corridor": "USD/EUR", "pref": "CHEAPEST", "is_weekend": False, "desc": "Small Retail Transfer (Cheapest)"},
+        {"amount": 2500.0, "corridor": "USD/EUR", "pref": "FASTEST", "is_weekend": True, "desc": "Urgent Weekend Payout (Fastest)"},
+        {"amount": 85000.0, "corridor": "USD/INR", "pref": "BALANCED", "is_weekend": False, "desc": "High-Value Commercial Transfer"},
+        {"amount": 12000.0, "corridor": "USD/ZAR", "pref": "RELIABLE", "is_weekend": False, "desc": "Exotic Corridor Transfer"}
     ]
 
     for tc in test_cases:
         res = predict_rail(clf, tc["amount"], tc["corridor"], tc["pref"], tc["is_weekend"])
-        print(f"\n Transfer: ${tc['amount']:,.2f} {tc['corridor']} | Priority: {tc['pref']} | Weekend: {tc['is_weekend']}")
+        print(f"\n Scenario: {tc['desc']} (${tc['amount']:,.2f} {tc['corridor']}) | Priority: {tc['pref']} | Weekend: {tc['is_weekend']}")
         print(f" -> Recommended Rail : [{res['recommended_rail']}] (Confidence: {res['confidence_score']*100:.1f}%)")
+        print(f" -> API Calling Target: {res['api_integration']}")
         print(f" -> Probabilities    : {res['rail_probabilities']}")
         print(f" -> Advisory Rationale: {res['advisory_rationale']}")
 
@@ -256,21 +264,21 @@ def predict_rail(model, amount_usd: float, corridor_slug: str = "USD/EUR", prefe
     best_rail = str(model.predict(feat_vector)[0])
     confidence = float(np.max(probs))
 
-    if best_rail == "REGIONAL_INSTANT":
-        rationale = f"Instant domestic clearing network selected. Transfer size (${amount_usd:,.2f}) fits within real-time clearing caps with near-zero latency."
-    elif best_rail == "BILATERAL_NETTING":
-        rationale = f"Internal multilateral netting selected under {preference} priority to minimize external correspondent banking fees."
-    elif best_rail == "RTGS_SETTLEMENT":
-        rationale = f"Large institutional gross settlement recommended for immediate central-bank finality on high-value transfer (${amount_usd:,.2f})."
-    elif best_rail == "CARD_PAYOUT":
-        rationale = f"Real-time push-to-card selected to bypass traditional weekend banking cutoffs."
+    if best_rail == "WISE_LOCAL_NETWORK":
+        api_target = "Wise Platform REST API (POST /v3/quotes)"
+        rationale = f"Wise local bank clearing network selected. Transfer size (${amount_usd:,.2f}) qualifies for lowest mid-market fee and local clearing (SEPA/ACH/UPI)."
+    elif best_rail == "CARD_PUSH_PAYOUT":
+        api_target = "Visa Direct PushFunds API / Stripe Instant Payouts API"
+        rationale = f"Push-to-card selected for sub-30 minute delivery. Bypasses traditional banking cutoffs on weekends and off-hours."
     else:
-        rationale = f"SWIFT GPI cross-border network selected for universal multi-hop reach in this corridor."
+        api_target = "SWIFT GPI / Currencycloud Correspondent Wire API"
+        rationale = f"SWIFT bank wire network selected. Recommended for high-value transfer (${amount_usd:,.2f}) or institutional principal protection."
 
     return {
         "recommended_rail": best_rail,
         "confidence_score": round(confidence, 3),
         "rail_probabilities": prob_dict,
+        "api_integration": api_target,
         "advisory_rationale": rationale
     }
 
