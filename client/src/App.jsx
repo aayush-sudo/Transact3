@@ -6,6 +6,8 @@ import Dashboard from './pages/Dashboard';
 import PaymentRouter from './pages/PaymentRouter';
 import Transactions from './pages/Transactions';
 import Portfolio from './pages/Portfolio';
+import FXForecasting from './pages/FXForecasting';
+import Evaluation from './pages/Evaluation';
 import Admin from './pages/Admin';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -44,6 +46,8 @@ function App() {
               <Route path="/transactions" element={<PrivateRoute><Transactions /></PrivateRoute>} />
               <Route path="/wallet" element={<PrivateRoute><Portfolio /></PrivateRoute>} />
               <Route path="/portfolio" element={<PrivateRoute><Portfolio /></PrivateRoute>} />
+              <Route path="/fx-forecasting" element={<PrivateRoute><FXForecasting /></PrivateRoute>} />
+              <Route path="/evaluation" element={<PrivateRoute><Evaluation /></PrivateRoute>} />
               <Route path="/admin" element={<PrivateRoute><AdminRoute><Admin /></AdminRoute></PrivateRoute>} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

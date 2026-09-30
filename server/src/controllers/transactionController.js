@@ -16,16 +16,7 @@ const iso20022 = require('../utils/iso20022');
 const { isCurrencySupported } = require('../config/currencies');
 const { roundToPrecision } = require('../utils/mathUtils');
 
-const RAIL_ADAPTERS_MAP = {
-  INSTANT_PAYMENT_LINK: require('../rails/instantRail'),
-  REGIONAL_INSTANT: require('../rails/instantRail'),
-  BILATERAL_NETTING: require('../rails/nettingRail'),
-  NETTING_LEDGER: require('../rails/nettingRail'),
-  CARD_PAYOUT: require('../rails/cardPushRail'),
-  CARD_PUSH: require('../rails/cardPushRail'),
-  SWIFT_CORRESPONDENT: require('../rails/swiftRail'),
-  SWIFT_BATCH: require('../rails/swiftRail')
-};
+const { RAIL_MAP: RAIL_ADAPTERS_MAP } = require('../rails');
 
 // @desc    Analyze payment & create binding quote
 // @route   POST /api/transaction/quote

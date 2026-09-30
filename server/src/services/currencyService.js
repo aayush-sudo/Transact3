@@ -130,8 +130,14 @@ const mockHistoricalData = (base, target, days, anchorRate) => {
   };
 };
 
+const formatAmount = (amount, currencyCode) => {
+  const decimals = (currencyCode && currencyCode.toUpperCase() === 'JPY') ? 0 : 2;
+  return parseFloat(Number(amount).toFixed(decimals));
+};
+
 module.exports = {
   getExchangeRates,
   getHistoricalRates,
+  formatAmount,
   DEFAULT_USD_RATES
 };

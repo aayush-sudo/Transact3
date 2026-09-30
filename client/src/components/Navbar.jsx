@@ -1,7 +1,7 @@
 import React, { useContext } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { LogOut, LayoutDashboard, Send, History, Wallet, ShieldCheck, Sparkles } from 'lucide-react';
+import { LogOut, LayoutDashboard, Send, History, Wallet, ShieldCheck, Sparkles, TrendingUp, BarChart2 } from 'lucide-react';
 
 const Navbar = () => {
   const { user, logout } = useContext(AuthContext);
@@ -67,7 +67,7 @@ const Navbar = () => {
                 }`}
               >
                 <History size={14} />
-                Transaction History
+                Transactions
               </Link>
               <Link
                 to="/wallet"
@@ -79,6 +79,28 @@ const Navbar = () => {
               >
                 <Wallet size={14} />
                 Wallet
+              </Link>
+              <Link
+                to="/fx-forecasting"
+                className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
+                  isActive('/fx-forecasting')
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                }`}
+              >
+                <TrendingUp size={14} />
+                FX Forecasting
+              </Link>
+              <Link
+                to="/evaluation"
+                className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
+                  isActive('/evaluation')
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                }`}
+              >
+                <BarChart2 size={14} />
+                Evaluation
               </Link>
               {user.role === 'ADMIN' && (
                 <Link

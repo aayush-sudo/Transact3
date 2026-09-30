@@ -13,7 +13,7 @@ const amlService = require('./src/services/amlService');
 const graphRouterService = require('./src/services/graphRouterService');
 const iso20022 = require('./src/utils/iso20022');
 const sagaOrchestrator = require('./src/services/sagaOrchestrator');
-const instantRail = require('./src/rails/instantRail');
+const { instantRail } = require('./src/rails');
 
 const User = require('./src/models/User');
 const Portfolio = require('./src/models/Portfolio');

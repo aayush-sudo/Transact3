@@ -1,8 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const transactionController = require('../controllers/transactionController');
-const { protect } = require('../middleware/auth');
-const { checkIdempotency } = require('../middleware/idempotency');
+const { protect, checkIdempotency } = require('../middleware');
 
 router.post('/quote', protect, transactionController.createTransactionQuote);
 router.post('/confirm', protect, checkIdempotency, transactionController.confirmAndExecuteTransaction);

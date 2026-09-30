@@ -4,9 +4,7 @@ const cors = require('cors');
 const path = require('path');
 const connectDB = require('./config/db');
 
-const { requestId } = require('./middleware/requestId');
-const { rateLimiter } = require('./middleware/rateLimiter');
-const { errorHandler } = require('./middleware/errorHandler');
+const { requestId, rateLimiter, errorHandler } = require('./middleware');
 
 // Load env vars
 dotenv.config({ path: path.join(__dirname, '..', '.env') });

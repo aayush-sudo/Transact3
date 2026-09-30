@@ -1,0 +1,52 @@
+===========================================================================
+ TRANSACT3 - EXPLORATORY DATA ANALYSIS (EDA) REPORT
+===========================================================================
+
+Dataset File        : C:\Users\nanir\Desktop\college\project\LY project\Transact3\ml_models\data\forex.csv
+Total Rows          : 1,453,035
+Total Columns       : 7 (slug, date, open, high, low, close, currency)
+Date Range          : 1996-10-30 to 2021-08-30
+Unique Slugs (Pairs): 340
+Unique Currencies   : 113
+Duplicates          : 0
+Missing Values      :
+  - slug: 0 (0.00%)
+  - date: 0 (0.00%)
+  - open: 0 (0.00%)
+  - high: 0 (0.00%)
+  - low: 0 (0.00%)
+  - close: 0 (0.00%)
+  - currency: 0 (0.00%)
+
+Top 15 Currency Slugs by Count:
+  - JPY/USD: 6,416
+  - USD/JPY: 6,416
+  - EUR/SEK: 5,892
+  - EUR/GBP: 5,882
+  - EUR/ZAR: 5,549
+  - EUR/NOK: 5,548
+  - USD/PEN: 5,257
+  - USD/NOK: 5,041
+  - USD/SEK: 5,041
+  - USD/HKD: 5,040
+  - USD/IDR: 5,036
+  - USD/EGP: 5,009
+  - EUR/PLN: 4,992
+  - USD/CNY: 4,984
+  - GBP/CZK: 4,891
+
+OHLC Sanity Checks:
+  - High < Low anomalies   : 29
+  - Zero or Negative values: 0
+
+Descriptive Statistics:
+             mean          std      min     50%         max
+open   629.110475  9563.686299  0.00100  7.8849  2760430.75
+high   633.435043  9577.636270  0.00402  7.9121  2760430.75
+low    625.978108  9560.175986  0.00100  7.8577  2760430.75
+close  629.560386  9565.754560  0.00400  7.8861  2760430.75
+
+Key Insights for ML Modeling:
+1. Scale variance across pairs is massive (min 0.000001 to max millions), requiring stationary, scale-invariant percentage return targets.
+2. Missing values and price zero anomalies are negligible.
+3. Multi-year historical depth enables rich rolling technical features (SMA, EMA, RSI, MACD, Volatility).

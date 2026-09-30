@@ -6,12 +6,15 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "seed": "node src/seeds/seed.js",
-    "test": "node --test test-api.js"
+    "test": "node --test test-api.js",
+    "test:comprehensive": "node test-comprehensive.js",
+    "test:saga": "node test-saga-aml-graph.js",
+    "test:all": "node --test test-api.js && node test-comprehensive.js && node test-saga-aml-graph.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "Transact3 Core API & Multi-Rail SAGA Orchestrator",
   "dependencies": {
     "axios": "^1.15.2",
     "bcryptjs": "^3.0.3",

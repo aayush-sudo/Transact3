@@ -1,7 +1,4 @@
-const swiftRail = require('../rails/swiftRail');
-const instantRail = require('../rails/instantRail');
-const nettingRail = require('../rails/nettingRail');
-const cardPushRail = require('../rails/cardPushRail');
+const { swiftRail, instantRail, nettingRail, cardPushRail } = require('../rails');
 
 const liquidityManager = require('./liquidityManager');
 const fxAnalysisEngine = require('./fxAnalysisEngine');

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { getPortfolio, addHolding } = require('../controllers/portfolioController');
-const { protect } = require('../middleware/auth');
+const { protect } = require('../middleware');
 
 router.route('/')
   .get(protect, getPortfolio)

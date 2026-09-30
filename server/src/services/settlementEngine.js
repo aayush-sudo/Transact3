@@ -1,8 +1,4 @@
-const swiftRail = require('../rails/swiftRail');
-const instantRail = require('../rails/instantRail');
-const nettingRail = require('../rails/nettingRail');
-const cardPushRail = require('../rails/cardPushRail');
-
+const { RAIL_MAP } = require('../rails');
 const liquidityManager = require('./liquidityManager');
 const ledgerEngine = require('./ledgerEngine');
 const auditEngine = require('./auditEngine');
@@ -11,17 +7,6 @@ const Transaction = require('../models/Transaction');
 const User = require('../models/User');
 const LedgerEntry = require('../models/LedgerEntry');
 const { roundToPrecision } = require('../utils/mathUtils');
-
-const RAIL_MAP = {
-  INSTANT_PAYMENT_LINK: instantRail,
-  REGIONAL_INSTANT: instantRail,
-  BILATERAL_NETTING: nettingRail,
-  NETTING_LEDGER: nettingRail,
-  CARD_PAYOUT: cardPushRail,
-  CARD_PUSH: cardPushRail,
-  SWIFT_CORRESPONDENT: swiftRail,
-  SWIFT_BATCH: swiftRail
-};
 
 class SettlementEngine {
   async processSettlement(transactionDoc) {

@@ -1,8 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
-const { protect } = require('../middleware/auth');
-const { authorize } = require('../middleware/authorization');
+const { protect, authorize } = require('../middleware');
 
 router.get('/metrics', protect, authorize('ADMIN'), adminController.getAdminMetrics);
 router.get('/rails', protect, authorize('ADMIN'), adminController.getAdminRails);

@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 
 from app.config import settings
-from app.routes import routing, fx, analytics, graph_routing, compliance
+from app.routes import router
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -19,11 +19,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(routing.router)
-app.include_router(fx.router)
-app.include_router(analytics.router)
-app.include_router(graph_routing.router)
-app.include_router(compliance.router)
+app.include_router(router)
 
 @app.get("/health", tags=["Health"])
 async def health_check():
