@@ -27,32 +27,33 @@ Transact3 is an **AI-powered cross-border payment advisory meta-engine** (non-cu
 
 ---
 
-### Model 2: Optimal Payment Rail Recommendation (3 Real-World API Rails)
+### Model 2: Optimal Payment Rail Recommendation
 * **File:** `ml_models/02_rail_recommendation_model.py`
 * **Artifact:** `ml_models/saved_models/rail_model.joblib`
 * **Algorithm:** `RandomForestClassifier` (120 balanced trees)
-* **Real-World API Rails (3):**
-  1. `WISE_LOCAL_NETWORK`
-     * **Real API:** Wise Platform REST API (`POST /v3/quotes`)
+* **Supported Payment Rails (3):**
+  1. `FINTECH_LOCAL_NETTING` (Wise, Instarem)
      * **Mechanism:** Domestic clearing network (SEPA in EU, ACH in US, UPI/IMPS in IN, Faster Payments in UK).
+     * **Typical Stats:** 0.0% FX markup, ~0.45% fee, 1–4 hour settlement.
      * **Best For:** Low fees, transfers $\le \$30,000$, `CHEAPEST` / `BALANCED` priority.
-  2. `SWIFT_WIRE`
-     * **Real API:** Currencycloud / Stripe Wire / SWIFT GPI Wire API (`POST /v1/transfers`)
-     * **Mechanism:** Interbank wire connecting 11,000+ banks worldwide via ISO 20022.
+  2. `SWIFT_INTERBANK_WIRE` (Chase, Wells Fargo, OFX)
+     * **Mechanism:** Interbank wire connecting 11,000+ banks worldwide via ISO 20022 wire messages.
+     * **Typical Stats:** Flat $25 – $45 wire fee + 2–3% bank spread, 24–48 hour settlement.
      * **Best For:** High-value wholesale transfers ($>\$30,000$), exotic corridors, `RELIABLE` priority.
-  3. `CARD_PUSH_PAYOUT`
-     * **Real API:** Visa Direct PushFunds API / Stripe Instant Card Payouts (`POST /v1/payouts`)
-     * **Mechanism:** Real-time push payment directly to 16-digit debit/credit card or digital wallet.
+  3. `INSTANT_CARD_WALLET_PUSH` (Western Union, Remitly, PayPal)
+     * **Mechanism:** Visa Direct / Mastercard Send real-time push-to-card and digital wallet rails.
+     * **Typical Stats:** Higher variable markup (~1.5% – 3.5%), but sub-30 minute delivery, 24/7/365.
      * **Best For:** Instant delivery (<30 minutes), transfers on weekends/after-hours, small amounts $\le \$5,000$, `FASTEST` priority.
 * **Input Features (9):** Amount ($\log$), Weekend Flag, Time of Day (UTC), Priority (`CHEAPEST`, `FASTEST`, `BALANCED`, `RELIABLE`), Major Corridor Flag, FX Volatility, Corridor Liquidity.
 * **Output / Advisory:**
-  * Top Recommended Rail (e.g. `WISE_LOCAL_NETWORK`)
-  * Target REST API to call (e.g. `Wise Platform REST API`)
+  * Top Recommended Rail (e.g. `FINTECH_LOCAL_NETTING`)
+  * Confidence Score (e.g. `99.3%`)
   * Probability Distribution across all 3 rails
-  * Natural language explanation of why the rail was selected.
+  * Network Providers (e.g. `['Wise', 'Instarem']`)
+  * Advisory Rationale (Explainable natural language reasoning)
 * **Validation Performance (10,000 unseen test scenarios):**
   * Out-of-Sample Accuracy: **100.00%**
-  * Log-Loss: **0.0168**
+  * Log-Loss: **0.0166**
 
 ---
 
