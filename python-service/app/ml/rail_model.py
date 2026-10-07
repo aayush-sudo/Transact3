@@ -6,16 +6,14 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, accuracy_score
+from app.ml.model_paths import MODEL_DIR
 
-MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "models")
-MODEL_PATH = os.path.join(MODEL_DIR, "rail_model.joblib")
+MODEL_PATH = MODEL_DIR / "rail_model.joblib"
 
 RAIL_CLASSES = [
-    "REGIONAL_INSTANT",
-    "BILATERAL_NETTING",
-    "CARD_PAYOUT",
-    "RTGS_SETTLEMENT",
-    "SWIFT_CORRESPONDENT"
+    "FINTECH_LOCAL_NETTING",
+    "SWIFT_INTERBANK_WIRE",
+    "INSTANT_CARD_WALLET_PUSH"
 ]
 
 RAIL_FEATURE_COLUMNS = [
@@ -72,29 +70,18 @@ class RailRecommendationModel:
             fx_vol = float(np.random.uniform(0.1, 2.0))
             liquidity = float(np.random.uniform(0.3, 1.0))
 
-            # Ground-truth decision logic reflecting institutional banking physics:
-            if amount >= 150000 and is_major and is_weekend == 0:
-                # Large enterprise amounts during banking hours -> RTGS
-                label = "RTGS_SETTLEMENT"
-            elif pref == "CHEAPEST" and 5000 <= amount <= 300000 and liquidity > 0.6:
-                # Corporate batch netting for cost optimization
-                label = "BILATERAL_NETTING"
-            elif pref == "FASTEST" and is_major and amount <= 30000:
-                # Instant domestic/regional rail (FedNow, SEPA Instant, UPI)
-                label = "REGIONAL_INSTANT"
-            elif is_weekend == 1 and pref == "FASTEST" and amount <= 5000:
-                # Weekend consumer rush -> Card Push (Visa Direct / MC Send)
-                label = "CARD_PAYOUT"
-            elif amount <= 15000 and is_major and pref != "RELIABLE":
-                label = "REGIONAL_INSTANT"
-            elif is_major == 0 or amount > 250000:
-                # Exotic or universal cross-border corridor -> SWIFT GPI
-                label = "SWIFT_CORRESPONDENT"
+            if amount >= 30000 or is_major == 0 or pref == "RELIABLE":
+                label = "SWIFT_INTERBANK_WIRE"
+            elif (is_weekend and pref == "FASTEST" and amount <= 7500) or (
+                pref == "FASTEST" and amount <= 4000
+            ):
+                label = "INSTANT_CARD_WALLET_PUSH"
+            elif pref in ("CHEAPEST", "BALANCED") and amount <= 30000 and is_major:
+                label = "FINTECH_LOCAL_NETTING"
+            elif amount <= 15000 and is_major:
+                label = "FINTECH_LOCAL_NETTING"
             else:
-                if pref == "CHEAPEST":
-                    label = "BILATERAL_NETTING" if amount > 5000 else "REGIONAL_INSTANT"
-                else:
-                    label = "REGIONAL_INSTANT" if amount <= 50000 else "SWIFT_CORRESPONDENT"
+                label = "SWIFT_INTERBANK_WIRE"
 
             records.append({
                 "amount": amount,
@@ -208,31 +195,29 @@ class RailRecommendationModel:
             confidence = float(np.max(probs))
         else:
             # Fallback heuristic
-            if amount_usd > 100000:
-                best_rail = "RTGS_SETTLEMENT"
-            elif amount_usd <= 15000:
-                best_rail = "REGIONAL_INSTANT"
+            if amount_usd >= 30000 or not is_major or preference.upper() == "RELIABLE":
+                best_rail = "SWIFT_INTERBANK_WIRE"
+            elif preference.upper() == "FASTEST" and (
+                (is_weekend and amount_usd <= 7500) or amount_usd <= 4000
+            ):
+                best_rail = "INSTANT_CARD_WALLET_PUSH"
+            elif amount_usd <= 30000 and is_major:
+                best_rail = "FINTECH_LOCAL_NETTING"
+            elif amount_usd <= 15000 and is_major:
+                best_rail = "FINTECH_LOCAL_NETTING"
             else:
-                best_rail = "BILATERAL_NETTING"
-            prob_dict = {best_rail: 0.85, "SWIFT_CORRESPONDENT": 0.15}
+                best_rail = "SWIFT_INTERBANK_WIRE"
+            prob_dict = {rail: 1.0 if rail == best_rail else 0.0 for rail in RAIL_CLASSES}
             confidence = 0.85
 
         # Format human-readable advisory reasoning
         reasons = []
-        if best_rail == "REGIONAL_INSTANT":
-            reasons.append("Ultra-low latency (<15s) settlement on modern domestic clearing network.")
-            if amount_usd <= 50000:
-                reasons.append(f"Transfer size (${amount_usd:,.2f}) fits well within instant limits.")
-            if is_weekend:
-                reasons.append("Operates 24/7/365 with zero weekend cutoff delays.")
-        elif best_rail == "BILATERAL_NETTING":
-            reasons.append("Internal multilateral ledger netting avoids external correspondent fees.")
-            reasons.append(f"Optimized for cost efficiency under {preference} preference.")
-        elif best_rail == "RTGS_SETTLEMENT":
-            reasons.append("Irrevocable, immediate central-bank gross settlement for institutional principal protection.")
-            reasons.append(f"Recommended for high-value transfer of ${amount_usd:,.2f}.")
-        elif best_rail == "CARD_PAYOUT":
-            reasons.append("Real-time push-to-card rail bypassing traditional banking cutoffs.")
+        if best_rail == "FINTECH_LOCAL_NETTING":
+            reasons.append("Local domestic bank clearing selected for cost efficiency via Wise or Instarem.")
+        elif best_rail == "SWIFT_INTERBANK_WIRE":
+            reasons.append("SWIFT correspondent bank wire selected for broad cross-border reach.")
+        elif best_rail == "INSTANT_CARD_WALLET_PUSH":
+            reasons.append("Push-to-card rail selected for rapid delivery via Western Union, Remitly, or PayPal.")
         else:
             reasons.append("Universal global reach through SWIFT GPI correspondent banking network.")
 
@@ -244,8 +229,17 @@ class RailRecommendationModel:
             "corridor": corridor_slug,
             "transfer_amount_usd": amount_usd,
             "model_metadata": {
-                "algorithm": self.metadata.get("model_type", "RandomForestClassifier"),
-                "accuracy_pct": self.metadata.get("accuracy_pct", 94.2)
+                "algorithm": self.metadata.get(
+                    "model_type",
+                    self.metadata.get("algorithm", "RandomForestClassifier")
+                ),
+                "accuracy_pct": self.metadata.get(
+                    "accuracy_pct",
+                    self.metadata.get(
+                        "final_accuracy_pct",
+                        self.metadata.get("epoch_2_metrics", {}).get("accuracy_pct", 94.2)
+                    )
+                )
             }
         }
 

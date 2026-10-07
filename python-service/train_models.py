@@ -98,7 +98,7 @@ def run_training_pipeline():
     elapsed = time.time() - start_total
     print("\n" + "=" * 70)
     print(f" [SUCCESS] All 3 Machine Learning Models trained and ready in {elapsed:.2f} seconds!")
-    print(" Artifacts serialized to: python-service/models/")
+    print(" Artifacts serialized to: ml_models/saved_models/")
     print("=" * 70)
 
 if __name__ == "__main__":

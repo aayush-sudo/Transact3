@@ -58,18 +58,16 @@ ml_models/
 ### Model 2: Optimal Payment Rail Recommendation Model
 - **File**: `02_rail_recommendation_model.py`
 - **Algorithm**: `RandomForestClassifier` (120 balanced trees)
-- **Target Rails (5 classes)**:
-  1. `REGIONAL_INSTANT` (FedNow, SEPA Instant, UPI/IMPS, Pix)
-  2. `BILATERAL_NETTING` (Internal corporate ledger netting)
-  3. `CARD_PAYOUT` (Visa Direct / Mastercard Send push-to-card)
-  4. `RTGS_SETTLEMENT` (Central-bank gross settlement: Fedwire, TARGET2, CHAPS)
-  5. `SWIFT_CORRESPONDENT` (Universal cross-border correspondent banking)
+- **Target Rails (3 classes)**:
+  1. `FINTECH_LOCAL_NETTING` (Wise / Instarem local clearing)
+  2. `SWIFT_INTERBANK_WIRE` (Cross-border correspondent bank wire)
+  3. `INSTANT_CARD_WALLET_PUSH` (Western Union / Remitly / PayPal push-to-card)
 - **Input Features**:
   - `amount_log`, `is_weekend`, `time_of_day_utc`
   - User Priority (`CHEAPEST`, `FASTEST`, `BALANCED`, `RELIABLE`)
   - `is_major_corridor`, `fx_volatility_pct`, `liquidity_ratio`
-- **Output**: Top recommended rail, probability distribution across all 5 rails, and explainable rationale.
-- **Accuracy**: >99% test accuracy on multi-objective payment physics.
+- **Output**: Top recommended rail, probability distribution across all 3 rails, and explainable rationale.
+- **Accuracy**: 100% on held-out synthetic routing scenarios.
 - **Saved Model**: `saved_models/rail_model.joblib`
 
 ---

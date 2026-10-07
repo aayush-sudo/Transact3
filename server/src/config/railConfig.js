@@ -1,5 +1,5 @@
 /**
- * Transact3: 5 Supported Simulated Settlement Routes
+ * Transact3: Payment rail configuration for the simulated settlement routes
  * Orchestration layer configuration with realistic simulation parameters.
  */
 
@@ -42,25 +42,6 @@ const RAIL_CONFIG = {
     capacityHourlyUSD: 2000000,
     icon: 'Activity',
     pricingModel: 'LOW_LATENCY_FLAT_PLUS_BPS'
-  },
-  BILATERAL_NETTING: {
-    id: 'BILATERAL_NETTING',
-    name: 'Bilateral / Institutional Netting',
-    description: 'Settlement optimization where connected payment institutions offset bilateral obligations and settle net positions.',
-    baseFeeUSD: 0.00,
-    variableFeeBps: 0, // 0 bps (0.00%)
-    variableFeePct: 0.0000,
-    expectedSettlementDisplay: 'Instant',
-    settlementDisplayShort: 'Instant',
-    minLatencyHours: 0.0001,
-    maxLatencyHours: 0.0003,
-    avgLatencyHours: 0.0001,
-    simulationDurationMs: 800,
-    maxAmountUSD: 5000000,
-    reliabilityScore: 0.999,
-    capacityHourlyUSD: 15000000,
-    icon: 'Repeat',
-    pricingModel: 'INTERNAL_BOOK_ZERO_FEE'
   },
   CARD_PAYOUT: {
     id: 'CARD_PAYOUT',
@@ -105,14 +86,12 @@ const RAIL_CONFIG = {
 // Aliases for seamless backwards compatibility with earlier database documents
 RAIL_CONFIG.REGIONAL_INSTANT = RAIL_CONFIG.INSTANT_PAYMENT_LINK;
 RAIL_CONFIG.SWIFT_BATCH = RAIL_CONFIG.SWIFT_CORRESPONDENT;
-RAIL_CONFIG.NETTING_LEDGER = RAIL_CONFIG.BILATERAL_NETTING;
 RAIL_CONFIG.CARD_PUSH = RAIL_CONFIG.CARD_PAYOUT;
 RAIL_CONFIG.RTGS_INSTANT = RAIL_CONFIG.RTGS_SETTLEMENT;
 
 const CANONICAL_RAIL_IDS = [
   'SWIFT_CORRESPONDENT',
   'INSTANT_PAYMENT_LINK',
-  'BILATERAL_NETTING',
   'CARD_PAYOUT',
   'RTGS_SETTLEMENT'
 ];

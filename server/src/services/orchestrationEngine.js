@@ -1,4 +1,4 @@
-const { swiftRail, instantRail, nettingRail, cardPushRail } = require('../rails');
+const { swiftRail, instantRail, cardPushRail } = require('../rails');
 
 const liquidityManager = require('./liquidityManager');
 const fxAnalysisEngine = require('./fxAnalysisEngine');
@@ -10,7 +10,6 @@ const { roundToPrecision, safeAdd, safeDivide, safeMultiply } = require('../util
 
 const ALL_RAIL_ADAPTERS = [
   instantRail,
-  nettingRail,
   cardPushRail,
   swiftRail
 ];
@@ -76,7 +75,7 @@ class MultiRailOrchestrationEngine {
     const spreadBps = corridorConfig.baseSpreadBps || 30;
     const fxCostUSD = roundToPrecision(sourceAmountUSD * (spreadBps / 10000), 2);
 
-    // 4. Evaluate ALL 4 rails without skipping
+    // 4. Evaluate all supported rails without skipping
     const railCandidatesForFastAPI = [];
     const evaluatedRails = [];
 

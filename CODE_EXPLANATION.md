@@ -30,12 +30,11 @@ Transact3/
 │       │   ├── Transaction.js     # Cross-border transaction schema
 │       │   ├── FXQuote.js         # Active FX quote reservation schema
 │       │   └── LedgerEntry.js     # Double-entry audit ledger schema
-│       ├── rails/                 # 5 Payment Rail Adapters
+│       ├── rails/                 # 4 Payment Rail Adapters
 │       │   ├── railAdapter.js     # Base adapter interface (validate, cost, latency)
 │       │   ├── swiftRail.js       # SWIFT Classic Batch adapter
 │       │   ├── rtgsRail.js        # RTGS High-Value clearing adapter
 │       │   ├── instantRail.js     # Regional Instant Network adapter (FedNow/SEPA/UPI)
-│       │   ├── nettingRail.js     # Bilateral Intra-Bank Netting adapter
 │       │   └── cardPushRail.js    # Visa Direct / Mastercard Send adapter
 │       ├── services/              # Core Business Logic & Optimization Engines
 │       │   ├── orchestrationEngine.js  # AI Multi-Rail Pareto Utility Router
@@ -90,7 +89,7 @@ Transact3/
 ---
 
 ### 2. Multi-Rail Routing Engine ([server/src/services/orchestrationEngine.js](file:///c:/Users/nanir/Desktop/college/project/LY%20project/Transact3/server/src/services/orchestrationEngine.js))
-The `MultiRailOrchestrationEngine` calculates the optimal settlement pipeline by evaluating all 6 rail adapters through a multi-objective utility scoring function:
+The `MultiRailOrchestrationEngine` calculates the optimal settlement pipeline by evaluating all 3 active rails through a multi-objective utility scoring function:
 
 $$\text{Utility Score} = (w_{\text{reliability}} \cdot \text{Reliability}_R) - \Big[w_{\text{cost}} \cdot \text{NormCost}_R + w_{\text{speed}} \cdot \text{NormSpeed}_R + 0.1 \cdot \text{NormRisk}_R + \text{LiquidityPenalty}_R\Big]$$
 
@@ -102,12 +101,11 @@ $$\text{Utility Score} = (w_{\text{reliability}} \cdot \text{Reliability}_R) - \
 ---
 
 ### 3. Payment Rail Adapters ([server/src/rails/](file:///c:/Users/nanir/Desktop/college/project/LY%20project/Transact3/server/src/rails/))
-All 5 payment rail adapters inherit from `BaseRailAdapter` ([railAdapter.js](file:///c:/Users/nanir/Desktop/college/project/LY%20project/Transact3/server/src/rails/railAdapter.js)):
+The payment rail adapters inherit from `BaseRailAdapter` ([railAdapter.js](file:///c:/Users/nanir/Desktop/college/project/LY%20project/Transact3/server/src/rails/railAdapter.js)):
 1. **`swiftRail.js`**: Baseline correspondent banking (36-hr avg latency, \$25 base fee + 10 bps).
 2. **`rtgsRail.js`**: Real-Time Gross Settlement (0.25-hr latency, \$18 base fee + 5 bps).
 3. **`instantRail.js`**: Domestic instant clearings (1-sec latency, \$1.50 base fee + 2 bps).
-4. **`nettingRail.js`**: Book transfer netting (Instant latency, \$0.00 base fee).
-5. **`cardPushRail.js`**: Account-to-card push payments (9-min latency, \$3.50 base fee + 15 bps).
+4. **`cardPushRail.js`**: Account-to-card push payments (9-min latency, \$3.50 base fee + 15 bps).
 
 ---
 
@@ -159,7 +157,7 @@ Presents core user metrics: Total Balance ($ USD), Completed Payments, Total Rai
 | `GET` | `/api/currency/rates/:pair` | Get current spot exchange rate |
 | `GET` | `/api/portfolio` | Get user multi-currency wallet holdings & history |
 | `POST` | `/api/portfolio/deposit` | Simulate deposit into wallet with ledger recording |
-| `POST` | `/api/transaction/quote` | Generate 60s binding quote & evaluate 5 rails |
+| `POST` | `/api/transaction/quote` | Generate 60s binding quote & evaluate 3 active rails |
 | `POST` | `/api/transaction/confirm` | Atomic settlement execution, wallet update & ledger |
 | `GET` | `/api/transaction/history` | User transaction history with TCA savings |
 | `GET` | `/api/transaction/:id` | Full transaction details with ledger & audit records |

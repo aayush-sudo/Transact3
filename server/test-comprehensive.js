@@ -39,7 +39,7 @@ async function runComprehensiveTests() {
     // 1. Database Connection & Seed
     await connectDB();
     await seedDatabase();
-    assert(true, 'Database connected & seeded with Users and 4 Rails');
+    assert(true, 'Database connected & seeded with Users and 3 Rails');
 
     // 2. Verify User A (Alice) and User B (Bob) exist
     const alice = await User.findOne({ email: 'alice@transact3.com' });
@@ -86,7 +86,7 @@ async function runComprehensiveTests() {
     });
     assert(modeARoute.sourceAmount === 1000, 'Mode A preserved source amount (1000 USD)');
     assert(modeARoute.destinationAmount > 0, `Mode A calculated destination amount: ${modeARoute.destinationAmount} INR`);
-    assert(modeARoute.evaluatedRails.length === 4, `Mode A evaluated exactly 4 rails: ${modeARoute.evaluatedRails.map(r => r.id).join(', ')}`);
+    assert(modeARoute.evaluatedRails.length === 3, `Mode A evaluated exactly 3 rails: ${modeARoute.evaluatedRails.map(r => r.id).join(', ')}`);
 
     // 7. Test Payment Mode B: RECIPIENT_GETS
     const modeBRoute = await orchestrationEngine.routePayment({
@@ -112,8 +112,8 @@ async function runComprehensiveTests() {
       amount: 5000,
       priority: 'FASTEST'
     });
-    assert(cheapestRoute.recommendedRail && ['BILATERAL_NETTING', 'NETTING_LEDGER'].includes(cheapestRoute.recommendedRail.id), `Cheapest policy picked lowest fee rail: ${cheapestRoute.recommendedRail ? cheapestRoute.recommendedRail.name : 'None'} ($0 fee)`);
-    assert(fastestRoute.recommendedRail && ['INSTANT_PAYMENT_LINK', 'REGIONAL_INSTANT', 'BILATERAL_NETTING', 'NETTING_LEDGER'].includes(fastestRoute.recommendedRail.id), `Fastest policy picked near-instant rail: ${fastestRoute.recommendedRail ? fastestRoute.recommendedRail.name : 'None'}`);
+    assert(cheapestRoute.recommendedRail && ['INSTANT_PAYMENT_LINK', 'CARD_PAYOUT'].includes(cheapestRoute.recommendedRail.id), `Cheapest policy picked a low-fee rail: ${cheapestRoute.recommendedRail ? cheapestRoute.recommendedRail.name : 'None'}`);
+    assert(fastestRoute.recommendedRail && ['INSTANT_PAYMENT_LINK', 'CARD_PAYOUT'].includes(fastestRoute.recommendedRail.id), `Fastest policy picked a fast eligible rail: ${fastestRoute.recommendedRail ? fastestRoute.recommendedRail.name : 'None'}`);
 
     // 9. Test Dynamic Liquidity Constraint & Controlled Failure Re-routing
     console.log('\n--- Testing Liquidity Constraint & Dynamic Re-Routing ---');

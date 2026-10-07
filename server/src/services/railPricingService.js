@@ -154,18 +154,6 @@ class RailPricingService {
         realWorldSource: 'FedNow / SEPA Instant Credit Transfer (SCT Inst) Scheme'
       },
       {
-        railId: 'BILATERAL_NETTING',
-        name: 'Bilateral / Institutional Netting',
-        pipeline: 'Intra-Bank Multi-Branch Netting Book Transfer',
-        baseFeeUSD: 0.00,
-        variableFeeBps: 0,
-        variableFeeDescription: '0 bps (0.00%) zero network fee',
-        weekendSurchargeUSD: 0.00,
-        settlementTime: 'Instant (internal book ledger offset)',
-        bestFor: 'Subsidiary transfers and connected partner liquidity pools',
-        realWorldSource: 'Corporate Treasury Netting Systems (Kyriba / Coprocess)'
-      },
-      {
         railId: 'CARD_PAYOUT',
         name: 'Card-Based Payout (Visa Direct / Mastercard Send)',
         pipeline: 'Card Scheme Original Credit Transaction (OCT)',

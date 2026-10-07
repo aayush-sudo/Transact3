@@ -18,12 +18,21 @@ class LiquidityManager {
         }
       }
 
-      // 2. Remove any obsolete RTGS records from database
-      await RailSetting.deleteMany({ railId: { $in: ['RTGS_SETTLEMENT', 'RTGS_INSTANT'] } });
+      // 2. Remove retired rail settings from database
+      await RailSetting.deleteMany({
+        railId: {
+          $in: [
+            'RTGS_SETTLEMENT', 'RTGS_INSTANT',
+            'BILATERAL_NETTING', 'NETTING_LEDGER'
+          ]
+        }
+      });
       this.cachedRailSettings.delete('RTGS_SETTLEMENT');
       this.cachedRailSettings.delete('RTGS_INSTANT');
+      this.cachedRailSettings.delete('BILATERAL_NETTING');
+      this.cachedRailSettings.delete('NETTING_LEDGER');
 
-      // 3. Ensure RailSettings exist in MongoDB for the 4 canonical routes
+      // 3. Ensure RailSettings exist in MongoDB for the canonical routes
       const railIds = RAIL_CONFIG.CANONICAL_RAIL_IDS || Object.keys(RAIL_CONFIG);
       for (const railId of railIds) {
         const config = RAIL_CONFIG[railId];

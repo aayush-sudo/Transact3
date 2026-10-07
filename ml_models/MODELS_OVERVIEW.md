@@ -21,9 +21,9 @@ Transact3 is an **AI-powered cross-border payment advisory meta-engine** (non-cu
     * `EXECUTE_NOW`: Rate expected to drop (hedges slippage) or stable low volatility.
     * `WAIT_6H` / `WAIT_24H`: Rate expected to appreciate, with projected monetary savings.
 * **Validation Performance (288,567 unseen test records):**
-  * MAE: **0.003901** (~0.39%)
-  * RMSE: **0.005178**
-  * Directional Accuracy: **51.74%**
+  * MAE: **0.004931** (~0.49%)
+  * RMSE: **0.010673**
+  * Directional Accuracy: **51.22%**
 
 ---
 

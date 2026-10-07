@@ -7,7 +7,7 @@
 
 **Transact3** is an AI-driven cross-border payment orchestration platform designed to solve the critical friction points of international banking: **high correspondent fees (3–5%)**, **slow settlement delays (24–72 hours)**, **weekend cut-offs**, and **opaque exchange rate markups**.
 
-Instead of locking users into a single payment rail, Transact3 acts as an **intelligent meta-router** (the *"Skyscanner for Cross-Border Payments"*). It dynamically monitors and benchmarks **5 settlement pipelines**—including legacy SWIFT, central bank RTGS, regional instant networks (FedNow/UPI/SEPA), bilateral netting, and card push networks—jointly optimizing cost, speed, liquidity capacity, and FX conversion timing in real time.
+Instead of locking users into a single payment rail, Transact3 acts as an **intelligent meta-router** (the *"Skyscanner for Cross-Border Payments"*). It dynamically monitors and benchmarks settlement pipelines—including legacy SWIFT, regional instant networks (FedNow/UPI/SEPA), and card push networks—jointly optimizing cost, speed, liquidity capacity, and FX conversion timing in real time.
 
 ---
 
@@ -25,14 +25,13 @@ Instead of locking users into a single payment rail, Transact3 acts as an **inte
 
 ---
 
-## 🛣️ The 5 Transactional Payment Pipelines
+## 🛣️ The Transactional Payment Pipelines
 
 | Rail ID | Rail Name | Pipeline Technology | Avg Speed | Base Fee | Best Use Case |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **`SWIFT_BATCH`** | SWIFT Classic Batch | Correspondent Banking | 36 Hours | \$25.00 + 10 bps | Large, non-urgent legacy transfers |
 | **`RTGS_INSTANT`** | RTGS High-Value Clearing | Central Bank Wire | 15 Mins | \$18.00 + 5 bps | High-value corporate treasury wires |
 | **`REGIONAL_INSTANT`** | Regional Instant Network | Instant Domestic (FedNow/UPI/SEPA) | 1 Second | \$1.50 + 2 bps | Fast low-to-medium value domestic clearings |
-| **`NETTING_LEDGER`** | Bilateral Intra-Bank Netting | Intra-Bank Book Transfer | Instant | \$0.00 | Internal subsidiary & partner book transfers |
 | **`CARD_PUSH`** | Card Push Network | Visa Direct / Mastercard Send | 9 Mins | \$3.50 + 15 bps | Account-to-card push disbursements |
 
 ---
@@ -56,10 +55,6 @@ $$\text{Utility Score} = (w_{\text{reliability}} \cdot \text{Reliability}_R) - \
 * **Scenario**: A user needs to transfer **$5,000 USD → EUR** on Friday at 7:30 PM.
 * **Legacy SWIFT Route**: Delayed by weekend bank closure until Monday afternoon (**68 hours**, $25.00 base fee + 10 bps).
 * **Transact3 Regional Instant Route**: Settles in **1-2 seconds** via Regional Instant Network (SEPA/FedNow) for **$2.50 total**, saving **68 hours** and over **$27.50** in direct fees and latency exposure.
-
-### Case 2: Corporate Subsidiary Intra-Company Netting
-* **Scenario**: US Headquarters transferring **\$500,000** to its UK branch.
-* **Transact3 Netting Route**: Identifies matching internal balance sheets and executes a **Bilateral Netting** book transfer for **\$0.00 fee** instantly.
 
 ---
 

@@ -8,9 +8,9 @@ from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.metrics import mean_absolute_error, root_mean_squared_error, r2_score
 
 from app.ml.dataset_loader import FEATURE_COLUMNS, extract_technical_features
+from app.ml.model_paths import MODEL_DIR
 
-MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "models")
-MODEL_PATH = os.path.join(MODEL_DIR, "currency_model.joblib")
+MODEL_PATH = MODEL_DIR / "currency_model.joblib"
 
 class CurrencyForecaster:
     """
@@ -220,9 +220,18 @@ class CurrencyForecaster:
                 "projected_benefit_target_currency": delta_amount_target
             },
             "model_metadata": {
-                "algorithm": self.metadata.get("model_type", "HistGradientBoostingRegressor"),
-                "directional_accuracy_pct": self.metadata.get("directional_accuracy_pct", 68.5),
-                "rmse": self.metadata.get("rmse_return", 0.004)
+                "algorithm": self.metadata.get(
+                    "model_type",
+                    self.metadata.get("algorithm", "HistGradientBoostingRegressor")
+                ),
+                "directional_accuracy_pct": self.metadata.get(
+                    "directional_accuracy_pct",
+                    self.metadata.get("final_directional_accuracy_pct", 68.5)
+                ),
+                "rmse": self.metadata.get(
+                    "rmse_return",
+                    self.metadata.get("final_rmse", 0.004)
+                )
             }
         }
 

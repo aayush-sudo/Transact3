@@ -173,29 +173,6 @@ class InstantRail extends BaseRailAdapter {
   }
 }
 
-class NettingRail extends BaseRailAdapter {
-  constructor() {
-    super(RAIL_CONFIG.BILATERAL_NETTING || RAIL_CONFIG.NETTING_LEDGER);
-  }
-
-  isCutOffActive() {
-    return { isCutOff: false, extraLatencyHours: 0, latePenaltyUSD: 0 };
-  }
-
-  validate(params) {
-    const baseValid = super.validate(params);
-    if (!baseValid.valid) return baseValid;
-    return { valid: true };
-  }
-
-  async executePayment(transactionData) {
-    const res = await super.executePayment(transactionData);
-    res.nettingMethod = 'Bilateral Multilateral Book-Transfer Clearing';
-    res.intercompanyBookReference = `BOOK-${Date.now().toString(36).toUpperCase()}`;
-    return res;
-  }
-}
-
 class CardPushRail extends BaseRailAdapter {
   constructor() {
     super(RAIL_CONFIG.CARD_PAYOUT || RAIL_CONFIG.CARD_PUSH);
@@ -259,15 +236,12 @@ class RtgsRail extends BaseRailAdapter {
 // Singletons
 const swiftRail = new SwiftRail();
 const instantRail = new InstantRail();
-const nettingRail = new NettingRail();
 const cardPushRail = new CardPushRail();
 const rtgsRail = new RtgsRail();
 
 const RAIL_MAP = {
   INSTANT_PAYMENT_LINK: instantRail,
   REGIONAL_INSTANT: instantRail,
-  BILATERAL_NETTING: nettingRail,
-  NETTING_LEDGER: nettingRail,
   CARD_PAYOUT: cardPushRail,
   CARD_PUSH: cardPushRail,
   SWIFT_CORRESPONDENT: swiftRail,
@@ -280,12 +254,10 @@ module.exports = {
   BaseRailAdapter,
   SwiftRail,
   InstantRail,
-  NettingRail,
   CardPushRail,
   RtgsRail,
   swiftRail,
   instantRail,
-  nettingRail,
   cardPushRail,
   rtgsRail,
   RAIL_MAP

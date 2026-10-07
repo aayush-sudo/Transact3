@@ -27,42 +27,40 @@ The Transact3 platform is structured into clean, decoupled tiers:
                     │ REST (Port 8000)               │ Adapter Pattern
                     ▼                                ▼
 ┌──────────────────────────────────────┐  ┌──────────────────────────────┐
-│       Python / FastAPI Service       │  │  4 Simulated Route Adapters │
+│       Python / FastAPI Service       │  │  3 Simulated Route Adapters │
 │  - Multi-Objective Pareto Scoring    │  │  - SWIFT Classic Batch       │
 │  - FX Stats: SMA, EMA & Volatility   │  │  - Correspondent Banking     │
 │  - Analytical Execution Guidance     │  │  - Instant Payment           │
-│  - Transaction Cost Analysis (TCA)   │  │  - Bilateral Netting         │
-│  - Deterministic Scoring              │  │  - Card Payout                │
+│  - Transaction Cost Analysis (TCA)   │  │  - Card Payout                │
+│  - Deterministic Scoring              │  │                               │
 └──────────────────────────────────────┘  └──────────────────────────────┘
 ```
 
 1. **React Frontend (`client/`)**: Modern responsive web application built with Tailwind CSS and Lucide icons. Includes 5 clean sections:
    - **Dashboard**: High-level personal transfer volume, savings vs SWIFT, fees paid, multi-currency balances, and recent payments.
-   - **Payment Router**: Payment orchestration console supporting Mode A ("Send Amount") and Mode B ("Recipient Gets"), live recipient picker, 4-route comparative matrix with eligibility badges and rejection reasons, and manual override capabilities.
+   - **Payment Router**: Payment orchestration console supporting Mode A ("Send Amount") and Mode B ("Recipient Gets"), live recipient picker, 3-route comparative matrix with eligibility badges and rejection reasons, and manual override capabilities.
    - **Transaction History**: Audit trail with expandable transaction drawer revealing ISO 20022 clearing refs, execution durations, savings vs SWIFT, double-entry ledger entries, and cryptographic hashes.
    - **Wallet (Portfolio)**: 9-currency balance viewer with simulated deposit modal that generates balanced double-entry ledger records.
    - **Admin Portal**: System-wide operations dashboard with rail enable/disable switches, liquidity pool replenishment, system ledger reconciliation, and SHA-256 audit chain verification.
 2. **Node.js / Express Backend (`server/`)**: Primary business engine managing JWT authentication, wallet debits/credits, binding quote generation, simulated settlement, double-entry ledger records, and MongoDB persistence. The API integration test uses an isolated in-memory database; the documented demo uses persistent MongoDB.
-3. **Python / FastAPI Intelligence Service (`python-service/`)**: Optional service providing deterministic multi-objective route scoring, technical indicators (SMA, EMA, 24h rolling volatility), execution timing classifications, and TCA metrics. The ML predictor is currently a pass-through hook with zero adjustment; no trained ML model is included. Express uses deterministic fallback scoring if FastAPI is offline.
+3. **Python / FastAPI Intelligence Service (`python-service/`)**: Optional service providing deterministic multi-objective route scoring, technical indicators (SMA, EMA, 24h rolling volatility), execution timing classifications, TCA metrics, and inference endpoints for the trained FX forecast, payment rail recommendation, and transaction risk models in `ml_models/saved_models/`. Express uses deterministic fallback scoring if FastAPI is offline.
 4. **Data Persistence (MongoDB)**: Mongoose schemas for `User`, `Transaction`, `LedgerEntry`, `RailSetting`, and `AuditLog`.
 
 ---
 
-## 🛣️ The 4 Simulated Route Adapters
+## 🛣️ The 3 Simulated Route Adapters
 
-Transact3 models the operational characteristics of four route types. These adapters return simulated results and are not connections to the named payment networks:
+Transact3 models the operational characteristics of three route types. These adapters return simulated results and are not connections to the named payment networks:
 
 | Rail ID | Rail Name | Settlement Mechanism | Base Fee (USD) | Variable (bps) | Typical Settlement Time | Simulation Duration |
 | :--- | :--- | :--- | :---: | :---: | :---: | :---: |
 | **`REGIONAL_INSTANT`** | Regional Instant Network | Direct domestic instant clearing (FedNow, SEPA Instant, UPI) | **$1.50** | **2 bps** (0.02%) | ~1 second | 1,200 ms |
-| **`NETTING_LEDGER`** | Bilateral Intra-Bank Netting | Intra-bank ledger offset between mutual correspondent books | **$0.00** | **0 bps** (0.00%) | Instant | 800 ms |
 | **`CARD_PUSH`** | Card Push Network | Direct debit-to-card rail (Visa Direct, Mastercard Send) | **$3.50** | **15 bps** (0.15%) | ~9 minutes | 1,800 ms |
 | **`SWIFT_BATCH`** | SWIFT Classic Batch | Correspondent banking multi-hop serial batch messaging | **$25.00** | **10 bps** (0.10%) | 24 to 48 hours | 4,000 ms |
 
 ### Rail Availability & Constraints
 - **Regional Instant**: Maximum transfer limit of $100,000 USD equivalent.
 - **Card Push**: Maximum transfer limit of $25,000 USD equivalent.
-- **Bilateral Netting**: Requires matching balance sheet pairs; available when configured on active corridor.
 - **SWIFT**: Universally eligible fallback rail supporting all corridors up to $10,000,000 USD.
 
 ---
@@ -180,9 +178,9 @@ npm install
 cd ../client
 npm install
 
-# Install python-service dependencies (optional)
+# Install python-service dependencies, including ML inference (optional)
 cd ../python-service
-pip install fastapi uvicorn
+pip install -r requirements.txt
 ```
 
 ### 2. Configure Environment Variables
@@ -257,7 +255,15 @@ node test-comprehensive.js
 
 ## Routing Intelligence Status
 
-Rail ranking currently uses deterministic weighted scoring. The Python `MLPredictionLayer` in [`python-service/app/services/ml_prediction_interface.py`](python-service/app/services/ml_prediction_interface.py) is a conceptual pass-through and returns a zero score adjustment; no trained model or learned predictions are part of this proof of concept.
+The three saved models are loaded by the FastAPI service at startup and are available through `POST /ml/predict-currency`, `POST /ml/predict-rail`, `POST /ml/predict-risk`, and the combined `POST /ml/advisory` endpoint. For example, after starting the Python service:
+
+```bash
+curl -X POST http://localhost:8000/ml/advisory \
+  -H 'Content-Type: application/json' \
+  -d '{"source_currency":"USD","destination_currency":"EUR","amount":10000,"preference":"BALANCED","recipient_country":"DE","current_rate":0.92}'
+```
+
+The separate `MLPredictionLayer` in [`python-service/app/services/ml_prediction_interface.py`](python-service/app/services/ml_prediction_interface.py) remains a pass-through hook for deterministic rail scoring; the standalone model inference endpoints do not replace that scoring path.
 
 ---
 

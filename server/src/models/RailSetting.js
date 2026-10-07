@@ -6,8 +6,8 @@ const RailSettingSchema = new mongoose.Schema({
     required: true,
     unique: true,
     enum: [
-      'SWIFT_CORRESPONDENT', 'INSTANT_PAYMENT_LINK', 'RTGS_SETTLEMENT', 'BILATERAL_NETTING', 'CARD_PAYOUT',
-      'REGIONAL_INSTANT', 'NETTING_LEDGER', 'RTGS_INSTANT', 'CARD_PUSH', 'SWIFT_BATCH'
+      'SWIFT_CORRESPONDENT', 'INSTANT_PAYMENT_LINK', 'RTGS_SETTLEMENT', 'CARD_PAYOUT',
+      'REGIONAL_INSTANT', 'RTGS_INSTANT', 'CARD_PUSH', 'SWIFT_BATCH'
     ]
   },
   name: {

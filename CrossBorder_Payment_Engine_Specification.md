@@ -27,7 +27,7 @@ This project implements an **Intelligent Multi-Rail Cross-Border Payment & Settl
 | **Core Microservices** | Python 3.11 (FastAPI, NumPy, NetworkX, Levenshtein) | Graph pathfinding, fuzzy AML string matching, ISO 20022 XML generation. |
 | **Ledger & Persistence** | PostgreSQL 16 & MongoDB (Strict ACID, Double-Entry Enforced) | Transaction logs, wallet balances, immutable ledger entries, audit trails. |
 | **Event Bus & State** | Event-Sourced SAGA Pattern | Microservice orchestration, SAGA state management, compensating rollbacks. |
-| **Settlement Rails Sandbox**| 5 Fiat Rails: Regional Instant, Netting Ledger, RTGS, Card Push, SWIFT | Execution of domestic payout and cross-border simulated rails. |
+| **Settlement Rails Sandbox**| 4 Fiat Rails: Regional Instant, RTGS, Card Push, SWIFT | Execution of domestic payout and cross-border simulated rails. |
 
 ---
 

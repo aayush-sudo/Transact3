@@ -5,9 +5,9 @@ import pandas as pd
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 from sklearn.ensemble import IsolationForest
+from app.ml.model_paths import MODEL_DIR
 
-MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "models")
-MODEL_PATH = os.path.join(MODEL_DIR, "risk_model.joblib")
+MODEL_PATH = MODEL_DIR / "risk_model.joblib"
 
 RISK_FEATURE_COLUMNS = [
     "amount_log",
@@ -253,7 +253,10 @@ class TransactionRiskModel:
             "advisory_action": advisory_action,
             "risk_factors": risk_factors,
             "model_metadata": {
-                "algorithm": self.metadata.get("model_type", "IsolationForest"),
+                "algorithm": self.metadata.get(
+                    "model_type",
+                    self.metadata.get("algorithm", "IsolationForest")
+                ),
                 "trained_samples": self.metadata.get("training_samples", 20000)
             }
         }

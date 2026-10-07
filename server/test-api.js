@@ -106,7 +106,7 @@ test('authenticated payment settles once to the quoted recipient and survives re
 
   const railsStatus = await request('/orchestration/rails');
   assert.equal(railsStatus.response.status, 200);
-  assert.equal(railsStatus.body.data.length, 4);
+  assert.equal(railsStatus.body.data.length, 3);
 
   const aliceToken = await login('alice@transact3.com');
   const bobToken = await login('bob@transact3.com');
@@ -178,7 +178,7 @@ test('authenticated payment settles once to the quoted recipient and survives re
   const conflictingReplay = await request('/transaction/confirm', {
     method: 'POST',
     token: aliceToken,
-    body: { ...paymentRequest, selectedRail: 'BILATERAL_NETTING' }
+    body: { ...paymentRequest, selectedRail: 'SWIFT_CORRESPONDENT' }
   });
   assert.equal(conflictingReplay.response.status, 409);
 
@@ -232,7 +232,7 @@ test('authenticated payment settles once to the quoted recipient and survives re
     token: aliceAfterRestart,
     body: {
       quoteId: postRestartQuote.body.data.quote.quoteId,
-      selectedRail: 'BILATERAL_NETTING',
+      selectedRail: 'INSTANT_PAYMENT_LINK',
       idempotencyKey: `RESTART-${postRestartQuote.body.data.quote.quoteId}`
     }
   });
