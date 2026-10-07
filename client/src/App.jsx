@@ -4,8 +4,6 @@ import { AuthProvider, AuthContext } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import Dashboard from './pages/Dashboard';
 import PaymentRouter from './pages/PaymentRouter';
-import Transactions from './pages/Transactions';
-import Portfolio from './pages/Portfolio';
 import FXForecasting from './pages/FXForecasting';
 import Evaluation from './pages/Evaluation';
 import Admin from './pages/Admin';
@@ -43,9 +41,9 @@ function App() {
               <Route path="/register" element={<Register />} />
               <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
               <Route path="/payment-router" element={<PrivateRoute><PaymentRouter /></PrivateRoute>} />
-              <Route path="/transactions" element={<PrivateRoute><Transactions /></PrivateRoute>} />
-              <Route path="/wallet" element={<PrivateRoute><Portfolio /></PrivateRoute>} />
-              <Route path="/portfolio" element={<PrivateRoute><Portfolio /></PrivateRoute>} />
+              <Route path="/transactions" element={<Navigate to="/payment-router" replace />} />
+              <Route path="/wallet" element={<Navigate to="/payment-router" replace />} />
+              <Route path="/portfolio" element={<Navigate to="/payment-router" replace />} />
               <Route path="/fx-forecasting" element={<PrivateRoute><FXForecasting /></PrivateRoute>} />
               <Route path="/evaluation" element={<PrivateRoute><Evaluation /></PrivateRoute>} />
               <Route path="/admin" element={<PrivateRoute><AdminRoute><Admin /></AdminRoute></PrivateRoute>} />

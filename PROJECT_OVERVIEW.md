@@ -7,7 +7,7 @@
 
 **Transact3** is a user-facing information and comparison platform for cross-border transfers. It helps users review illustrative exchange-rate, fee, delivery-time, and route trade-offs before choosing an external provider. Transact3 does not process payments, hold funds, or connect to payment networks.
 
-An optional software demo illustrates route scoring and a simulated transfer lifecycle using sample balances. Demo rates, availability, and settlement behavior are not real provider offers, and the simulation moves no real money.
+Transact3 compares indicative route data and provides decision support. A one-time transfer simulator demonstrates the selected route end to end using sample account records; it does not move real funds or contact external providers.
 
 ---
 
@@ -19,33 +19,32 @@ An optional software demo illustrates route scoring and a simulated transfer lif
 3. **Hidden Spread Costs**: FX markups are buried inside "zero fee" marketing claims.
 
 ### The Transact3 Platform:
-1. **Independent Comparison**: Presents simulated routes ranked by user-selected preferences (`BALANCED`, `MINIMIZE COST`, `MAXIMIZE SPEED`); users choose an external provider themselves.
-2. **Illustrative Route Data**: Models costs, speeds, and availability for educational comparison; it does not integrate with settlement networks.
+1. **Independent Comparison**: Ranks three route categories by user-selected preferences (`BALANCED`, `MINIMIZE COST`, `MAXIMIZE SPEED`); users choose an external provider themselves.
+2. **Indicative Route Data**: Presents estimated costs, speeds, and availability; it does not integrate with settlement networks.
 3. **Cost Guidance**: Shows estimated fees and FX comparisons, not guaranteed savings or provider offers.
 
 ---
 
-## 🛣️ Simulated Route Examples
+## 🛣️ Indicative Route Categories
 
-| Rail ID | Rail Name | Pipeline Technology | Avg Speed | Base Fee | Best Use Case |
+| Route ID | Route Category | Reference Technology | Indicative Delivery Time | Estimated Base Fee | Typical Use |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **`SWIFT_BATCH`** | SWIFT Classic Batch | Correspondent Banking | 36 Hours | \$25.00 + 10 bps | Large, non-urgent legacy transfers |
-| **`RTGS_INSTANT`** | RTGS High-Value Clearing | Central Bank Wire | 15 Mins | \$18.00 + 5 bps | High-value corporate treasury wires |
-| **`REGIONAL_INSTANT`** | Regional Instant Network | Instant Domestic (FedNow/UPI/SEPA) | 1 Second | \$1.50 + 2 bps | Fast low-to-medium value domestic clearings |
-| **`CARD_PUSH`** | Card Push Network | Visa Direct / Mastercard Send | 9 Mins | \$3.50 + 15 bps | Account-to-card push disbursements |
+| **`SWIFT_BATCH`** | Correspondent transfer | Bank-to-bank network category | 36 Hours | \$25.00 + 10 bps | Large, non-urgent transfers |
+| **`REGIONAL_INSTANT`** | Regional instant | Domestic instant network category | 1 Second | \$1.50 + 2 bps | Fast low-to-medium value transfers |
+| **`CARD_PUSH`** | Card payout | Debit-to-card network category | 9 Mins | \$3.50 + 15 bps | Account-to-card payouts |
 
 ---
 
-## 🧮 AI Joint Optimization Routing Engine
+## 🧮 Route Ranking Model
 
-The routing engine solves a **Multi-Objective Utility Optimization Model** in real time:
+The ranking model uses a **Multi-Objective Utility Optimization Model**:
 
 $$\text{Utility Score} = (w_{\text{reliability}} \cdot \text{Reliability}_R) - \Big[w_{\text{cost}} \cdot \text{NormCost}_R + w_{\text{speed}} \cdot \text{NormSpeed}_R + 0.1 \cdot \text{NormRisk}_R + \text{LiquidityPenalty}_R\Big]$$
 
 ### Key Dynamic Inputs:
-1. **Dynamic Liquidity Saturation Penalty ($\lambda$)**: Applies exponential cost penalties as a rail pool approaches $100\%$ hourly capacity, preventing transaction bounces.
-2. **Predictive FX Timing**: Analyzes 24-hour time-series rate trends to advise whether to `EXECUTE_NOW` or `DEFER` execution to capture rate improvements.
-3. **Compliance Risk Score**: Evaluates transaction size ($> \$10,000$) and rolling 1-hour velocity to score transaction risk ($0.0 \rightarrow 1.0$).
+1. **Capacity Adjustment**: Accounts for configured route capacity when ranking available options.
+2. **FX Outlook**: Analyzes historical rate trends to provide `EXECUTE_NOW`, `CONSIDER_DEFER`, or `NEUTRAL` guidance.
+3. **Risk Indicator**: Model-derived indicator included in the comparison output.
 
 ---
 
@@ -74,5 +73,5 @@ $$\text{Utility Score} = (w_{\text{reliability}} \cdot \text{Reliability}_R) - \
 ### Q2: "Why would someone defer a Web3 transaction for 6 to 12 hours if Web3 takes 3 seconds?"
 > **Answer**: For large corporate B2B transfers (e.g. \$5,000,000), a 0.5% exchange rate fluctuation equals \$25,000 USD. Even if instant clearing takes seconds, the FX Timing Engine advises holding execution for 6 hours to capture a better currency conversion rate, saving substantial money on large B2B payments.
 
-### Q3: "Is real money required to demo this application?"
-> **Answer**: No. Account holdings and the optional transfer lifecycle use virtual demo balances and simulated route adapters.
+### Q3: "Does the transfer simulation move real money?"
+> **Answer**: No. The one-time simulator records sample account activity to demonstrate the lifecycle. It does not move real funds or contact a payment provider.

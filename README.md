@@ -1,8 +1,6 @@
 # Transact3 — Cross-Border Transfer Comparison Platform
 
-Transact3 is a user-focused information and comparison platform for cross-border transfers. It helps people review estimated exchange rates, fees, delivery times, and route trade-offs before choosing an external provider. Transact3 does not process payments, hold funds, or connect to payment networks.
-
-An optional software demo illustrates a simulated transfer lifecycle across three sample routes. Demo balances, quotes, settlement, and transaction history are not real financial services and no real money moves.
+Transact3 is an information and comparison platform for cross-border transfers. It helps people review estimated exchange rates, fees, delivery times, and route trade-offs before choosing an external provider. A one-time transfer simulation demonstrates the selected route using sample account records; it does not transfer real funds or contact an external provider.
 
 ---
 
@@ -13,21 +11,21 @@ The Transact3 platform is structured into clean, decoupled tiers:
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
 │                        React 19 + Vite Frontend                        │
-│  (Overview, Option Comparison, FX Outlook, Optional Demo, Admin UI)    │
+│  (Overview, Route Comparison, FX Outlook, Model Insights, Simulator)   │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ REST / JSON (Port 5001)
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
 │                  Node.js / Express Information API                    │
 │  - Auth & Reference Data             - Comparison Estimates             │
-│  - Optional Demo Wallet              - Simulated Settlement Pipeline    │
-│  - Demonstration Ledger              - Audit Evidence                   │
-│  - Persistent MongoDB                - Sample Route Scoring              │
+│  - User Accounts                     - Route Comparison Estimates        │
+│  - One-Time Transfer Simulation      - Audit Evidence                    │
+│  - Persistent MongoDB                - Preference-Based Rankings         │
 └───────────────────┬────────────────────────────────┬───────────────────┘
                     │ REST (Port 8000)               │ Adapter Pattern
                     ▼                                ▼
 ┌──────────────────────────────────────┐  ┌──────────────────────────────┐
-│       Python / FastAPI Service       │  │  3 Simulated Route Adapters │
+│       Python / FastAPI Service       │  │   3 Modeled Route Options    │
 │  - Multi-Objective Pareto Scoring    │  │  - SWIFT Classic Batch       │
 │  - FX Stats: SMA, EMA & Volatility   │  │  - Correspondent Banking     │
 │  - Analytical Execution Guidance     │  │  - Instant Payment           │
@@ -36,22 +34,22 @@ The Transact3 platform is structured into clean, decoupled tiers:
 └──────────────────────────────────────┘  └──────────────────────────────┘
 ```
 
-1. **React Frontend (`client/`)**: Light-themed comparison and guidance experience with an explicitly optional, simulated transfer demo.
-2. **Node.js / Express Backend (`server/`)**: Provides comparison and reference data. Separate demo endpoints simulate quotes, wallet changes, settlement, ledger entries, and MongoDB persistence; they do not connect to external payment networks.
+1. **React Frontend (`client/`)**: Light-themed comparison and guidance experience with a one-time transfer simulation.
+2. **Node.js / Express Backend (`server/`)**: Provides comparison estimates, route reference data, account access, and the sample-record transfer simulator. The simulator never contacts external providers or moves real funds.
 3. **Python / FastAPI Intelligence Service (`python-service/`)**: Provides route scoring, FX analysis, TCA metrics, and inference endpoints for the trained FX forecast, payment rail recommendation, and transaction risk models in `ml_models/saved_models/`.
 4. **Data Persistence (MongoDB)**: Mongoose schemas for `User`, `Transaction`, `LedgerEntry`, `RailSetting`, and `AuditLog`.
 
 ---
 
-## 🛣️ The 3 Simulated Route Adapters
+## 🛣️ Three Modeled Route Options
 
-Transact3 models the operational characteristics of three route types. These adapters return simulated results and are not connections to the named payment networks:
+Transact3 presents estimated characteristics for three route types. The named payment networks are examples of route categories and are not connected to Transact3:
 
-| Rail ID | Rail Name | Settlement Mechanism | Base Fee (USD) | Variable (bps) | Typical Settlement Time | Simulation Duration |
-| :--- | :--- | :--- | :---: | :---: | :---: | :---: |
-| **`REGIONAL_INSTANT`** | Regional Instant Network | Direct domestic instant clearing (FedNow, SEPA Instant, UPI) | **$1.50** | **2 bps** (0.02%) | ~1 second | 1,200 ms |
-| **`CARD_PUSH`** | Card Push Network | Direct debit-to-card rail (Visa Direct, Mastercard Send) | **$3.50** | **15 bps** (0.15%) | ~9 minutes | 1,800 ms |
-| **`SWIFT_BATCH`** | SWIFT Classic Batch | Correspondent banking multi-hop serial batch messaging | **$25.00** | **10 bps** (0.10%) | 24 to 48 hours | 4,000 ms |
+| Rail ID | Route Category | Typical Use | Estimated Base Fee (USD) | Variable (bps) | Indicative Delivery Time |
+| :--- | :--- | :--- | :---: | :---: | :---: |
+| **`REGIONAL_INSTANT`** | Regional instant | Domestic instant clearing categories | **$1.50** | **2 bps** (0.02%) | ~1 second |
+| **`CARD_PUSH`** | Card payout | Debit-to-card payout categories | **$3.50** | **15 bps** (0.15%) | ~9 minutes |
+| **`SWIFT_BATCH`** | Correspondent transfer | Multi-hop bank transfer categories | **$25.00** | **10 bps** (0.10%) | 24 to 48 hours |
 
 ### Rail Availability & Constraints
 - **Regional Instant**: Maximum transfer limit of $100,000 USD equivalent.
@@ -103,10 +101,10 @@ Transact3 includes a persistent liquidity pool system tracked in MongoDB via the
 - Each rail has a configured total capacity and current available balance in USD.
 - When an atomic payment settles, the rail's available liquidity is decremented by the principal USD amount.
 - **Admin Controls**: Administrators can toggle rails on/off or replenish liquidity via the Admin Portal (`/admin`).
-- **Controlled Failure Demonstration**:
-  1. Open the Admin Portal and disable `REGIONAL_INSTANT` or drain its liquidity to $10.
-  2. Request a quote for a $1,000 USD transfer.
-   3. The router immediately disqualifies Regional Instant, explains the rejection, and dynamically routes to the next eligible simulated alternative (e.g. `CARD_PUSH` or `SWIFT_BATCH`).
+- **Capacity Constraints**:
+  1. An administrator can adjust configured route availability in the Admin Portal.
+  2. The comparison excludes a route when its configured capacity is insufficient.
+  3. The results explain the exclusion and rank the remaining available options.
 
 ---
 
@@ -208,10 +206,10 @@ VITE_API_URL=http://localhost:5001/api
 cd server
 npm run dev
 # Server listens at http://localhost:5001
-# Automatically seeds demo users: Alice (alice@transact3.com) and Bob (bob@transact3.com)
+# Automatically seeds local test accounts for Alice and Bob
 ```
 
-Demo logins: Alice (`alice@transact3.com`), Bob (`bob@transact3.com`), and Treasury Admin (`treasury@transact3.io`) all use `Password123!`. These seeded credentials are for local demonstration only.
+Local test accounts: Alice (`alice@transact3.com`), Bob (`bob@transact3.com`), and Treasury Admin (`treasury@transact3.io`) use `Password123!`.
 
 **Terminal 2 — Python FastAPI Intelligence Service** *(Optional — Express will use native JS fallback if skipped)*:
 ```bash
@@ -264,4 +262,4 @@ The separate `MLPredictionLayer` in [`python-service/app/services/ml_prediction_
 
 ## ⚠️ Disclaimer
 
-**Information and Demonstration Notice**: Transact3 provides estimates and educational guidance, not financial services or payment processing. Route prices, rates, availability, delivery times, and model outputs may be simulated or illustrative and are not provider offers. The optional demo uses sample account data; no real funds are held or transferred and no external provider is contacted.
+**Information Notice**: Transact3 provides estimates and guidance, not financial services or payment processing. Route prices, rates, availability, delivery times, and model outputs are indicative, may differ from provider offers, and are not guarantees. Transact3 does not execute transfers or contact payment networks.

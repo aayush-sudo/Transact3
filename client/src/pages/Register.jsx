@@ -58,7 +58,7 @@ const Register = () => {
           </div>
 
           <h2 className="text-3xl font-bold text-slate-900 mb-1">Create account</h2>
-          <p className="text-slate-600 mb-8">Create an account to save your optional demo activity.</p>
+          <p className="text-slate-600 mb-8">Create an account to access transfer comparisons and exchange-rate guidance.</p>
 
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-xl mb-6 text-sm text-center">

@@ -1,7 +1,7 @@
 import { useContext } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { LogOut, LayoutDashboard, Send, History, Wallet, ShieldCheck, Sparkles, TrendingUp, BarChart2 } from 'lucide-react';
+import { LogOut, LayoutDashboard, Send, ShieldCheck, Sparkles, TrendingUp, BarChart2 } from 'lucide-react';
 
 const Navbar = () => {
   const { user, logout } = useContext(AuthContext);
@@ -57,28 +57,6 @@ const Navbar = () => {
               >
                 <Send size={14} />
                 Compare options
-              </Link>
-              <Link
-                to="/transactions"
-                className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
-                  isActive('/transactions')
-                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <History size={14} />
-                Demo activity
-              </Link>
-              <Link
-                to="/wallet"
-                className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
-                  isActive('/wallet') || isActive('/portfolio')
-                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <Wallet size={14} />
-                Demo balances
               </Link>
               <Link
                 to="/fx-forecasting"

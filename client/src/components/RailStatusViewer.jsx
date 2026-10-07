@@ -19,10 +19,8 @@ const RailStatusViewer = () => {
 
   useEffect(() => {
     const initialFetch = setTimeout(fetchRailsStatus, 0);
-    const interval = setInterval(fetchRailsStatus, 15000);
     return () => {
       clearTimeout(initialFetch);
-      clearInterval(interval);
     };
   }, [fetchRailsStatus]);
 
@@ -44,8 +42,8 @@ const RailStatusViewer = () => {
             <Activity size={18} />
           </div>
           <div>
-            <h3 className="text-base font-bold text-white">Demo route availability</h3>
-            <p className="text-xs text-gray-400">Illustrative capacity across three simulated routes; not live provider status</p>
+            <h3 className="text-base font-bold text-white">Route capacity estimates</h3>
+            <p className="text-xs text-gray-400">Modeled capacity across three route options; provider availability may differ</p>
           </div>
         </div>
 

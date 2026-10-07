@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Award, Play, CheckCircle2, TrendingDown, Clock, ShieldCheck, Loader2 } from 'lucide-react';
+import { useState } from 'react';
+import { Award, Play, Loader2 } from 'lucide-react';
 import api from '../services/api';
 
 const EvaluationBenchmarking = () => {
@@ -31,6 +31,7 @@ const EvaluationBenchmarking = () => {
           </div>
           <h3 className="text-xl font-bold text-white mt-1">System Evaluation & Performance Benchmarking</h3>
           <p className="text-xs text-gray-400 mt-0.5">Compare AI Multi-Rail Joint Router against single-rail baseline strategies using deterministic batch datasets</p>
+          <p className="text-xs text-gray-500 mt-1">Benchmark results are model estimates, not observed provider transfers.</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -39,9 +40,9 @@ const EvaluationBenchmarking = () => {
             onChange={(e) => setBatchSize(Number(e.target.value))}
             className="bg-gray-900 border border-gray-700 text-white rounded-xl px-3 py-2 text-xs font-mono font-bold"
           >
-            <option value={100}>100 Synthetic Payments</option>
-            <option value={250}>250 Synthetic Payments</option>
-            <option value={500}>500 Synthetic Payments</option>
+            <option value={100}>100 Scenarios</option>
+            <option value={250}>250 Scenarios</option>
+            <option value={500}>500 Scenarios</option>
           </select>
 
           <button
@@ -50,7 +51,7 @@ const EvaluationBenchmarking = () => {
             className="py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-gray-950 font-bold rounded-xl transition-all shadow-lg flex items-center gap-2 text-xs font-mono disabled:opacity-50"
           >
             {loading ? (
-              <><Loader2 size={15} className="animate-spin" /> Running Simulation...</>
+              <><Loader2 size={15} className="animate-spin" /> Evaluating...</>
             ) : (
               <><Play size={15} /> Run Benchmark</>
             )}
@@ -86,7 +87,7 @@ const EvaluationBenchmarking = () => {
 
           {/* Benchmark Strategies Comparison Table */}
           <div className="bg-gray-900/60 rounded-xl p-4 border border-gray-700/40 space-y-3">
-            <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Strategy Comparison Matrix ({evalResult.batchSize} Simulated Payments)</h4>
+            <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Strategy comparison ({evalResult.batchSize} scenarios)</h4>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs font-mono">
                 <thead>
@@ -128,7 +129,7 @@ const EvaluationBenchmarking = () => {
           <Award size={40} className="mx-auto text-emerald-400 opacity-60" />
           <h4 className="text-base font-bold text-white">Run System Benchmark Suite</h4>
           <p className="text-xs text-gray-400 max-w-md mx-auto">
-            Click "Run Benchmark" to execute synthetic batch payments across all 3 rails and compare the AI Joint Router against SWIFT-only, Instant-only, and Greedy Cost baselines.
+            Compare route recommendations against single-route and lowest-cost baselines using a consistent set of scenarios.
           </p>
         </div>
       )}
