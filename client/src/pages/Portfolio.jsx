@@ -1,16 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
 import {
   Plus,
   DollarSign,
   Wallet,
-  ShieldCheck,
   RefreshCw,
   Loader2,
   Send,
   CheckCircle,
-  FileText,
   AlertCircle
 } from 'lucide-react';
 
@@ -40,7 +38,6 @@ const Portfolio = () => {
 
   const fetchPortfolio = async () => {
     try {
-      setLoading(true);
       const res = await api.get('/portfolio');
       if (res.data.success) {
         setPortfolio(res.data.data);
@@ -56,11 +53,16 @@ const Portfolio = () => {
     fetchPortfolio();
   }, []);
 
+  const handleRefresh = () => {
+    setLoading(true);
+    fetchPortfolio();
+  };
+
   const handleAddHolding = async (e) => {
     e.preventDefault();
     const numAmount = Number(amount);
     if (isNaN(numAmount) || numAmount <= 0) {
-      setErrorMsg('Please enter a valid deposit amount');
+      setErrorMsg('Please enter a valid sample balance amount');
       return;
     }
 
@@ -75,13 +77,13 @@ const Portfolio = () => {
       });
 
       if (res.data.success) {
-        setSuccessMsg(res.data.message || `Deposited ${numAmount} ${currency} into wallet`);
+        setSuccessMsg(`Added ${numAmount} ${currency} to the optional demo balance`);
         setShowAdd(false);
         setAmount('1000');
         await fetchPortfolio();
       }
     } catch (err) {
-      setErrorMsg(err.response?.data?.message || 'Failed to deposit funds');
+      setErrorMsg(err.response?.data?.message || 'Failed to update the demo balance');
     } finally {
       setSaving(false);
     }
@@ -93,16 +95,16 @@ const Portfolio = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 border-b border-gray-800 pb-4">
         <div>
           <p className="text-xs font-bold tracking-widest text-emerald-400 uppercase mb-1 font-mono">
-            MULTI-CURRENCY BALANCES & TREASURY
+            OPTIONAL SIMULATED ACCOUNT
           </p>
           <h1 className="text-3xl font-extrabold text-white flex items-center gap-2.5">
             <Wallet className="text-emerald-400" size={28} />
-            Multi-Currency Wallet
+            Demo balances
           </h1>
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={fetchPortfolio}
+            onClick={handleRefresh}
             className="p-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl border border-gray-700 text-xs font-mono transition-colors"
             title="Refresh Holdings"
           >
@@ -112,13 +114,13 @@ const Portfolio = () => {
             onClick={() => { setShowAdd(true); setSuccessMsg(null); setErrorMsg(null); }}
             className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-gray-950 font-bold rounded-xl text-xs font-mono flex items-center gap-2 shadow-lg shadow-emerald-500/10 transition-all cursor-pointer"
           >
-            <Plus size={16} /> Add Simulated Funds
+            <Plus size={16} /> Add demo funds
           </button>
           <Link
             to="/payment-router"
             className="px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-white font-bold rounded-xl text-xs font-mono flex items-center gap-2 border border-gray-700 transition-all"
           >
-            <Send size={14} className="text-emerald-400" /> Send Funds
+            <Send size={14} className="text-emerald-400" /> Try demo transfer
           </Link>
         </div>
       </div>
@@ -137,19 +139,23 @@ const Portfolio = () => {
         </div>
       )}
 
+      <p className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950">
+        These are sample balances for the optional software demo. They are not real funds, and Transact3 is not a wallet or payment processor.
+      </p>
+
       {/* Summary Banner */}
       <div className="bg-gradient-to-br from-emerald-950/80 via-gray-900 to-gray-950 border border-emerald-500/30 rounded-2xl p-6 relative overflow-hidden shadow-xl">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <p className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-1 font-mono">
-              Total Consolidated Treasury Value
+              Total sample balance value
             </p>
             <p className="text-3xl font-black text-white font-mono flex items-center gap-1">
               <DollarSign size={26} className="text-emerald-400" />
               {portfolio?.totalValueUSD?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'} USD
             </p>
             <p className="text-xs text-gray-400 mt-1">
-              Reconciled across 9 active fiat currencies with double-entry clearing records.
+              Illustrative values across 9 currencies; no money is held by Transact3.
             </p>
           </div>
 
@@ -157,7 +163,7 @@ const Portfolio = () => {
             onClick={() => setShowAdd(true)}
             className="px-5 py-2.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-mono font-bold flex items-center gap-2"
           >
-            <Plus size={14} /> Quick Deposit
+            <Plus size={14} /> Add sample balance
           </button>
         </div>
       </div>
@@ -165,8 +171,8 @@ const Portfolio = () => {
       {/* Holdings Cards Grid */}
       <div className="space-y-3">
         <div className="flex justify-between items-center">
-          <h3 className="text-sm font-bold text-white font-mono">Currency Balances (9 Supported Currencies)</h3>
-          <span className="text-xs text-gray-400 font-mono">Real-Time Holdings</span>
+          <h3 className="text-sm font-bold text-white font-mono">Sample currency balances (9 currencies)</h3>
+          <span className="text-xs text-gray-400 font-mono">Demo data</span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

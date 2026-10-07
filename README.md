@@ -1,8 +1,8 @@
-# Transact3 — AI Multi-Rail Cross-Border Payment Orchestrator
+# Transact3 — Cross-Border Transfer Comparison Platform
 
-Transact3 is a full-stack simulated cross-border payment orchestration platform designed to eliminate the major inefficiencies in international finance: opaque FX markups, punitive flat correspondent bank fees, slow batch settlements, weekend cutoffs, and rigid single-rail lock-in.
+Transact3 is a user-focused information and comparison platform for cross-border transfers. It helps people review estimated exchange rates, fees, delivery times, and route trade-offs before choosing an external provider. Transact3 does not process payments, hold funds, or connect to payment networks.
 
-Instead of forcing all payments through a single rail (such as legacy SWIFT), Transact3 functions as an educational cross-border meta-router. It ranks transfers across **4 configured simulated route adapters** using multi-objective optimization (cost, speed, reliability, and liquidity availability), updates simulated wallet balances across 9 currencies, and records double-entry ledger and SHA-256 audit evidence. No external payment network is contacted and no real funds move.
+An optional software demo illustrates a simulated transfer lifecycle across three sample routes. Demo balances, quotes, settlement, and transaction history are not real financial services and no real money moves.
 
 ---
 
@@ -13,16 +13,16 @@ The Transact3 platform is structured into clean, decoupled tiers:
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
 │                        React 19 + Vite Frontend                        │
-│   (Dashboard, Payment Router, Transaction History, Wallet, Admin UI)   │
+│  (Overview, Option Comparison, FX Outlook, Optional Demo, Admin UI)    │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ REST / JSON (Port 5001)
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│                    Node.js / Express Orchestration API                 │
-│  - Auth & Recipient Management      - 60-Second Binding Quotes         │
-│  - Multi-Currency Wallet Engine     - Atomic Settlement Pipeline       │
-│  - Balanced Double-Entry Ledger     - SHA-256 Chained Audit Logger     │
-│  - Persistent MongoDB               - Simulated Rail Fallbacks         │
+│                  Node.js / Express Information API                    │
+│  - Auth & Reference Data             - Comparison Estimates             │
+│  - Optional Demo Wallet              - Simulated Settlement Pipeline    │
+│  - Demonstration Ledger              - Audit Evidence                   │
+│  - Persistent MongoDB                - Sample Route Scoring              │
 └───────────────────┬────────────────────────────────┬───────────────────┘
                     │ REST (Port 8000)               │ Adapter Pattern
                     ▼                                ▼
@@ -36,14 +36,9 @@ The Transact3 platform is structured into clean, decoupled tiers:
 └──────────────────────────────────────┘  └──────────────────────────────┘
 ```
 
-1. **React Frontend (`client/`)**: Modern responsive web application built with Tailwind CSS and Lucide icons. Includes 5 clean sections:
-   - **Dashboard**: High-level personal transfer volume, savings vs SWIFT, fees paid, multi-currency balances, and recent payments.
-   - **Payment Router**: Payment orchestration console supporting Mode A ("Send Amount") and Mode B ("Recipient Gets"), live recipient picker, 3-route comparative matrix with eligibility badges and rejection reasons, and manual override capabilities.
-   - **Transaction History**: Audit trail with expandable transaction drawer revealing ISO 20022 clearing refs, execution durations, savings vs SWIFT, double-entry ledger entries, and cryptographic hashes.
-   - **Wallet (Portfolio)**: 9-currency balance viewer with simulated deposit modal that generates balanced double-entry ledger records.
-   - **Admin Portal**: System-wide operations dashboard with rail enable/disable switches, liquidity pool replenishment, system ledger reconciliation, and SHA-256 audit chain verification.
-2. **Node.js / Express Backend (`server/`)**: Primary business engine managing JWT authentication, wallet debits/credits, binding quote generation, simulated settlement, double-entry ledger records, and MongoDB persistence. The API integration test uses an isolated in-memory database; the documented demo uses persistent MongoDB.
-3. **Python / FastAPI Intelligence Service (`python-service/`)**: Optional service providing deterministic multi-objective route scoring, technical indicators (SMA, EMA, 24h rolling volatility), execution timing classifications, TCA metrics, and inference endpoints for the trained FX forecast, payment rail recommendation, and transaction risk models in `ml_models/saved_models/`. Express uses deterministic fallback scoring if FastAPI is offline.
+1. **React Frontend (`client/`)**: Light-themed comparison and guidance experience with an explicitly optional, simulated transfer demo.
+2. **Node.js / Express Backend (`server/`)**: Provides comparison and reference data. Separate demo endpoints simulate quotes, wallet changes, settlement, ledger entries, and MongoDB persistence; they do not connect to external payment networks.
+3. **Python / FastAPI Intelligence Service (`python-service/`)**: Provides route scoring, FX analysis, TCA metrics, and inference endpoints for the trained FX forecast, payment rail recommendation, and transaction risk models in `ml_models/saved_models/`.
 4. **Data Persistence (MongoDB)**: Mongoose schemas for `User`, `Transaction`, `LedgerEntry`, `RailSetting`, and `AuditLog`.
 
 ---
@@ -269,4 +264,4 @@ The separate `MLPredictionLayer` in [`python-service/app/services/ml_prediction_
 
 ## ⚠️ Disclaimer
 
-**Educational and Demonstration Notice**: Transact3 is a simulated payment orchestration engine developed for educational, architectural demonstration, and research purposes. All banking networks (SWIFT, RTGS, FedNow, SEPA, Visa Direct, Mastercard Send) and ledger settlements are simulated via software adapters and do not move real-world sovereign legal tender.
+**Information and Demonstration Notice**: Transact3 provides estimates and educational guidance, not financial services or payment processing. Route prices, rates, availability, delivery times, and model outputs may be simulated or illustrative and are not provider offers. The optional demo uses sample account data; no real funds are held or transferred and no external provider is contacted.

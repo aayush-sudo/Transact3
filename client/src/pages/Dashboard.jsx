@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   DollarSign,
@@ -6,10 +6,7 @@ import {
   History,
   Send,
   Wallet,
-  ShieldCheck,
   CheckCircle,
-  ArrowUpRight,
-  Sparkles,
   Zap,
   RefreshCw
 } from 'lucide-react';
@@ -22,7 +19,6 @@ const Dashboard = () => {
 
   const fetchData = async () => {
     try {
-      setLoading(true);
       const [portRes, txRes] = await Promise.all([
         api.get('/portfolio'),
         api.get('/transaction/history')
@@ -45,6 +41,11 @@ const Dashboard = () => {
     fetchData();
   }, []);
 
+  const handleRefresh = () => {
+    setLoading(true);
+    fetchData();
+  };
+
   // Compute metrics
   const totalBalanceUSD = portfolio?.totalValueUSD || 0;
   const completedCount = transactions.filter(t => t.status === 'COMPLETED' || t.status === 'COMPLETED_VIA_FALLBACK').length;
@@ -57,13 +58,16 @@ const Dashboard = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 border-b border-gray-800 pb-4">
         <div>
           <p className="text-xs font-bold tracking-widest text-emerald-400 uppercase mb-1 font-mono">
-            INSTITUTIONAL SIMULATED PAYMENT ORCHESTRATION PLATFORM
+            YOUR INDEPENDENT CROSS-BORDER TRANSFER GUIDE
           </p>
-          <h1 className="text-3xl font-extrabold text-white">Treasury & Payment Dashboard</h1>
+          <h1 className="text-3xl font-extrabold text-white">Understand your transfer options</h1>
+          <p className="mt-2 max-w-2xl text-sm text-gray-400">
+            Compare estimated exchange rates, fees, and delivery times before choosing a provider. Transact3 doesn’t process payments; account balances and transfers are optional simulations.
+          </p>
         </div>
         <div className="flex gap-2">
           <button
-            onClick={fetchData}
+            onClick={handleRefresh}
             className="p-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl border border-gray-700 transition-colors"
             title="Refresh"
           >
@@ -73,7 +77,7 @@ const Dashboard = () => {
             to="/payment-router"
             className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-gray-950 font-bold rounded-xl text-xs font-mono flex items-center gap-2 shadow-lg shadow-emerald-500/20 transition-all"
           >
-            <Send size={15} /> Send Payment
+            <Send size={15} />             Compare options
           </Link>
         </div>
       </div>
@@ -83,43 +87,43 @@ const Dashboard = () => {
         {/* Total Balance */}
         <div className="bg-gradient-to-br from-emerald-950/60 to-gray-900 border border-emerald-500/30 rounded-2xl p-5 shadow-xl relative overflow-hidden">
           <div className="flex justify-between items-start">
-            <span className="text-xs font-bold text-gray-400 uppercase font-mono tracking-wider">Total Balance</span>
+            <span className="text-xs font-bold text-gray-400 uppercase font-mono tracking-wider">Demo balance</span>
             <span className="p-2 bg-emerald-500/20 text-emerald-400 rounded-xl"><DollarSign size={16} /></span>
           </div>
           <p className="text-2xl font-black text-white font-mono mt-3">
             ${totalBalanceUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <span className="text-[11px] text-emerald-400 font-mono mt-1 block">9 Supported Currencies</span>
+          <span className="text-[11px] text-emerald-400 font-mono mt-1 block">Optional demo account · 9 currencies</span>
         </div>
 
         {/* Completed Payments */}
         <div className="bg-gray-900/80 border border-gray-800 rounded-2xl p-5 shadow-xl">
           <div className="flex justify-between items-start">
-            <span className="text-xs font-bold text-gray-400 uppercase font-mono tracking-wider">Completed Payments</span>
+            <span className="text-xs font-bold text-gray-400 uppercase font-mono tracking-wider">Demo transfers</span>
             <span className="p-2 bg-blue-500/20 text-blue-400 rounded-xl"><CheckCircle size={16} /></span>
           </div>
           <p className="text-2xl font-black text-white font-mono mt-3">{completedCount}</p>
-          <span className="text-[11px] text-gray-400 font-mono mt-1 block">Out of {transactions.length} total orders</span>
+          <span className="text-[11px] text-gray-400 font-mono mt-1 block">Optional simulated activity</span>
         </div>
 
         {/* Total Fees Paid */}
         <div className="bg-gray-900/80 border border-gray-800 rounded-2xl p-5 shadow-xl">
           <div className="flex justify-between items-start">
-            <span className="text-xs font-bold text-gray-400 uppercase font-mono tracking-wider">Total Rail Fees</span>
+            <span className="text-xs font-bold text-gray-400 uppercase font-mono tracking-wider">Demo fees</span>
             <span className="p-2 bg-amber-500/20 text-amber-400 rounded-xl"><TrendingUp size={16} /></span>
           </div>
           <p className="text-2xl font-black text-white font-mono mt-3">${totalFeesPaid.toFixed(2)}</p>
-          <span className="text-[11px] text-gray-400 font-mono mt-1 block">Dynamic basis point pricing</span>
+          <span className="text-[11px] text-gray-400 font-mono mt-1 block">Illustrative estimates only</span>
         </div>
 
-        {/* Estimated Savings vs SWIFT Baseline */}
+        {/* Estimated         Illustrative savings Baseline */}
         <div className="bg-gradient-to-br from-emerald-950/40 to-gray-900 border border-emerald-500/30 rounded-2xl p-5 shadow-xl">
           <div className="flex justify-between items-start">
-            <span className="text-xs font-bold text-emerald-400 uppercase font-mono tracking-wider">Savings vs SWIFT</span>
+            <span className="text-xs font-bold text-emerald-400 uppercase font-mono tracking-wider">Illustrative savings</span>
             <span className="p-2 bg-emerald-500/20 text-emerald-400 rounded-xl"><Zap size={16} /></span>
           </div>
           <p className="text-2xl font-black text-emerald-400 font-mono mt-3">${totalAiSavings.toFixed(2)}</p>
-          <span className="text-[11px] text-gray-400 font-mono mt-1 block">Saved via Multi-Rail Routing</span>
+          <span className="text-[11px] text-gray-400 font-mono mt-1 block">Shown in demo history only</span>
         </div>
       </div>
 
@@ -129,15 +133,15 @@ const Dashboard = () => {
           <div>
             <h3 className="text-base font-bold text-white font-mono flex items-center gap-2">
               <Wallet size={18} className="text-emerald-400" />
-              Multi-Currency Holdings
+              Optional demo balances
             </h3>
-            <p className="text-xs text-gray-400">Live balances available across supported currency accounts</p>
+            <p className="text-xs text-gray-400">Sample balances for trying the simulated transfer flow</p>
           </div>
           <Link
             to="/wallet"
             className="text-xs font-mono font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1"
           >
-            Manage Wallet & Deposit Funds →
+            View demo balances →
           </Link>
         </div>
 
@@ -167,15 +171,15 @@ const Dashboard = () => {
           <div>
             <h3 className="text-base font-bold text-white font-mono flex items-center gap-2">
               <History size={18} className="text-emerald-400" />
-              Recent Cross-Border Settlements
+              Recent simulated transfers
             </h3>
-            <p className="text-xs text-gray-400">Latest orchestrated international transactions</p>
+            <p className="text-xs text-gray-400">Optional demonstration history; no real payments are made</p>
           </div>
           <Link
             to="/transactions"
             className="text-xs font-mono font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1"
           >
-            View Full Ledger & Audit History →
+            View demo activity →
           </Link>
         </div>
 
@@ -209,7 +213,7 @@ const Dashboard = () => {
               {transactions.length === 0 && (
                 <tr>
                   <td colSpan="6" className="text-center py-8 text-gray-500">
-                    No transactions executed yet. Click "Send Payment" to start!
+                    No demo transfers yet. Compare options without making a transfer, or try the optional demo.
                   </td>
                 </tr>
               )}

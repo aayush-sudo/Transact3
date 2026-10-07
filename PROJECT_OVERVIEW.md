@@ -1,13 +1,13 @@
-# Transact3: AI Multi-Rail Cross-Border Payment Orchestrator
+# Transact3: Cross-Border Transfer Comparison Platform
 ## Final Year (LY) Project Documentation & Presentation Guide
 
 ---
 
 ## 📌 Executive Summary
 
-**Transact3** is an AI-driven cross-border payment orchestration platform designed to solve the critical friction points of international banking: **high correspondent fees (3–5%)**, **slow settlement delays (24–72 hours)**, **weekend cut-offs**, and **opaque exchange rate markups**.
+**Transact3** is a user-facing information and comparison platform for cross-border transfers. It helps users review illustrative exchange-rate, fee, delivery-time, and route trade-offs before choosing an external provider. Transact3 does not process payments, hold funds, or connect to payment networks.
 
-Instead of locking users into a single payment rail, Transact3 acts as an **intelligent meta-router** (the *"Skyscanner for Cross-Border Payments"*). It dynamically monitors and benchmarks settlement pipelines—including legacy SWIFT, regional instant networks (FedNow/UPI/SEPA), and card push networks—jointly optimizing cost, speed, liquidity capacity, and FX conversion timing in real time.
+An optional software demo illustrates route scoring and a simulated transfer lifecycle using sample balances. Demo rates, availability, and settlement behavior are not real provider offers, and the simulation moves no real money.
 
 ---
 
@@ -18,14 +18,14 @@ Instead of locking users into a single payment rail, Transact3 acts as an **inte
 2. **Weekend Blackouts**: Bank clearing systems (Fedwire, TARGET2) shut down on weekends, delaying Friday evening payments by 68+ hours.
 3. **Hidden Spread Costs**: FX markups are buried inside "zero fee" marketing claims.
 
-### The Transact3 Solution:
-1. **Multi-Rail Agnostic Routing**: Dynamically routes every payment through the optimal pipeline based on user policy profiles (`BALANCED`, `MINIMIZE COST`, `MAXIMIZE SPEED`).
-2. **Instant Settlement Integration**: Routes transfers via Regional Instant & RTGS networks settling in seconds/minutes.
-3. **Institutional Transaction Cost Analysis (TCA)**: Provides complete fee transparency, mid-market rate comparison, and **Calculated AI Savings ($ USD)** against traditional SWIFT benchmarks.
+### The Transact3 Platform:
+1. **Independent Comparison**: Presents simulated routes ranked by user-selected preferences (`BALANCED`, `MINIMIZE COST`, `MAXIMIZE SPEED`); users choose an external provider themselves.
+2. **Illustrative Route Data**: Models costs, speeds, and availability for educational comparison; it does not integrate with settlement networks.
+3. **Cost Guidance**: Shows estimated fees and FX comparisons, not guaranteed savings or provider offers.
 
 ---
 
-## 🛣️ The Transactional Payment Pipelines
+## 🛣️ Simulated Route Examples
 
 | Rail ID | Rail Name | Pipeline Technology | Avg Speed | Base Fee | Best Use Case |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -75,4 +75,4 @@ $$\text{Utility Score} = (w_{\text{reliability}} \cdot \text{Reliability}_R) - \
 > **Answer**: For large corporate B2B transfers (e.g. \$5,000,000), a 0.5% exchange rate fluctuation equals \$25,000 USD. Even if instant clearing takes seconds, the FX Timing Engine advises holding execution for 6 hours to capture a better currency conversion rate, saving substantial money on large B2B payments.
 
 ### Q3: "Is real money required to demo this application?"
-> **Answer**: No. The app operates in a zero-cost sandbox environment. All account holdings use virtual demo balances, and all payment rails run on zero-cost simulation engines.
+> **Answer**: No. Account holdings and the optional transfer lifecycle use virtual demo balances and simulated route adapters.

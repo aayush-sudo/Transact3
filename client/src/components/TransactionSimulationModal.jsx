@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
-  X, CheckCircle, Clock, ArrowRight, Zap, Shield, Globe, RefreshCw, 
-  ChevronDown, ChevronUp, AlertTriangle, Layers, Award, DollarSign, Check, XCircle
+  X, CheckCircle, Clock, Zap, Globe, RefreshCw,
+  ChevronDown, ChevronUp, AlertTriangle, Layers, DollarSign, XCircle
 } from 'lucide-react';
 import api from '../services/api';
 
@@ -63,6 +63,7 @@ const TransactionSimulationModal = ({
     sourceCurrency: initialParams?.sourceCurrency || 'USD',
     destinationCurrency: initialParams?.destinationCurrency || 'INR',
     amount: Number(initialParams?.amount || 10000),
+    paymentMode: initialParams?.paymentMode || 'SEND_AMOUNT',
     receiverEmail: initialParams?.receiverEmail || 'recipient@transact3.io',
     priority: initialParams?.priority || 'BALANCED',
     createdAt: new Date().toLocaleTimeString()
@@ -117,6 +118,7 @@ const TransactionSimulationModal = ({
       sourceCurrency: initialParams?.sourceCurrency || 'USD',
       destinationCurrency: initialParams?.destinationCurrency || 'INR',
       amount: Number(initialParams?.amount || 10000),
+      paymentMode: initialParams?.paymentMode || 'SEND_AMOUNT',
       receiverEmail: initialParams?.receiverEmail || 'recipient@transact3.io',
       priority: initialParams?.priority || 'BALANCED'
     };
@@ -138,7 +140,10 @@ const TransactionSimulationModal = ({
 
       // Step 2: Input Validation
       setStepStatuses(prev => { const s = [...prev]; s[1] = 'IN_PROGRESS'; return s; });
-      addAuditLog(`Input validated: ${params.amount} ${params.sourceCurrency} → ${params.destinationCurrency}.`);
+      const amountDescription = params.paymentMode === 'RECIPIENT_GETS'
+        ? `recipient target ${params.amount} ${params.destinationCurrency}`
+        : `${params.amount} ${params.sourceCurrency}`;
+      addAuditLog(`Input validated: ${amountDescription} → ${params.destinationCurrency}.`);
       await delay(STEP_DELAYS[1]);
       setStepStatuses(prev => { const s = [...prev]; s[1] = 'COMPLETED'; return s; });
       setCurrentStepIndex(2);
@@ -149,7 +154,7 @@ const TransactionSimulationModal = ({
         sourceCurrency: params.sourceCurrency,
         destinationCurrency: params.destinationCurrency,
         amount: params.amount,
-        paymentMode: 'SEND_AMOUNT',
+        paymentMode: params.paymentMode,
         priority: params.priority,
         receiverEmail: params.receiverEmail
       });
@@ -159,6 +164,7 @@ const TransactionSimulationModal = ({
       const orch = quoteRes.data.orchestration;
       setQuoteData(quote);
       setOrchestrationData(orch);
+      setTxDetails(prev => ({ ...prev, amount: quote.sourceAmount }));
       addAuditLog(`Server validated the payment request and recipient ${quote.receiverEmail}.`);
       await delay(STEP_DELAYS[2]);
       setStepStatuses(prev => { const s = [...prev]; s[2] = 'COMPLETED'; return s; });
@@ -252,7 +258,7 @@ const TransactionSimulationModal = ({
 
       // Step 13: Wallet Update
       setStepStatuses(prev => { const s = [...prev]; s[12] = 'IN_PROGRESS'; return s; });
-      addAuditLog(`Wallet balance updated. Debited ${params.amount} ${params.sourceCurrency}.`);
+      addAuditLog(`Demo balance updated. Debited ${quote.sourceAmount} ${params.sourceCurrency}.`);
       await delay(STEP_DELAYS[12]);
       setStepStatuses(prev => { const s = [...prev]; s[12] = 'COMPLETED'; return s; });
       setCurrentStepIndex(13);

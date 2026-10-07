@@ -5,24 +5,28 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    color-scheme: light;
+  }
+
   body {
-    @apply bg-gray-950 text-gray-100 font-sans antialiased;
+    @apply bg-slate-50 text-slate-800 font-sans antialiased;
   }
 }
 
 @layer components {
   /* ── Cards ─────────────────────────────────────────────── */
   .card {
-    @apply bg-gray-800/80 backdrop-blur-md rounded-2xl p-6 shadow-xl border border-gray-700/60;
+    @apply bg-white rounded-2xl p-6 shadow-sm border border-slate-200;
   }
   .card-dark {
-    @apply bg-gray-900/90 rounded-2xl p-6 shadow-2xl border border-gray-800;
+    @apply bg-white rounded-2xl p-6 shadow-sm border border-slate-200;
   }
 
   /* ── Inputs ─────────────────────────────────────────────── */
   .input-field {
-    @apply w-full bg-gray-900/80 border border-gray-700/60 rounded-xl px-4 py-2.5
-           text-white placeholder-gray-500
+    @apply w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5
+           text-slate-900 placeholder-slate-400
            focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent
            transition-all;
   }
@@ -37,8 +41,8 @@
            hover:bg-emerald-300 transition-all shadow-md active:scale-95;
   }
   .btn-secondary {
-    @apply bg-gray-800 text-gray-200 font-medium py-2.5 px-5 rounded-xl
-           border border-gray-700 hover:bg-gray-700
+    @apply bg-white text-slate-700 font-medium py-2.5 px-5 rounded-xl
+           border border-slate-300 hover:bg-slate-50
            transition-all active:scale-95;
   }
 }
@@ -54,6 +58,55 @@
 
 /* ── Custom Scrollbar ───────────────────────────────────── */
 ::-webkit-scrollbar        { width: 6px; height: 6px; }
-::-webkit-scrollbar-track  { background: #111827; }
+::-webkit-scrollbar-track  { background: #f1f5f9; }
 ::-webkit-scrollbar-thumb  { background: #10b981; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #34d399; }
+
+/* Keep legacy utility-heavy screens readable while the app migrates to light surfaces. */
+[class*="bg-gray-950"],
+[class*="bg-gray-900"],
+[class*="bg-gray-800"],
+[class*="bg-gray-700"] {
+  background-color: #fff !important;
+}
+
+[class*="from-gray-950"],
+[class*="from-gray-900"],
+[class*="from-emerald-950"] {
+  background-image: linear-gradient(135deg, #ecfdf5, #fff 72%) !important;
+}
+
+[class*="bg-black/"] {
+  background-color: rgb(15 23 42 / 0.28) !important;
+}
+
+[class~="text-white"] { color: #172033 !important; }
+[class*="bg-emerald-"][class~="text-white"] { color: #fff !important; }
+[class*="text-gray-100"],
+[class*="text-gray-200"] { color: #334155 !important; }
+[class*="text-gray-300"] { color: #475569 !important; }
+[class*="text-gray-400"] { color: #64748b !important; }
+[class*="text-gray-500"] { color: #64748b !important; }
+[class*="text-emerald-300"],
+[class*="text-emerald-400"],
+[class*="text-teal-300"],
+[class*="text-teal-400"] { color: #047857 !important; }
+[class*="text-blue-300"],
+[class*="text-blue-400"] { color: #1d4ed8 !important; }
+[class*="text-amber-200"],
+[class*="text-amber-300"],
+[class*="text-amber-400"] { color: #a16207 !important; }
+[class*="text-rose-300"],
+[class*="text-rose-400"],
+[class*="text-red-400"] { color: #be123c !important; }
+
+[class*="border-gray-800"],
+[class*="border-gray-700"] { border-color: #e2e8f0 !important; }
+
+[class*="hover:bg-gray-"]:hover { background-color: #f1f5f9 !important; }
+
+input,
+select,
+textarea {
+  color-scheme: light;
+}

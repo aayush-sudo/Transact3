@@ -111,6 +111,22 @@ test('authenticated payment settles once to the quoted recipient and survives re
   const aliceToken = await login('alice@transact3.com');
   const bobToken = await login('bob@transact3.com');
   const adminToken = await login('treasury@transact3.io');
+  const comparison = await request('/orchestration/route', {
+    method: 'POST',
+    token: aliceToken,
+    body: {
+      sourceCurrency: 'USD',
+      destinationCurrency: 'INR',
+      amount: 100,
+      paymentMode: 'RECIPIENT_GETS',
+      priority: 'BALANCED'
+    }
+  });
+  assert.equal(comparison.response.status, 200, comparison.body.message);
+  assert.equal(comparison.body.success, true);
+  assert.equal(comparison.body.data.evaluatedRails.length, 3);
+  assert.ok(comparison.body.data.recommendedRail, 'Comparison should recommend an eligible route');
+
   const deniedAdminAccess = await request('/admin/metrics', { token: aliceToken });
   assert.equal(deniedAdminAccess.response.status, 403);
   const allowedAdminAccess = await request('/admin/metrics', { token: adminToken });

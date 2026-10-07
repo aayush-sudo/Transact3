@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import { useState, useContext } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { Lock, Mail } from 'lucide-react';
@@ -28,36 +28,36 @@ const Login = () => {
   return (
     <div className="min-h-[calc(100vh-64px)] flex">
       {/* Left — brand panel */}
-      <div className="hidden lg:flex flex-col justify-between w-1/2 bg-velto-forest p-12">
+      <div className="hidden lg:flex flex-col justify-between w-1/2 bg-emerald-50 border-r border-emerald-100 p-12">
         <div>
-          <div className="w-10 h-10 bg-velto-lime rounded-xl flex items-center justify-center mb-12">
-            <span className="text-velto-forest font-black text-xs leading-none">T3</span>
+          <div className="w-10 h-10 bg-emerald-700 rounded-xl flex items-center justify-center mb-12">
+            <span className="text-white font-black text-xs leading-none">T3</span>
           </div>
-          <h1 className="text-white text-5xl font-bold leading-tight mb-4">
-            ONE APP FOR<br />A FASTER<br />GLOBAL LIFE
+          <h1 className="text-slate-900 text-5xl font-bold leading-tight mb-4">
+            KNOW YOUR<br />OPTIONS BEFORE<br />YOU SEND
           </h1>
-          <p className="text-velto-lime/70 text-lg">Send, receive, and manage money across borders.</p>
+          <p className="text-slate-600 text-lg">Independent guidance for cross-border transfers. You choose the provider.</p>
         </div>
         <div className="flex gap-3">
-          <span className="bg-velto-lime text-velto-forest text-xs font-bold px-3 py-1.5 rounded-full">send</span>
-          <span className="border border-white/20 text-white/60 text-xs font-bold px-3 py-1.5 rounded-full">receive</span>
-          <span className="border border-white/20 text-white/60 text-xs font-bold px-3 py-1.5 rounded-full">money</span>
+          <span className="bg-white text-emerald-800 text-xs font-bold px-3 py-1.5 rounded-full border border-emerald-200">compare</span>
+          <span className="bg-white text-slate-600 text-xs font-bold px-3 py-1.5 rounded-full border border-slate-200">understand</span>
+          <span className="bg-white text-slate-600 text-xs font-bold px-3 py-1.5 rounded-full border border-slate-200">choose</span>
         </div>
       </div>
 
       {/* Right — form panel */}
-      <div className="flex-1 flex flex-col justify-center items-center px-6 py-12 bg-velto-offwhite">
+      <div className="flex-1 flex flex-col justify-center items-center px-6 py-12 bg-white">
         <div className="w-full max-w-md">
           {/* Mobile logo */}
           <div className="flex items-center gap-2 mb-10 lg:hidden">
-            <div className="w-8 h-8 bg-velto-forest rounded-lg flex items-center justify-center">
-              <span className="text-velto-lime font-black text-xs">T3</span>
+            <div className="w-8 h-8 bg-emerald-700 rounded-lg flex items-center justify-center">
+              <span className="text-white font-black text-xs">T3</span>
             </div>
-            <span className="text-velto-forest font-bold text-xl">Transact3</span>
+            <span className="text-slate-900 font-bold text-xl">Transact3</span>
           </div>
 
-          <h2 className="text-3xl font-bold text-velto-ink mb-1">Welcome back</h2>
-          <p className="text-velto-muted mb-8">Sign in to your Transact3 account</p>
+          <h2 className="text-3xl font-bold text-slate-900 mb-1">Welcome back</h2>
+          <p className="text-slate-600 mb-8">Sign in to compare transfer options and view your optional demo account.</p>
 
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-xl mb-6 text-sm text-center">
@@ -67,10 +67,10 @@ const Login = () => {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-semibold text-velto-ink mb-1.5">Email Address</label>
+              <label className="block text-sm font-semibold text-slate-800 mb-1.5">Email Address</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <Mail size={16} className="text-velto-faint" />
+                  <Mail size={16} className="text-slate-400" />
                 </div>
                 <input
                   type="email"
@@ -84,10 +84,10 @@ const Login = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-velto-ink mb-1.5">Password</label>
+              <label className="block text-sm font-semibold text-slate-800 mb-1.5">Password</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <Lock size={16} className="text-velto-faint" />
+                  <Lock size={16} className="text-slate-400" />
                 </div>
                 <input
                   type="password"
@@ -102,16 +102,16 @@ const Login = () => {
 
             <button
               type="submit"
-              className="btn-lime w-full py-3 mt-2 text-base"
+              className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl w-full py-3 mt-2 text-base transition-colors"
               disabled={loading}
             >
               {loading ? 'Signing in...' : 'Get Started'}
             </button>
           </form>
 
-          <p className="text-center mt-6 text-velto-muted text-sm">
+          <p className="text-center mt-6 text-slate-600 text-sm">
             Don't have an account?{' '}
-            <Link to="/register" className="text-velto-forest font-semibold hover:underline">
+            <Link to="/register" className="text-emerald-800 font-semibold hover:underline">
               Register here
             </Link>
           </p>

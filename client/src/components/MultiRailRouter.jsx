@@ -1,11 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Send,
-  RefreshCw,
   CheckCircle,
   Loader2,
   Sparkles,
-  Clock,
   Zap,
   Activity,
   Repeat,
@@ -14,9 +11,7 @@ import {
   AlertTriangle,
   ArrowRight,
   ShieldCheck,
-  DollarSign,
   ChevronDown,
-  Info,
   Check,
   FileText,
   ShieldAlert,
@@ -102,11 +97,6 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
       setError('Please enter a valid transfer amount');
       return;
     }
-    if (!receiverEmail) {
-      setError('Please select or specify a recipient');
-      return;
-    }
-
     setLoadingQuote(true);
     setError(null);
     setTxResult(null);
@@ -114,6 +104,44 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
     setOverrideWarning(null);
     setComplianceAcknowledged(false);
 
+    try {
+      const { data } = await api.post('/orchestration/route', {
+        sourceCurrency,
+        destinationCurrency,
+        amount: Number(amount),
+        paymentMode,
+        priority
+      });
+
+      if (data.success) {
+        setQuoteData(null);
+        setOrchestration(data.data);
+        setAmlCompliance(null);
+        setGraphRoute(null);
+
+        const recRail = data.data.recommendedRail;
+        if (recRail) {
+          setSelectedRailId(recRail.id);
+          setSelectionMode('RECOMMENDED');
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      setError(err.response?.data?.message || 'Failed to analyze payment routing');
+    } finally {
+      setLoadingQuote(false);
+    }
+  };
+
+  const handlePrepareDemo = async () => {
+    if (!orchestration) return;
+    if (!receiverEmail) {
+      setError('Choose a recipient to continue with the optional transfer demo');
+      return;
+    }
+
+    setLoadingQuote(true);
+    setError(null);
     try {
       const { data } = await api.post('/transaction/quote', {
         sourceCurrency,
@@ -126,19 +154,12 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
 
       if (data.success) {
         setQuoteData(data.data.quote);
-        setOrchestration(data.data.orchestration);
         setAmlCompliance(data.data.amlCompliance);
         setGraphRoute(data.data.graphRoute);
-
-        const recRail = data.data.orchestration?.recommendedRail;
-        if (recRail) {
-          setSelectedRailId(recRail.id);
-          setSelectionMode('RECOMMENDED');
-        }
+        setShowConfirmScreen(true);
       }
     } catch (err) {
-      console.error(err);
-      setError(err.response?.data?.message || 'Failed to analyze payment routing');
+      setError(err.response?.data?.message || 'Could not prepare the optional demo transfer');
     } finally {
       setLoadingQuote(false);
     }
@@ -180,7 +201,7 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
       }
     } catch (err) {
       console.error(err);
-      setError(err.response?.data?.message || 'Transaction execution failed');
+      setError(err.response?.data?.message || 'The simulated transfer failed');
     } finally {
       setExecuting(false);
     }
@@ -196,10 +217,10 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
             <span className="text-[11px] font-bold uppercase tracking-widest text-emerald-400 font-mono">
-              Dynamic Multi-Rail Payment Orchestration
+              Independent transfer comparison
             </span>
           </div>
-          <h2 className="text-2xl font-black text-white mt-1">Cross-Border Payment Router</h2>
+          <h2 className="text-2xl font-black text-white mt-1">Compare transfer options</h2>
         </div>
 
         {/* Payment Mode Selector Tabs */}
@@ -229,8 +250,8 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
         </div>
       </div>
 
-      <p className="text-xs text-amber-200/90 bg-amber-400/10 border border-amber-300/20 rounded-lg px-3 py-2">
-        Demonstration mode: transfers update simulated wallets only; no bank or card network is contacted.
+      <p className="text-xs text-slate-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2.5">
+        Compare estimated rates, costs, and delivery times. Transact3 does not handle or move money. You can optionally try a simulated transfer demo after comparing.
       </p>
 
       {error && (
@@ -240,12 +261,12 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
         </div>
       )}
 
-      {/* Input Parameters Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Comparison inputs */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Recipient Selector */}
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
           <label className="text-xs font-bold text-gray-400 uppercase tracking-wider font-mono">
-            Recipient User
+            Demo recipient <span className="normal-case font-normal tracking-normal">(only needed for the optional transfer demo)</span>
           </label>
           <div className="relative">
             <select
@@ -320,8 +341,8 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
       {/* Routing Preference Policy Selector */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-gray-950/60 p-3.5 rounded-xl border border-gray-800">
         <div>
-          <span className="text-xs font-bold text-gray-300 font-mono block">Routing Optimization Preference</span>
-          <span className="text-[11px] text-gray-500">Determines algorithm weight distribution across cost, latency, and reliability</span>
+          <span className="text-xs font-bold text-gray-300 font-mono block">Choose a comparison preference</span>
+          <span className="text-[11px] text-gray-500">Rank simulated options by cost, delivery time, and reliability.</span>
         </div>
         <div className="flex gap-2">
           {['BALANCED', 'CHEAPEST', 'FASTEST'].map((pref) => (
@@ -350,7 +371,7 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
           className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-gray-950 font-bold rounded-xl text-xs font-mono flex items-center gap-2 shadow-lg shadow-emerald-500/10 transition-all cursor-pointer"
         >
           {loadingQuote ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-          Analyze Payment Route
+          Compare available options
         </button>
       </div>
 
@@ -510,7 +531,7 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
             )}
 
             <div className="grid grid-cols-1 gap-2.5">
-              {orchestration.evaluatedRails?.map((rail, index) => {
+              {orchestration.evaluatedRails?.map((rail) => {
                 const isSelected = selectedRailId === rail.id;
                 const isRecommended = orchestration.recommendedRail && orchestration.recommendedRail.id === rail.id;
                 const Icon = ICON_MAP[rail.icon] || Globe;
@@ -584,24 +605,36 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
             </div>
           </div>
 
-          {/* Action Row: Review & Confirmation Buttons */}
+          <p className="text-xs text-slate-600">
+            Estimates are for comparison only. Continue with the optional demo below only if you want to see the simulated wallet and settlement flow.
+          </p>
+
+          {/* Optional demo actions */}
           <div className="flex flex-col sm:flex-row justify-between items-center gap-3 pt-3">
             <button
               type="button"
-              onClick={() => setShowSimulationModal(true)}
+              onClick={() => {
+                if (!receiverEmail) {
+                  setError('Choose a recipient to run the optional transfer demo');
+                  return;
+                }
+                setError(null);
+                setShowSimulationModal(true);
+              }}
               className="w-full sm:w-auto px-5 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-xl text-xs font-mono font-bold flex items-center justify-center gap-2 border border-gray-700 transition-all cursor-pointer"
             >
               <Zap size={14} className="text-amber-400" />
-              Interactive 16-Step Simulation
+              Run full simulated transfer demo
             </button>
 
             <button
               type="button"
-              onClick={() => setShowConfirmScreen(true)}
-              className="w-full sm:w-auto px-7 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-gray-950 rounded-xl text-xs font-mono font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
+              onClick={handlePrepareDemo}
+              disabled={loadingQuote}
+              className="w-full sm:w-auto px-7 py-2.5 bg-white hover:bg-slate-50 text-emerald-800 rounded-xl text-xs font-mono font-bold flex items-center justify-center gap-2 border border-emerald-300 transition-all cursor-pointer disabled:opacity-50"
             >
               <CheckCircle size={15} />
-              Review & Confirm Payment
+              Run optional simulated transfer
             </button>
           </div>
         </div>
@@ -613,8 +646,8 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
           <div className="bg-gray-900 border border-gray-700 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 font-mono">
             <div className="border-b border-gray-800 pb-3 flex justify-between items-center">
               <div>
-                <span className="text-[10px] text-emerald-400 uppercase font-bold tracking-widest block">Payment Execution Confirmation</span>
-                <h3 className="text-lg font-black text-white">Confirm Cross-Border Settlement</h3>
+                <span className="text-[10px] text-emerald-400 uppercase font-bold tracking-widest block">Optional demo only</span>
+                <h3 className="text-lg font-black text-white">Review simulated transfer</h3>
               </div>
               <button
                 onClick={() => setShowConfirmScreen(false)}
@@ -623,6 +656,10 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
                 ✕
               </button>
             </div>
+
+            <p className="text-[11px] text-slate-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              This is a software demonstration. Confirming it changes only the demo wallet and transaction history; no funds are moved and no external provider is contacted.
+            </p>
 
             <div className="space-y-2.5 text-xs">
               <div className="flex justify-between py-1 border-b border-gray-800/60">
@@ -748,7 +785,7 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
                 className="w-1/2 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-gray-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
               >
                 {executing ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                Confirm & Settle
+                Confirm simulated transfer
               </button>
             </div>
           </div>
@@ -873,6 +910,7 @@ const MultiRailRouter = ({ onTransactionComplete }) => {
             sourceCurrency,
             destinationCurrency,
             amount: Number(amount),
+            paymentMode,
             receiverEmail,
             priority
           }}

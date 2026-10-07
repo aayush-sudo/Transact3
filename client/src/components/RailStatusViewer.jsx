@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Activity, RefreshCw } from 'lucide-react';
 import api from '../services/api';
 
@@ -6,13 +6,7 @@ const RailStatusViewer = () => {
   const [railStatus, setRailStatus] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchRailsStatus();
-    const interval = setInterval(fetchRailsStatus, 15000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchRailsStatus = async () => {
+  const fetchRailsStatus = useCallback(async () => {
     try {
       const { data } = await api.get('/orchestration/rails');
       setRailStatus(data.data);
@@ -21,7 +15,16 @@ const RailStatusViewer = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const initialFetch = setTimeout(fetchRailsStatus, 0);
+    const interval = setInterval(fetchRailsStatus, 15000);
+    return () => {
+      clearTimeout(initialFetch);
+      clearInterval(interval);
+    };
+  }, [fetchRailsStatus]);
 
   if (loading) {
     return (
@@ -41,8 +44,8 @@ const RailStatusViewer = () => {
             <Activity size={18} />
           </div>
           <div>
-            <h3 className="text-base font-bold text-white">Multi-Rail Liquidity & Settlement Capacity Monitor</h3>
-            <p className="text-xs text-gray-400">Available liquidity across 4 simulated settlement routes</p>
+            <h3 className="text-base font-bold text-white">Demo route availability</h3>
+            <p className="text-xs text-gray-400">Illustrative capacity across three simulated routes; not live provider status</p>
           </div>
         </div>
 

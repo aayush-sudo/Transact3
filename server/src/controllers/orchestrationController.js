@@ -5,11 +5,19 @@ const evaluationEngine = require('../services/evaluationEngine');
 
 exports.previewRoute = async (req, res, next) => {
   try {
-    const { sourceCurrency = 'USD', destinationCurrency = 'EUR', amount = 10000, priority = 'BALANCED', maxPermittedDelayHours = 24 } = req.body;
+    const {
+      sourceCurrency = 'USD',
+      destinationCurrency = 'EUR',
+      amount = 10000,
+      paymentMode = 'SEND_AMOUNT',
+      priority = 'BALANCED',
+      maxPermittedDelayHours = 24
+    } = req.body;
     const result = await orchestrationEngine.routePayment({
       sourceCurrency,
       destinationCurrency,
       amount: Number(amount),
+      paymentMode,
       priority,
       maxPermittedDelayHours: Number(maxPermittedDelayHours)
     });

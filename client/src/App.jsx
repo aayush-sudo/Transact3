@@ -15,10 +15,10 @@ import Register from './pages/Register';
 const PrivateRoute = ({ children }) => {
   const { user, loading } = React.useContext(AuthContext);
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-950">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50">
       <div className="flex flex-col items-center gap-3">
         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-400" />
-        <p className="text-gray-400 text-sm font-mono">Loading TRANSACT3...</p>
+        <p className="text-slate-500 text-sm">Loading Transact3...</p>
       </div>
     </div>
   );
@@ -35,7 +35,7 @@ function App() {
   return (
     <AuthProvider>
       <Router>
-        <div className="min-h-screen flex flex-col bg-gray-950 text-gray-100 font-sans selection:bg-emerald-500 selection:text-gray-950">
+        <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800 font-sans selection:bg-emerald-200 selection:text-slate-900">
           <Navbar />
           <main className="flex-grow container mx-auto px-4 py-8">
             <Routes>

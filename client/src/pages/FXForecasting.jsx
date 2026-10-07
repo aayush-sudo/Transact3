@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import FXForecastChart from '../components/FXForecastChart';
-import FXTimingBadge from '../components/FXTimingBadge';
 import api from '../services/api';
-import { TrendingUp, RefreshCw, BarChart2 } from 'lucide-react';
+import { BarChart2 } from 'lucide-react';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'INR', 'BRL', 'MXN', 'SGD', 'AED', 'CHF', 'CAD', 'AUD', 'HKD', 'SEK', 'ZAR'];
 
@@ -10,14 +9,8 @@ const FXForecasting = () => {
   const [base, setBase] = useState('USD');
   const [target, setTarget] = useState('INR');
   const [backtest, setBacktest] = useState(null);
-  const [loadingBacktest, setLoadingBacktest] = useState(false);
 
-  useEffect(() => {
-    fetchBacktest();
-  }, [base, target]);
-
-  const fetchBacktest = async () => {
-    setLoadingBacktest(true);
+  const fetchBacktest = useCallback(async () => {
     try {
       const { data } = await api.post('/fx/backtest', {
         baseCurrency: base,
@@ -27,19 +20,21 @@ const FXForecasting = () => {
       setBacktest(data.data);
     } catch (err) {
       console.error(err);
-    } finally {
-      setLoadingBacktest(false);
     }
-  };
+  }, [base, target]);
+
+  useEffect(() => {
+    fetchBacktest();
+  }, [fetchBacktest]);
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-end">
         <div>
           <p className="text-xs font-bold tracking-widest text-emerald-400 uppercase mb-1">
-            PREDICTIVE TIME-SERIES FX FORECASTING ENGINE
+            FX INFORMATION & MODEL GUIDANCE
           </p>
-          <h1 className="text-3xl font-extrabold text-white">FX Forecasting & Backtesting</h1>
+          <h1 className="text-3xl font-extrabold text-white">Exchange-rate outlook</h1>
         </div>
 
         <div className="flex items-center gap-3">

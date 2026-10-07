@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+import { useContext } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { LogOut, LayoutDashboard, Send, History, Wallet, ShieldCheck, Sparkles, TrendingUp, BarChart2 } from 'lucide-react';
@@ -20,16 +20,16 @@ const Navbar = () => {
   };
 
   return (
-    <nav className="bg-gray-900/95 backdrop-blur-md border-b border-gray-800 sticky top-0 z-50 shadow-sm">
-      <div className="container mx-auto px-6 py-3 flex justify-between items-center">
+    <nav className="bg-white/95 backdrop-blur-md border-b border-slate-200 sticky top-0 z-50 shadow-sm">
+      <div className="container mx-auto px-4 lg:px-6 py-3 flex flex-wrap gap-3 justify-between items-center">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2.5 group">
-          <div className="w-9 h-9 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20 group-hover:scale-105 transition-transform">
-            <Sparkles size={18} className="text-gray-950" />
+          <div className="w-9 h-9 bg-emerald-600 rounded-xl flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
+          <Sparkles size={18} className="text-white" />
           </div>
           <div>
-            <span className="text-white font-extrabold text-lg tracking-tight block leading-tight font-mono">TRANSACT3</span>
-            <span className="text-[9px] text-emerald-400 font-bold uppercase tracking-widest block">Cross-Border Payment Orchestration</span>
+            <span className="text-slate-900 font-extrabold text-lg tracking-tight block leading-tight">Transact3</span>
+            <span className="text-[9px] text-emerald-700 font-bold uppercase tracking-widest block">Independent transfer guidance</span>
           </div>
         </Link>
 
@@ -40,75 +40,75 @@ const Navbar = () => {
                 to="/"
                 className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
                   isActive('/') && location.pathname === '/'
-                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
                 <LayoutDashboard size={14} />
-                Dashboard
+                Overview
               </Link>
               <Link
                 to="/payment-router"
                 className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
                   isActive('/payment-router')
-                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
                 <Send size={14} />
-                Payment Router
+                Compare options
               </Link>
               <Link
                 to="/transactions"
                 className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
                   isActive('/transactions')
-                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
                 <History size={14} />
-                Transactions
+                Demo activity
               </Link>
               <Link
                 to="/wallet"
                 className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
                   isActive('/wallet') || isActive('/portfolio')
-                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
                 <Wallet size={14} />
-                Wallet
+                Demo balances
               </Link>
               <Link
                 to="/fx-forecasting"
                 className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
                   isActive('/fx-forecasting')
-                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
                 <TrendingUp size={14} />
-                FX Forecasting
+                FX outlook
               </Link>
               <Link
                 to="/evaluation"
                 className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
                   isActive('/evaluation')
-                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
                 <BarChart2 size={14} />
-                Evaluation
+                About the model
               </Link>
               {user.role === 'ADMIN' && (
                 <Link
                   to="/admin"
                   className={`text-xs font-bold font-mono transition-all flex items-center gap-1.5 px-3 py-2 rounded-xl ${
                     isActive('/admin')
-                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                      : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                   }`}
                 >
                   <ShieldCheck size={14} />
@@ -116,11 +116,11 @@ const Navbar = () => {
                 </Link>
               )}
 
-              <div className="flex items-center gap-3 ml-2 pl-2 border-l border-gray-800">
-                <span className="text-xs text-gray-300 font-mono hidden sm:inline">Hi, {user.name}</span>
+              <div className="flex items-center gap-3 ml-2 pl-2 border-l border-slate-200">
+                <span className="text-xs text-slate-600 hidden sm:inline">Hi, {user.name}</span>
                 <button
                   onClick={handleLogout}
-                  className="text-gray-400 hover:text-rose-400 transition-colors p-1.5 hover:bg-rose-500/10 rounded-lg"
+                  className="text-slate-500 hover:text-rose-700 transition-colors p-1.5 hover:bg-rose-50 rounded-lg"
                   title="Logout"
                 >
                   <LogOut size={16} />
@@ -129,8 +129,8 @@ const Navbar = () => {
             </>
           ) : (
             <>
-              <Link to="/login" className="text-gray-400 hover:text-white text-xs font-bold font-mono px-3 py-2">Login</Link>
-              <Link to="/register" className="bg-emerald-500 hover:bg-emerald-400 text-gray-950 px-4 py-2 rounded-xl text-xs font-bold font-mono shadow-md">Register</Link>
+              <Link to="/login" className="text-slate-600 hover:text-slate-900 text-xs font-bold px-3 py-2">Login</Link>
+              <Link to="/register" className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">Create account</Link>
             </>
           )}
         </div>
