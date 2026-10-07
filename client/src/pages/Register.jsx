@@ -114,9 +114,13 @@ const Register = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  minLength={6}
+                  minLength={8}
+                  maxLength={72}
+                  pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,72}"
+                  title="Use 8–72 characters with uppercase, lowercase, a number, and a symbol"
                 />
               </div>
+              <p className="mt-1 text-xs text-slate-500">8–72 characters; include uppercase, lowercase, a number, and a symbol.</p>
             </div>
 
             <button

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { MongoMemoryServer } = require('mongodb-memory-server');
 const connectDB = require('./src/config/db');
 const seedDatabase = require('./src/seeds/seed');
 
@@ -16,6 +17,7 @@ const ledgerEngine = require('./src/services/ledgerEngine');
 const auditEngine = require('./src/services/auditEngine');
 const fxAnalysisEngine = require('./src/services/fxAnalysisEngine');
 const portfolioController = require('./src/controllers/portfolioController');
+let mongoServer;
 
 async function runComprehensiveTests() {
   console.log('============================================================');
@@ -37,8 +39,10 @@ async function runComprehensiveTests() {
 
   try {
     // 1. Database Connection & Seed
+    mongoServer = await MongoMemoryServer.create();
+    process.env.MONGO_URI = mongoServer.getUri();
     await connectDB();
-    await seedDatabase();
+    await seedDatabase({ testFixtures: true });
     assert(true, 'Database connected & seeded with Users and 3 Rails');
 
     // 2. Verify User A (Alice) and User B (Bob) exist
@@ -52,21 +56,8 @@ async function runComprehensiveTests() {
     assert(aliceUsdInitial >= 10000, `Alice initial USD balance is sufficient (${aliceUsdInitial} USD)`);
     assert(bobInrInitial >= 50000, `Bob initial INR balance is present (${bobInrInitial} INR)`);
 
-    // 4. Test Simulated Wallet Deposit with Double-Entry Ledger
-    await portfolioController.addHolding(
-      { user: alice, body: { currency: 'USD', amount: 2000 } },
-      { status: () => ({ json: () => {} }) }
-    );
-    const aliceUsdAfterDeposit = await portfolioController.checkUserBalance(alice._id, 'USD');
-    assert(aliceUsdAfterDeposit === aliceUsdInitial + 2000, `Deposit successfully increased Alice USD balance by 2,000 to ${aliceUsdAfterDeposit}`);
-
-    const depositLedgerEntry = await LedgerEntry.findOne({
-      userId: alice._id,
-      entryType: 'DEPOSIT',
-      currency: 'USD',
-      amount: 2000
-    });
-    assert(depositLedgerEntry && depositLedgerEntry.direction === 'CREDIT', 'Deposit created a valid double-entry CREDIT ledger record');
+    // 4. Unverified API requests must not be able to add wallet funds.
+    assert(typeof portfolioController.addHolding === 'undefined', 'Unverified wallet credit endpoint is not exposed');
 
     // 5. Test Statistical FX Analysis (SMA, EMA, Volatility)
     const fxAnalysis = await fxAnalysisEngine.analyzePair('USD', 'INR');
@@ -216,9 +207,13 @@ async function runComprehensiveTests() {
     console.log(`🎉 TEST SUMMARY: ${passed} PASSED, ${failed} FAILED`);
     console.log('============================================================\n');
 
+    await mongoose.disconnect();
+    await mongoServer.stop();
     process.exit(failed > 0 ? 1 : 0);
   } catch (err) {
     console.error('Fatal test error:', err);
+    await mongoose.disconnect();
+    if (mongoServer) await mongoServer.stop();
     process.exit(1);
   }
 }

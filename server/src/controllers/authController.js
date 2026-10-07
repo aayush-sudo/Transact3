@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const Portfolio = require('../models/Portfolio');
+const { provisionNewUserWallet } = require('../services/walletProvisioning');
 const jwt = require('jsonwebtoken');
 
 // Generate JWT
@@ -9,28 +10,31 @@ const generateToken = (id) => {
   });
 };
 
-// Default initial holdings for new users
-const DEFAULT_INITIAL_HOLDINGS = [
-  { currency: 'USD', amount: 10000, averageBuyPrice: 1.0 },
-  { currency: 'EUR', amount: 2000, averageBuyPrice: 1.08 },
-  { currency: 'GBP', amount: 500, averageBuyPrice: 1.27 },
-  { currency: 'INR', amount: 100000, averageBuyPrice: 0.0115 },
-  { currency: 'AED', amount: 5000, averageBuyPrice: 0.272 },
-  { currency: 'SGD', amount: 2500, averageBuyPrice: 0.74 },
-  { currency: 'AUD', amount: 2000, averageBuyPrice: 0.66 },
-  { currency: 'CAD', amount: 2000, averageBuyPrice: 0.735 },
-  { currency: 'JPY', amount: 500000, averageBuyPrice: 0.0066 }
-];
+const PASSWORD_POLICY = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,72}$/;
+const EMAIL_POLICY = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 // @desc    Register a user
 // @route   POST /api/user/register
 // @access  Public
-exports.registerUser = async (req, res) => {
+exports.registerUser = async (req, res, next) => {
   try {
     const { name, email, password } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({ success: false, message: 'Please provide name, email, and password' });
+    }
+    if (typeof email !== 'string' || !EMAIL_POLICY.test(email.trim())) {
+      return res.status(400).json({ success: false, message: 'Enter a valid email address' });
+    }
+    if (
+      typeof password !== 'string' ||
+      !PASSWORD_POLICY.test(password) ||
+      Buffer.byteLength(password, 'utf8') > 72
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be 8–72 characters and include uppercase, lowercase, a number, and a symbol'
+      });
     }
 
     // Check if user exists
@@ -44,14 +48,11 @@ exports.registerUser = async (req, res) => {
       name,
       email: email.toLowerCase().trim(),
       password,
-      walletBalance: 10000
+      walletBalance: 0
     });
 
     // Initialize multi-currency portfolio for new user
-    await Portfolio.create({
-      user: user._id,
-      holdings: DEFAULT_INITIAL_HOLDINGS
-    });
+    await provisionNewUserWallet(user);
 
     res.status(201).json({
       success: true,
@@ -63,14 +64,14 @@ exports.registerUser = async (req, res) => {
       token: generateToken(user._id),
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    next(error);
   }
 };
 
 // @desc    Authenticate a user
 // @route   POST /api/user/login
 // @access  Public
-exports.loginUser = async (req, res) => {
+exports.loginUser = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
@@ -94,10 +95,7 @@ exports.loginUser = async (req, res) => {
     // Ensure portfolio exists
     const portfolio = await Portfolio.findOne({ user: user._id });
     if (!portfolio) {
-      await Portfolio.create({
-        user: user._id,
-        holdings: DEFAULT_INITIAL_HOLDINGS
-      });
+      await provisionNewUserWallet(user);
     }
 
     res.json({
@@ -110,7 +108,7 @@ exports.loginUser = async (req, res) => {
       token: generateToken(user._id),
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    next(error);
   }
 };
 

@@ -11,7 +11,7 @@ const RAIL_CONFIG = {
     baseFeeUSD: 25.00,
     variableFeeBps: 10, // 10 bps = 0.0010 (0.10%)
     variableFeePct: 0.0010,
-    expectedSettlementDisplay: 'Approximately 36 hours (Simulated estimate)',
+    expectedSettlementDisplay: 'Approximately 36 hours',
     settlementDisplayShort: '~36 hours',
     minLatencyHours: 24,
     maxLatencyHours: 48,

@@ -20,7 +20,7 @@ const PaymentRouter = () => {
       <div className="flex gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">
         <Info size={18} className="mt-0.5 shrink-0 text-sky-700" />
         <p>
-          Explore estimated rates, fees, delivery times, and route trade-offs before choosing a provider. You can also run a one-time transfer simulation with sample account data.
+          Compare route estimates and schedule a wallet-funded transfer. Razorpay wallet funding is in test mode, and cross-border payout settlement is modeled internally.
         </p>
       </div>
 

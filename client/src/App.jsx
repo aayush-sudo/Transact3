@@ -9,6 +9,7 @@ import Evaluation from './pages/Evaluation';
 import Admin from './pages/Admin';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import Portfolio from './pages/Portfolio';
 
 const PrivateRoute = ({ children }) => {
   const { user, loading } = React.useContext(AuthContext);
@@ -42,8 +43,8 @@ function App() {
               <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
               <Route path="/payment-router" element={<PrivateRoute><PaymentRouter /></PrivateRoute>} />
               <Route path="/transactions" element={<Navigate to="/payment-router" replace />} />
-              <Route path="/wallet" element={<Navigate to="/payment-router" replace />} />
-              <Route path="/portfolio" element={<Navigate to="/payment-router" replace />} />
+              <Route path="/wallet" element={<PrivateRoute><Portfolio /></PrivateRoute>} />
+              <Route path="/portfolio" element={<Navigate to="/wallet" replace />} />
               <Route path="/fx-forecasting" element={<PrivateRoute><FXForecasting /></PrivateRoute>} />
               <Route path="/evaluation" element={<PrivateRoute><Evaluation /></PrivateRoute>} />
               <Route path="/admin" element={<PrivateRoute><AdminRoute><Admin /></AdminRoute></PrivateRoute>} />

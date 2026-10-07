@@ -1,6 +1,6 @@
 # Transact3 — Cross-Border Transfer Comparison Platform
 
-Transact3 is an information and comparison platform for cross-border transfers. It helps people review estimated exchange rates, fees, delivery times, and route trade-offs before choosing an external provider. A one-time transfer simulation demonstrates the selected route using sample account records; it does not transfer real funds or contact an external provider.
+Transact3 is a light-themed wallet and cross-border transfer planning platform. Users can create accounts, fund an INR wallet through Razorpay test checkout, compare three routes, and schedule an internal modeled settlement. Razorpay test mode does not move live funds, and payout routes are not connected to external banks or payment networks.
 
 ---
 
@@ -11,16 +11,15 @@ The Transact3 platform is structured into clean, decoupled tiers:
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
 │                        React 19 + Vite Frontend                        │
-│  (Overview, Route Comparison, FX Outlook, Model Insights, Simulator)   │
+│  (Overview, Wallet, Route Comparison, FX Outlook, Model Insights)      │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ REST / JSON (Port 5001)
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│                  Node.js / Express Information API                    │
-│  - Auth & Reference Data             - Comparison Estimates             │
-│  - User Accounts                     - Route Comparison Estimates        │
-│  - One-Time Transfer Simulation      - Audit Evidence                    │
-│  - Persistent MongoDB                - Preference-Based Rankings         │
+│                   Node.js / Express API                               │
+│  - Auth & Wallet                    - Razorpay Test Funding               │
+│  - Route Comparisons                - Scheduled Modeled Settlement        │
+│  - Persistent MongoDB               - Ledger & Audit Evidence             │
 └───────────────────┬────────────────────────────────┬───────────────────┘
                     │ REST (Port 8000)               │ Adapter Pattern
                     ▼                                ▼
@@ -34,10 +33,12 @@ The Transact3 platform is structured into clean, decoupled tiers:
 └──────────────────────────────────────┘  └──────────────────────────────┘
 ```
 
-1. **React Frontend (`client/`)**: Light-themed comparison and guidance experience with a one-time transfer simulation.
-2. **Node.js / Express Backend (`server/`)**: Provides comparison estimates, route reference data, account access, and the sample-record transfer simulator. The simulator never contacts external providers or moves real funds.
+1. **React Frontend (`client/`)**: Light-themed account, wallet, route comparison, payment scheduling, and activity pages.
+2. **Node.js / Express Backend (`server/`)**: Verifies captured Razorpay test payments before wallet credit, reserves funds and modeled route capacity, and settles due transfers asynchronously.
 3. **Python / FastAPI Intelligence Service (`python-service/`)**: Provides route scoring, FX analysis, TCA metrics, and inference endpoints for the trained FX forecast, payment rail recommendation, and transaction risk models in `ml_models/saved_models/`.
 4. **Data Persistence (MongoDB)**: Mongoose schemas for `User`, `Transaction`, `LedgerEntry`, `RailSetting`, and `AuditLog`.
+
+> **Important:** Razorpay funding is test-mode only. Cross-border route execution remains an internal model and does not send funds through payout networks. Do not use this application for live payments.
 
 ---
 
@@ -182,7 +183,7 @@ pip install -r requirements.txt
 ```env
 PORT=5001
 MONGO_URI=mongodb://127.0.0.1:27017/transact3
-JWT_SECRET=replace_with_a_local_secret
+JWT_SECRET=replace-with-a-long-random-secret
 FASTAPI_URL=http://127.0.0.1:8000
 NODE_ENV=development
 ```
@@ -192,7 +193,7 @@ Start the persistent MongoDB service from the repository root before starting th
 docker compose up -d mongo
 ```
 
-`server/.env.example` contains these local defaults. Copy its values into `server/.env` and use a private `JWT_SECRET`. The memory database is reserved for automated tests and disposable local runs.
+Copy `server/.env.example` to `server/.env` and set private values for `JWT_SECRET`, `RAZORPAY_KEY_ID`, and `RAZORPAY_KEY_SECRET` using Razorpay test credentials. New accounts receive ₹10,000 in clearly recorded platform test funds in their INR wallet. To provision the requested Aayush and Anirudh accounts, set `BOOTSTRAP_USER_1_PASSWORD` and `BOOTSTRAP_USER_2_PASSWORD` in that local file. Keep passwords and provider keys out of source control. Users can also register in the app.
 
 **Frontend (`client/.env`)**:
 ```env
@@ -206,10 +207,7 @@ VITE_API_URL=http://localhost:5001/api
 cd server
 npm run dev
 # Server listens at http://localhost:5001
-# Automatically seeds local test accounts for Alice and Bob
 ```
-
-Local test accounts: Alice (`alice@transact3.com`), Bob (`bob@transact3.com`), and Treasury Admin (`treasury@transact3.io`) use `Password123!`.
 
 **Terminal 2 — Python FastAPI Intelligence Service** *(Optional — Express will use native JS fallback if skipped)*:
 ```bash
@@ -235,7 +233,7 @@ Run the API-level proof of concept from the repository root:
 npm test
 ```
 
-This starts the real Express server against an isolated temporary MongoDB and exercises authenticated login, quote ownership, Alice-to-Bob settlement, fee checks, idempotent replay/conflict, and balance persistence after an API restart. It moves no real funds.
+This starts Express against an isolated temporary MongoDB and exercises authentication, quote ownership, scheduled settlement, fee checks, idempotent replay/conflict, and balance persistence after an API restart.
 
 The additional service regression suite covers routing preferences, liquidity rerouting, wallet settlement, ledger reconciliation, and audit tamper detection:
 
@@ -262,4 +260,4 @@ The separate `MLPredictionLayer` in [`python-service/app/services/ml_prediction_
 
 ## ⚠️ Disclaimer
 
-**Information Notice**: Transact3 provides estimates and guidance, not financial services or payment processing. Route prices, rates, availability, delivery times, and model outputs are indicative, may differ from provider offers, and are not guarantees. Transact3 does not execute transfers or contact payment networks.
+**Product Notice**: Razorpay is configured for test-mode wallet funding only. Transfer routes and payout execution are modeled internally; the app does not connect to payout networks or deliver funds to external recipients. Route prices, FX rates, capacities, and delivery times are indicative, may differ from provider offers, and are not guarantees. Do not use for live payments.

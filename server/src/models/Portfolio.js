@@ -23,7 +23,10 @@ const PortfolioSchema = new mongoose.Schema({
         default: 1 // Relative to base currency (e.g. USD)
       }
     }
-  ]
+  ],
+  appliedFundingIds: { type: [String], default: [] }
 }, { timestamps: true });
+
+PortfolioSchema.index({ user: 1 }, { unique: true });
 
 module.exports = mongoose.model('Portfolio', PortfolioSchema);

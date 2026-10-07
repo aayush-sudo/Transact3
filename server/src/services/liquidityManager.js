@@ -235,20 +235,26 @@ class LiquidityManager {
 
   // Deduct liquidity upon settlement
   async consumeLiquidity(railId, amountUSD) {
-    const setting = await this.getRailSetting(railId);
-    if (setting) {
-      const newLiquidity = Math.max(0, setting.availableLiquidityUSD - amountUSD);
-      await this.setRailLiquidity(railId, newLiquidity);
-    }
+    if (!this.isInitialized) await this.initialize();
+    const setting = await RailSetting.findOneAndUpdate(
+      { railId, isEnabled: true, availableLiquidityUSD: { $gte: amountUSD } },
+      { $inc: { availableLiquidityUSD: -amountUSD }, lastUpdated: new Date() },
+      { new: true }
+    );
+    if (!setting) return false;
+    this.cachedRailSettings.set(railId, setting.toObject());
+    return true;
   }
 
   // Release liquidity if failed
   async restoreLiquidity(railId, amountUSD) {
-    const setting = await this.getRailSetting(railId);
-    if (setting) {
-      const newLiquidity = setting.availableLiquidityUSD + amountUSD;
-      await this.setRailLiquidity(railId, newLiquidity);
-    }
+    if (!this.isInitialized) await this.initialize();
+    const setting = await RailSetting.findOneAndUpdate(
+      { railId },
+      { $inc: { availableLiquidityUSD: amountUSD }, lastUpdated: new Date() },
+      { new: true }
+    );
+    if (setting) this.cachedRailSettings.set(railId, setting.toObject());
   }
 }
 

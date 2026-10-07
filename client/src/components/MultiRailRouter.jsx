@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, ArrowRight, CheckCircle, Clock3, Loader2, Play, Sparkles } from 'lucide-react';
+import { Activity, ArrowRight, CheckCircle, Clock3, Loader2, Sparkles } from 'lucide-react';
 import api from '../services/api';
-import TransactionSimulationModal from './TransactionSimulationModal';
+import PaymentSchedulingModal from './PaymentSchedulingModal';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'INR', 'AED', 'SGD', 'AUD', 'CAD', 'JPY'];
 const PREFERENCES = ['BALANCED', 'CHEAPEST', 'FASTEST'];
 
 const MultiRailRouter = () => {
   const [paymentMode, setPaymentMode] = useState('SEND_AMOUNT');
-  const [sourceCurrency, setSourceCurrency] = useState('USD');
-  const [destinationCurrency, setDestinationCurrency] = useState('INR');
+  const [sourceCurrency, setSourceCurrency] = useState('INR');
+  const [destinationCurrency, setDestinationCurrency] = useState('USD');
   const [amount, setAmount] = useState('1000');
   const [priority, setPriority] = useState('BALANCED');
   const [routeAnalysis, setRouteAnalysis] = useState(null);
@@ -17,7 +17,7 @@ const MultiRailRouter = () => {
   const [recipients, setRecipients] = useState([]);
   const [recipientEmail, setRecipientEmail] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showSimulation, setShowSimulation] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -66,7 +66,7 @@ const MultiRailRouter = () => {
   };
 
   const selectedRail = routeAnalysis?.evaluatedRails?.find((rail) => rail.id === selectedRailId);
-  const simulationParams = useMemo(() => ({
+  const paymentParams = useMemo(() => ({
     sourceCurrency,
     destinationCurrency,
     amount: Number(amount),
@@ -82,7 +82,7 @@ const MultiRailRouter = () => {
         <p className="text-xs font-bold uppercase tracking-widest text-emerald-700">Transfer comparison</p>
         <h2 className="text-2xl font-bold text-slate-900">Compare available routes</h2>
         <p className="text-sm text-slate-600">
-          Review estimated costs, delivery times, and route characteristics, then choose a provider separately.
+          Compare the three modeled routes and schedule an internal settlement using your wallet balance.
         </p>
       </header>
 
@@ -209,6 +209,16 @@ const MultiRailRouter = () => {
               </div>
             </div>
           )}
+          {routeAnalysis.timingRecommendation && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+              <p className="font-bold">
+                FX timing: {routeAnalysis.timingRecommendation.deferHours > 0
+                  ? `wait ${routeAnalysis.timingRecommendation.deferHours} hour${routeAnalysis.timingRecommendation.deferHours === 1 ? '' : 's'}`
+                  : 'proceed without an FX delay'}
+              </p>
+              <p className="mt-1 text-xs text-amber-900">{routeAnalysis.timingRecommendation.reason}</p>
+            </div>
+          )}
 
           <div className="space-y-3">
             <div className="flex items-end justify-between gap-2">
@@ -267,7 +277,10 @@ const MultiRailRouter = () => {
                 <p><strong>Selected route:</strong> {selectedRail.name}</p>
               </div>
               <p className="text-xs text-slate-600">
-                Run one transfer simulation to see the selected route end to end. It updates sample account records only; no real funds move and no provider is contacted.
+                Settlement is scheduled using the selected route estimate and FX guidance. Your wallet balance and route capacity are reserved until settlement.
+              </p>
+              <p className="text-xs text-slate-500">
+                This release models payout settlement internally; external payouts are not yet connected. Wallet funding uses Razorpay test mode.
               </p>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <label className="flex-1 text-sm font-semibold text-slate-800">
@@ -288,23 +301,23 @@ const MultiRailRouter = () => {
                 </label>
                 <button
                   type="button"
-                  onClick={() => setShowSimulation(true)}
+                  onClick={() => setShowConfirmation(true)}
                   disabled={recipients.length === 0}
                   className="btn-primary inline-flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <Play size={16} />
-                  Simulate transfer
+                  <CheckCircle size={16} />
+                  Review and schedule
                 </button>
               </div>
             </div>
           )}
         </div>
       )}
-      {showSimulation && (
-        <TransactionSimulationModal
-          isOpen={showSimulation}
-          onClose={() => setShowSimulation(false)}
-          initialParams={simulationParams}
+      {showConfirmation && (
+        <PaymentSchedulingModal
+          isOpen={showConfirmation}
+          onClose={() => setShowConfirmation(false)}
+          initialParams={paymentParams}
         />
       )}
     </section>

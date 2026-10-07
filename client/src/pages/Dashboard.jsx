@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ArrowRight, BarChart2, TrendingUp } from 'lucide-react';
+import { ArrowRight, BarChart2, TrendingUp, Wallet } from 'lucide-react';
 
 const Dashboard = () => (
   <div className="space-y-8">
@@ -9,8 +9,7 @@ const Dashboard = () => (
         Make informed choices for international transfers.
       </h1>
       <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-        Compare estimated exchange rates, fees, delivery times, and route characteristics before choosing a provider.
-        Transact3 does not initiate real-world transfers or connect to external providers.
+        Fund your wallet in Razorpay test mode, compare estimated transfer routes, and schedule a modeled settlement with clear timing guidance.
       </p>
       <Link to="/payment-router" className="btn-primary mt-7 inline-flex items-center gap-2">
         Compare transfer options <ArrowRight size={17} />
@@ -24,6 +23,13 @@ const Dashboard = () => (
           <ArrowRight size={18} className="text-emerald-700 transition-transform group-hover:translate-x-1" />
         </div>
         <p className="mt-2 text-sm leading-6 text-slate-600">Review costs, timing, and route details for your currency corridor.</p>
+      </Link>
+      <Link to="/wallet" className="card group transition-colors hover:border-emerald-300">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-slate-900">Wallet</h2>
+          <Wallet size={18} className="text-emerald-700" />
+        </div>
+        <p className="mt-2 text-sm leading-6 text-slate-600">Manage balances, add INR using test checkout, and review scheduled transfers.</p>
       </Link>
       <Link to="/fx-forecasting" className="card group transition-colors hover:border-emerald-300">
         <div className="flex items-center justify-between">

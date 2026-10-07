@@ -19,14 +19,16 @@ const RailStatusViewer = () => {
 
   useEffect(() => {
     const initialFetch = setTimeout(fetchRailsStatus, 0);
+    window.addEventListener('transact3:capacity-changed', fetchRailsStatus);
     return () => {
       clearTimeout(initialFetch);
+      window.removeEventListener('transact3:capacity-changed', fetchRailsStatus);
     };
   }, [fetchRailsStatus]);
 
   if (loading) {
     return (
-      <div className="bg-gray-800/80 rounded-2xl p-6 border border-gray-700/60 flex justify-center py-10">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 flex justify-center py-10">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-400" />
       </div>
     );
@@ -35,19 +37,19 @@ const RailStatusViewer = () => {
   const rails = Array.isArray(railStatus) ? railStatus : [];
 
   return (
-    <div className="bg-gray-800/80 backdrop-blur-md rounded-2xl p-5 border border-gray-700/60 shadow-xl space-y-4">
-      <div className="flex items-center justify-between border-b border-gray-700/60 pb-3">
+    <div className="card space-y-4">
+      <div className="flex items-center justify-between border-b border-slate-200 pb-3">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg">
+          <div className="rounded-lg bg-emerald-50 p-1.5 text-emerald-700">
             <Activity size={18} />
           </div>
           <div>
             <h3 className="text-base font-bold text-white">Route capacity estimates</h3>
-            <p className="text-xs text-gray-400">Modeled capacity across three route options; provider availability may differ</p>
+            <p className="text-xs text-slate-500">Available capacity across three modeled route options</p>
           </div>
         </div>
 
-        <button onClick={fetchRailsStatus} className="p-1.5 bg-gray-700/50 hover:bg-gray-700 text-gray-300 rounded-lg transition-colors">
+        <button onClick={fetchRailsStatus} aria-label="Refresh route capacity" className="rounded-lg bg-slate-100 p-1.5 text-slate-600 transition-colors hover:bg-slate-200">
           <RefreshCw size={14} />
         </button>
       </div>
@@ -75,9 +77,9 @@ const RailStatusViewer = () => {
           }
 
           return (
-            <div key={rail.railId} className="bg-gray-900/60 rounded-xl p-3.5 border border-gray-700/40 space-y-2">
+            <div key={rail.railId} className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3.5">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-gray-200">{rail.name}</span>
+                <span className="text-xs font-bold text-slate-800">{rail.name}</span>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded font-mono ${statusColor}`}>
                   {status}
                 </span>
@@ -85,15 +87,15 @@ const RailStatusViewer = () => {
 
               <div>
                 <div className="flex justify-between text-xs font-mono mb-1">
-                  <span className="text-gray-400">Capacity Utilized</span>
+                  <span className="text-slate-500">Capacity utilized</span>
                   <span className={`font-bold ${textColor}`}>{utilPct}%</span>
                 </div>
-                <div className="w-full bg-gray-800 rounded-full h-1.5 overflow-hidden">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
                   <div className={`${utilColor} h-1.5 rounded-full transition-all duration-500`} style={{ width: `${utilPct}%` }} />
                 </div>
               </div>
 
-              <div className="flex justify-between text-[11px] text-gray-400 font-mono pt-1">
+              <div className="flex justify-between pt-1 font-mono text-[11px] text-slate-500">
                 <span>Available: ${availableUSD.toLocaleString()}</span>
                 <span>Pool: ${capacityUSD.toLocaleString()}</span>
               </div>

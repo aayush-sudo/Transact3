@@ -62,7 +62,11 @@ class QuoteEngine {
       totalSenderDebitUSD,
       estimatedLatencyHours: recommended.est_latency_hours || 0.0003,
       riskScore: 15,
-      timingRecommendation: orchestrationResult.fxAnalysis ? orchestrationResult.fxAnalysis.recommendation : 'Execute now',
+      timingRecommendation: orchestrationResult.timingRecommendation || {
+        recommendation: 'EXECUTE_NOW',
+        deferHours: 0,
+        reason: 'No FX deferral was recommended.'
+      },
       priority: orchestrationResult.priorityProfile || 'BALANCED',
       evaluatedRails: orchestrationResult.evaluatedRails || [],
       aiSavingsUSD: recommended.ai_savings_usd || 0,

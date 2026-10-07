@@ -30,6 +30,7 @@ const orchestrationRoutes = require('./routes/orchestrationRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const fxCronService = require('./services/fxCronService');
 const seedDatabase = require('./seeds/seed');
+const scheduledSettlementService = require('./services/scheduledSettlementService');
 
 // Mount routers
 app.use('/api/user', authRoutes);
@@ -61,5 +62,6 @@ app.listen(PORT, async () => {
   // Start background FX ingestion & volatility monitoring
   fxCronService.start();
   // Auto-seed initial data
-  await seedDatabase();
+  await seedDatabase({ testFixtures: process.env.NODE_ENV === 'test' });
+  scheduledSettlementService.start();
 });

@@ -188,30 +188,28 @@ exports.confirmAndExecuteTransaction = async (req, res, next) => {
     const sourceAmountUSD = Number(quote.sourceAmountUSD) || (quote.sourceCurrency === 'USD' ? Number(quote.sourceAmount) : Number(quote.sourceAmount));
     const railFeeBreakdown = railAdapter.getFeeBreakdown(sourceAmountUSD);
     const activeRailFeeUSD = railFeeBreakdown.totalFeeUSD;
-    const activeLatencyHours = railAdapter.estimateLatency();
+    const activeLatencyHours = Number(quotedRail.est_latency_hours) || railAdapter.estimateLatency();
+    const timingRecommendation = quote.timingRecommendation || { deferHours: 0 };
+    const deferHours = Math.max(0, Number(timingRecommendation.deferHours) || 0);
+    const scheduledFor = new Date(Date.now() + Math.max(activeLatencyHours, deferHours) * 3600000);
+    const railFeeCurrency = quote.sourceCurrency;
+    const railFeeAmount = roundToPrecision(
+      activeRailFeeUSD * (Number(quote.sourceAmount) / Math.max(Number(quote.sourceAmountUSD), 0.01)),
+      2
+    );
     const totalSenderDebitUSD = roundToPrecision(sourceAmountUSD + activeRailFeeUSD, 2);
     const receiverEmail = quote.receiverEmail;
     const recipientId = quote.recipientId;
 
     // 3. Re-verify Sender Balance (Principal + Fee)
     const currentBalance = await portfolioController.checkUserBalance(senderId, quote.sourceCurrency);
-    const requiredSourceAmount = Number(quote.sourceAmount) + (quote.sourceCurrency === 'USD' ? activeRailFeeUSD : 0);
+    const requiredSourceAmount = Number(quote.sourceAmount) + railFeeAmount;
     if (currentBalance < requiredSourceAmount) {
       return res.status(400).json({
         success: false,
         message: `Insufficient ${quote.sourceCurrency} balance: Available ${currentBalance}, required ${requiredSourceAmount}`
       });
     }
-    if (quote.sourceCurrency !== 'USD' && activeRailFeeUSD > 0) {
-      const usdBalance = await portfolioController.checkUserBalance(senderId, 'USD');
-      if (usdBalance < activeRailFeeUSD) {
-        return res.status(400).json({
-          success: false,
-          message: `Insufficient USD balance for the ${activeRailFeeUSD} USD rail fee: Available ${usdBalance}`
-        });
-      }
-    }
-
     let idempotencyClaimed = false;
     if (idempotencyKey) {
       const requestHash = req.idempotencyData?.requestHash || '';
@@ -262,8 +260,12 @@ exports.confirmAndExecuteTransaction = async (req, res, next) => {
       selectionMode,
       routingPreference: quote.priority || 'BALANCED',
       railFeeUSD: activeRailFeeUSD,
+      railFeeCurrency,
+      railFeeAmount,
       totalSenderDebitUSD,
       estimatedLatencyHours: activeLatencyHours,
+      scheduledFor,
+      timingRecommendation,
       simulationDurationMs: railAdapter.config.simulationDurationMs || 1200,
       riskScore: quote.riskScore || 15,
       totalCostUSD: roundToPrecision((quote.fxCostUSD || 0) + activeRailFeeUSD, 2),
@@ -273,18 +275,36 @@ exports.confirmAndExecuteTransaction = async (req, res, next) => {
       status: 'PROCESSING'
     });
 
-    // 5. Execute Full Settlement Lifecycle
-    let settlementResult;
+    let principalReserved = false;
+    let feeReserved = false;
+    let liquidityReserved = false;
     try {
-      settlementResult = await settlementEngine.processSettlement(transactionDoc);
+      await portfolioController.debitUserWallet(senderId, quote.sourceCurrency, quote.sourceAmount);
+      principalReserved = true;
+      if (railFeeAmount > 0) {
+        await portfolioController.debitUserWallet(senderId, railFeeCurrency, railFeeAmount);
+        feeReserved = true;
+      }
+      liquidityReserved = await liquidityManager.consumeLiquidity(railToUse, sourceAmountUSD);
+      if (!liquidityReserved) throw new Error(`Route capacity changed. Please compare routes again before scheduling.`);
+      transactionDoc.set({
+        status: 'SCHEDULED',
+        fundsReserved: true,
+        liquidityReserved: true
+      });
+      await transactionDoc.save();
     } catch (error) {
+      if (liquidityReserved) await liquidityManager.restoreLiquidity(railToUse, sourceAmountUSD);
+      if (feeReserved) await portfolioController.creditUserWallet(senderId, railFeeCurrency, railFeeAmount);
+      if (principalReserved) await portfolioController.creditUserWallet(senderId, quote.sourceCurrency, quote.sourceAmount);
+      await Transaction.findByIdAndUpdate(transactionDoc._id, { status: 'FAILED' });
       if (idempotencyClaimed) {
         await IdempotencyRecord.deleteOne({ idempotencyKey, userId: senderId });
       }
       throw error;
     }
 
-    // 6. Mark Quote Executed
+    // The wallet and route capacity stay reserved until the scheduled settlement worker runs.
     await quoteEngine.markQuoteExecuted(quote.quoteId);
 
     // 7. Calculate TCA
@@ -298,20 +318,17 @@ exports.confirmAndExecuteTransaction = async (req, res, next) => {
       selectedLatencyHours: activeLatencyHours
     });
 
-    // 8. Fetch fresh user portfolio balance
+    // Fetch the available wallet balance after reserving funds.
     const updatedPortfolio = await portfolioController.checkUserBalance(senderId, quote.sourceCurrency);
 
     const responsePayload = {
       success: true,
-      message: `Cross-border payment successfully settled via ${railAdapter.name}`,
+      message: `Payment scheduled via ${railAdapter.name}. Settlement is expected ${scheduledFor.toLocaleString('en-US', { timeZone: 'UTC' })} UTC.`,
       data: {
         transaction: transactionDoc,
-        clearingReference: settlementResult.clearingReference,
-        railReference: settlementResult.railReference,
-        expectedSettlementDisplay: settlementResult.expectedSettlementDisplay,
-        simulationDurationMs: settlementResult.simulationDurationMs,
-        settledAt: settlementResult.settledAt,
-        iso20022: settlementResult.iso20022,
+        scheduledFor,
+        expectedSettlementDisplay: quotedRail.expected_settlement_display,
+        timingRecommendation,
         tca,
         senderRemainingBalance: {
           currency: quote.sourceCurrency,
@@ -325,14 +342,14 @@ exports.confirmAndExecuteTransaction = async (req, res, next) => {
       try {
         await IdempotencyRecord.findOneAndUpdate(
           { idempotencyKey, userId: senderId },
-          { statusCode: 201, responseBody: responsePayload, transactionId: transactionDoc._id }
+          { statusCode: 202, responseBody: responsePayload, transactionId: transactionDoc._id }
         );
       } catch (idemErr) {
         console.error('[Idempotency] Settled payment result could not be persisted:', idemErr.message);
       }
     }
 
-    res.status(201).json(responsePayload);
+    res.status(202).json(responsePayload);
   } catch (err) {
     next(err);
   }

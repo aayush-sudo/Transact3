@@ -5,9 +5,9 @@
 
 ## 📌 Executive Summary
 
-**Transact3** is a user-facing information and comparison platform for cross-border transfers. It helps users review illustrative exchange-rate, fee, delivery-time, and route trade-offs before choosing an external provider. Transact3 does not process payments, hold funds, or connect to payment networks.
+**Transact3** is a light-themed wallet and cross-border transfer planning platform. Users can register, add INR through Razorpay test checkout, compare modeled route options, and schedule an internal settlement lifecycle. Razorpay operates in test mode only, and modeled routes do not connect to external payout networks.
 
-Transact3 compares indicative route data and provides decision support. A one-time transfer simulator demonstrates the selected route end to end using sample account records; it does not move real funds or contact external providers.
+Funds are reserved when a transfer is scheduled and credited to the recipient only when the scheduled worker settles it. Route capacity updates when wallet funds and capacity are reserved. No live payout is made.
 
 ---
 
@@ -19,9 +19,9 @@ Transact3 compares indicative route data and provides decision support. A one-ti
 3. **Hidden Spread Costs**: FX markups are buried inside "zero fee" marketing claims.
 
 ### The Transact3 Platform:
-1. **Independent Comparison**: Ranks three route categories by user-selected preferences (`BALANCED`, `MINIMIZE COST`, `MAXIMIZE SPEED`); users choose an external provider themselves.
-2. **Indicative Route Data**: Presents estimated costs, speeds, and availability; it does not integrate with settlement networks.
-3. **Cost Guidance**: Shows estimated fees and FX comparisons, not guaranteed savings or provider offers.
+1. **Route Comparison**: Ranks three modeled route options by user-selected preferences.
+2. **Wallet Funding**: Credits INR only after Razorpay test payment signature and captured status are verified server-side.
+3. **Scheduled Settlement**: Reserves wallet funds and route capacity, then settles at the later of route ETA and FX timing guidance.
 
 ---
 
@@ -70,8 +70,8 @@ $$\text{Utility Score} = (w_{\text{reliability}} \cdot \text{Reliability}_R) - \
 ### Q1: "Why not just use a simple HTTP health check instead of an AI routing engine?"
 > **Answer**: A health check only answers a binary question: *"Is the server alive?"* It cannot answer *"Is this payment cost-effective?"* or *"Does this pool have enough liquidity?"* Even when SWIFT is 100% healthy (`HTTP 200`), it may still be 50x more expensive and 1,000x slower than a Web3 or Instant rail. Our AI routing engine evaluates dynamic pool capacity, non-linear fees, SLA velocity, and FX volatility to compute the optimal route continuously.
 
-### Q2: "Why would someone defer a Web3 transaction for 6 to 12 hours if Web3 takes 3 seconds?"
-> **Answer**: For large corporate B2B transfers (e.g. \$5,000,000), a 0.5% exchange rate fluctuation equals \$25,000 USD. Even if instant clearing takes seconds, the FX Timing Engine advises holding execution for 6 hours to capture a better currency conversion rate, saving substantial money on large B2B payments.
+### Q2: "How does FX timing affect a scheduled transfer?"
+> **Answer**: The FX outlook may recommend a wait. The platform displays the recommended duration, reserves the user's wallet funds, and schedules the modeled settlement for the later of the selected route estimate or FX delay.
 
-### Q3: "Does the transfer simulation move real money?"
-> **Answer**: No. The one-time simulator records sample account activity to demonstrate the lifecycle. It does not move real funds or contact a payment provider.
+### Q3: "Does the app send funds through a real payout network?"
+> **Answer**: No. Wallet funding uses Razorpay test mode; the three payout routes are modeled internally and do not connect to external networks.

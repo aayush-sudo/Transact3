@@ -1,7 +1,5 @@
-const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const path = require('path');
-
 dotenv.config({ path: path.join(__dirname, '..', '..', '.env') });
 
 const User = require('../models/User');
@@ -9,234 +7,126 @@ const Portfolio = require('../models/Portfolio');
 const Transaction = require('../models/Transaction');
 const LedgerEntry = require('../models/LedgerEntry');
 const AuditLog = require('../models/AuditLog');
-const RailSetting = require('../models/RailSetting');
-const auditEngine = require('../services/auditEngine');
-const ledgerEngine = require('../services/ledgerEngine');
+const FXQuote = require('../models/FXQuote');
+const IdempotencyRecord = require('../models/IdempotencyRecord');
+const WalletFunding = require('../models/WalletFunding');
 const liquidityManager = require('../services/liquidityManager');
-const RAIL_CONFIG = require('../config/railConfig');
+const { provisionNewUserWallet } = require('../services/walletProvisioning');
+const { SUPPORTED_CURRENCY_CODES } = require('../config/currencies');
 
-const seedDatabase = async () => {
-  try {
-    console.log('[Seed] Starting database seeding...');
+const LEGACY_DEMO_EMAILS = [
+  'alice@transact3.com',
+  'bob@transact3.com',
+  'treasury@transact3.io'
+];
 
-    // 1. Initialize RailSettings in MongoDB
-    await liquidityManager.initialize();
+const emptyHoldings = () => SUPPORTED_CURRENCY_CODES.map(currency => ({
+  currency,
+  amount: 0,
+  averageBuyPrice: 1
+}));
 
-    // 2. Seed Alice (User A)
-    let alice = await User.findOne({ email: 'alice@transact3.com' });
-    if (!alice) {
-      alice = await User.create({
-        name: 'Alice Johnson',
-        email: 'alice@transact3.com',
-        password: 'Password123!',
-        walletBalance: 10000
-      });
-      console.log('[Seed] Created User A: alice@transact3.com');
-    }
-
-    let alicePortfolio = await Portfolio.findOne({ user: alice._id });
-    if (!alicePortfolio) {
-      await Portfolio.create({
-        user: alice._id,
-        holdings: [
-          { currency: 'USD', amount: 10000, averageBuyPrice: 1.0 },
-          { currency: 'EUR', amount: 2000, averageBuyPrice: 1.08 },
-          { currency: 'GBP', amount: 500, averageBuyPrice: 1.27 },
-          { currency: 'INR', amount: 100000, averageBuyPrice: 0.0115 },
-          { currency: 'AED', amount: 5000, averageBuyPrice: 0.272 },
-          { currency: 'SGD', amount: 2500, averageBuyPrice: 0.74 },
-          { currency: 'AUD', amount: 2000, averageBuyPrice: 0.66 },
-          { currency: 'CAD', amount: 2000, averageBuyPrice: 0.735 },
-          { currency: 'JPY', amount: 500000, averageBuyPrice: 0.0066 }
-        ]
-      });
-      await ledgerEngine.recordDeposit({
-        userId: alice._id,
-        userEmail: alice.email,
-        currency: 'USD',
-        amount: 10000,
-        description: 'Genesis Alice USD Funding'
-      });
-    }
-
-    // 3. Seed Bob (User B)
-    let bob = await User.findOne({ email: 'bob@transact3.com' });
-    if (!bob) {
-      bob = await User.create({
-        name: 'Bob Smith',
-        email: 'bob@transact3.com',
-        password: 'Password123!',
-        walletBalance: 5000
-      });
-      console.log('[Seed] Created User B: bob@transact3.com');
-    }
-
-    let bobPortfolio = await Portfolio.findOne({ user: bob._id });
-    if (!bobPortfolio) {
-      await Portfolio.create({
-        user: bob._id,
-        holdings: [
-          { currency: 'USD', amount: 5000, averageBuyPrice: 1.0 },
-          { currency: 'EUR', amount: 1000, averageBuyPrice: 1.08 },
-          { currency: 'GBP', amount: 200, averageBuyPrice: 1.27 },
-          { currency: 'INR', amount: 50000, averageBuyPrice: 0.0115 },
-          { currency: 'AED', amount: 1000, averageBuyPrice: 0.272 },
-          { currency: 'SGD', amount: 1000, averageBuyPrice: 0.74 },
-          { currency: 'AUD', amount: 1000, averageBuyPrice: 0.66 },
-          { currency: 'CAD', amount: 1000, averageBuyPrice: 0.735 },
-          { currency: 'JPY', amount: 250000, averageBuyPrice: 0.0066 }
-        ]
-      });
-      await ledgerEngine.recordDeposit({
-        userId: bob._id,
-        userEmail: bob.email,
-        currency: 'USD',
-        amount: 5000,
-        description: 'Genesis Bob USD Funding'
-      });
-    }
-
-    // 4. Seed Treasury / Admin User
-    let demoUser = await User.findOne({ email: 'treasury@transact3.io' });
-    if (!demoUser) {
-      demoUser = await User.create({
-        _id: new mongoose.Types.ObjectId('60c72b2f9b1d8b0015f8e001'),
-        name: 'Treasury Admin',
-        email: 'treasury@transact3.io',
-        password: 'Password123!',
-        walletBalance: 250000,
-        role: 'ADMIN'
-      });
-      console.log('[Seed] Created Treasury Admin: treasury@transact3.io');
-    } else if (demoUser.role !== 'ADMIN') {
-      demoUser.role = 'ADMIN';
-      await demoUser.save();
-    }
-
-    let portfolio = await Portfolio.findOne({ user: demoUser._id });
-    if (!portfolio) {
-      await Portfolio.create({
-        user: demoUser._id,
-        holdings: [
-          { currency: 'USD', amount: 150000, averageBuyPrice: 1.0 },
-          { currency: 'EUR', amount: 80000, averageBuyPrice: 1.08 },
-          { currency: 'GBP', amount: 50000, averageBuyPrice: 1.27 },
-          { currency: 'INR', amount: 5000000, averageBuyPrice: 0.012 },
-          { currency: 'JPY', amount: 12000000, averageBuyPrice: 0.0066 },
-          { currency: 'AED', amount: 100000, averageBuyPrice: 0.272 },
-          { currency: 'SGD', amount: 50000, averageBuyPrice: 0.74 },
-          { currency: 'AUD', amount: 50000, averageBuyPrice: 0.66 },
-          { currency: 'CAD', amount: 50000, averageBuyPrice: 0.735 }
-        ]
-      });
-    }
-
-    // 5. Seed Initial Sample Transactions
-    const txCount = await Transaction.countDocuments();
-    if (txCount === 0) {
-      const sampleTxs = [
-        {
-          quoteId: 'QTE-HIST-001',
-          sender: alice._id,
-          recipient: bob._id,
-          receiverEmail: 'bob@transact3.com',
-          paymentMode: 'SEND_AMOUNT',
-          sourceCurrency: 'USD',
-          destinationCurrency: 'EUR',
-          sourceAmount: 1000,
-          destinationAmount: 920,
-          referenceFXRate: 0.92,
-          quotedFXRate: 0.92,
-          executedFXRate: 0.92,
-          fxSpreadBps: 30,
-          fxCostUSD: 3.0,
-          selectedRail: 'INSTANT_PAYMENT_LINK',
-          recommendedRail: 'INSTANT_PAYMENT_LINK',
-          selectionMode: 'RECOMMENDED',
-          routingPreference: 'BALANCED',
-          railFeeUSD: 1.70,
-          totalSenderDebitUSD: 1001.70,
-          estimatedLatencyHours: 0.0003,
-          riskScore: 12,
-          riskLevel: 'LOW',
-          totalCostUSD: 4.70,
-          totalCostBps: 47,
-          aiSavingsUSD: 24.30,
-          status: 'COMPLETED',
-          clearingReference: 'CLR-INST-992143',
-          timestamp: new Date(Date.now() - 3600000 * 24 * 2)
-        },
-        {
-          quoteId: 'QTE-HIST-002',
-          sender: demoUser._id,
-          recipient: alice._id,
-          receiverEmail: 'alice@transact3.com',
-          paymentMode: 'SEND_AMOUNT',
-          sourceCurrency: 'USD',
-          destinationCurrency: 'GBP',
-          sourceAmount: 5000,
-          destinationAmount: 3950,
-          referenceFXRate: 0.79,
-          quotedFXRate: 0.79,
-          executedFXRate: 0.79,
-          fxSpreadBps: 25,
-          fxCostUSD: 12.50,
-          selectedRail: 'INSTANT_PAYMENT_LINK',
-          recommendedRail: 'INSTANT_PAYMENT_LINK',
-          selectionMode: 'RECOMMENDED',
-          routingPreference: 'CHEAPEST',
-          railFeeUSD: 2.50,
-          totalSenderDebitUSD: 5002.50,
-          estimatedLatencyHours: 0.0003,
-          riskScore: 10,
-          riskLevel: 'LOW',
-          totalCostUSD: 15.00,
-          totalCostBps: 30,
-          aiSavingsUSD: 27.50,
-          status: 'COMPLETED',
-          clearingReference: 'CLR-INST-881230',
-          timestamp: new Date(Date.now() - 3600000 * 24 * 1)
-        }
-      ];
-
-      for (const tx of sampleTxs) {
-        const createdTx = await Transaction.create(tx);
-        await ledgerEngine.recordPaymentSettlement({
-          transactionId: createdTx._id,
-          quoteId: tx.quoteId,
-          senderId: tx.sender,
-          recipientId: tx.recipient,
-          senderEmail: 'sender@transact3.io',
-          recipientEmail: tx.receiverEmail,
-          sourceCurrency: tx.sourceCurrency,
-          destinationCurrency: tx.destinationCurrency,
-          sourceAmount: tx.sourceAmount,
-          destinationAmount: tx.destinationAmount,
-          railFeeUSD: tx.railFeeUSD,
-          selectedRail: tx.selectedRail
-        });
-        await auditEngine.logEvent({
-          transactionId: String(createdTx._id),
-          actor: String(tx.sender),
-          action: 'SETTLEMENT_COMPLETED',
-          result: 'SUCCESS',
-          metadata: { selectedRail: tx.selectedRail, clearingReference: tx.clearingReference }
-        });
-      }
-      console.log('[Seed] Seeded sample transactions and ledger entries');
-    }
-
-    console.log('[Seed] Seeding completed successfully!');
-  } catch (err) {
-    console.error('[Seed] Seeding error:', err.message);
+async function removeLegacyAccounts() {
+  const users = await User.find({ email: { $in: LEGACY_DEMO_EMAILS } }).select('_id');
+  if (users.length === 0) return;
+  const userIds = users.map(user => user._id);
+  const transactions = await Transaction.find({
+    $or: [{ sender: { $in: userIds } }, { recipient: { $in: userIds } }]
+  }).select('_id');
+  const transactionIds = transactions.map(transaction => String(transaction._id));
+  if (transactionIds.length) {
+    await LedgerEntry.deleteMany({
+      $or: [
+        { transactionId: { $in: transactions.map(transaction => transaction._id) } },
+        { userId: { $in: userIds } }
+      ]
+    });
+    await AuditLog.deleteMany({ transactionId: { $in: transactionIds } });
+    await Transaction.deleteMany({ _id: { $in: transactions.map(transaction => transaction._id) } });
+  } else {
+    await LedgerEntry.deleteMany({ userId: { $in: userIds } });
   }
+  await FXQuote.deleteMany({ $or: [{ userId: { $in: userIds } }, { recipientId: { $in: userIds } }] });
+  await IdempotencyRecord.deleteMany({ userId: { $in: userIds } });
+  await WalletFunding.deleteMany({ userId: { $in: userIds } });
+  await Portfolio.deleteMany({ user: { $in: userIds } });
+  await User.deleteMany({ _id: { $in: userIds } });
+}
+
+async function seedBootstrapAccounts() {
+  const accounts = [
+    {
+      name: process.env.BOOTSTRAP_USER_1_NAME || 'Aayush',
+      email: process.env.BOOTSTRAP_USER_1_EMAIL || 'aayush@gmail.com',
+      password: process.env.BOOTSTRAP_USER_1_PASSWORD
+    },
+    {
+      name: process.env.BOOTSTRAP_USER_2_NAME || 'Anirudh',
+      email: process.env.BOOTSTRAP_USER_2_EMAIL || 'anirudh@gmail.com',
+      password: process.env.BOOTSTRAP_USER_2_PASSWORD
+    }
+  ];
+  if (process.env.BOOTSTRAP_ADMIN_EMAIL && process.env.BOOTSTRAP_ADMIN_PASSWORD) {
+    accounts.push({
+      name: process.env.BOOTSTRAP_ADMIN_NAME || 'Administrator',
+      email: process.env.BOOTSTRAP_ADMIN_EMAIL,
+      password: process.env.BOOTSTRAP_ADMIN_PASSWORD,
+      role: 'ADMIN'
+    });
+  }
+
+  for (const account of accounts) {
+    if (!account.password) continue;
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,72}$/.test(account.password) ||
+      Buffer.byteLength(account.password, 'utf8') > 72) {
+      throw new Error(`Bootstrap password for ${account.email} does not meet password policy.`);
+    }
+    const email = account.email.toLowerCase().trim();
+    if (await User.exists({ email })) continue;
+    const user = await User.create({
+      name: account.name,
+      email,
+      password: account.password,
+      role: account.role || 'USER',
+      walletBalance: 0
+    });
+    await provisionNewUserWallet(user);
+  }
+}
+
+async function seedTestAccounts() {
+  const testUsers = [
+    { name: 'Test Sender', email: 'alice@transact3.com', password: 'Password123!', walletBalance: 10000 },
+    { name: 'Test Recipient', email: 'bob@transact3.com', password: 'Password123!', walletBalance: 5000 },
+    { name: 'Test Admin', email: 'treasury@transact3.io', password: 'Password123!', walletBalance: 0, role: 'ADMIN' }
+  ];
+  for (const data of testUsers) {
+    let user = await User.findOne({ email: data.email });
+    if (!user) user = await User.create(data);
+    const holdings = emptyHoldings();
+    holdings.find(holding => holding.currency === 'USD').amount = data.walletBalance;
+    holdings.find(holding => holding.currency === 'INR').amount = data.email.startsWith('bob@') ? 50000 : 0;
+    await Portfolio.findOneAndUpdate(
+      { user: user._id },
+      { $setOnInsert: { holdings } },
+      { upsert: true }
+    );
+  }
+}
+
+const seedDatabase = async ({ testFixtures = false } = {}) => {
+  await liquidityManager.initialize();
+  if (testFixtures) {
+    await seedTestAccounts();
+    return;
+  }
+  await removeLegacyAccounts();
+  await seedBootstrapAccounts();
 };
 
 module.exports = seedDatabase;
 
 if (require.main === module) {
   const connectDB = require('../config/db');
-  connectDB().then(() => {
-    seedDatabase().then(() => process.exit(0));
-  });
+  connectDB().then(() => seedDatabase()).then(() => process.exit(0));
 }

@@ -22,6 +22,8 @@ class SettlementEngine {
       destinationAmount,
       selectedRail,
       railFeeUSD,
+      railFeeCurrency,
+      railFeeAmount,
       totalSenderDebitUSD,
       executedFXRate
     } = transactionDoc;
@@ -33,6 +35,8 @@ class SettlementEngine {
     const senderUser = await User.findById(senderId);
     if (!senderUser) throw new Error('Settlement sender was not found');
     const senderEmail = senderUser.email;
+    const feeCurrency = railFeeCurrency || 'USD';
+    const feeAmount = Number(railFeeAmount) || Number(railFeeUSD || 0);
 
     let actualRecipientId = recipientId;
     if (!actualRecipientId && receiverEmail) {
@@ -43,7 +47,15 @@ class SettlementEngine {
       throw new Error('Settlement recipient was not found');
     }
 
-    const eligibility = await liquidityManager.checkRailEligibility(selectedRail, sourceAmountUSD);
+    const reservedRail = transactionDoc.liquidityReserved
+      ? await liquidityManager.getRailSetting(selectedRail)
+      : null;
+    const eligibility = transactionDoc.liquidityReserved
+      ? {
+          isEligible: Boolean(reservedRail?.isEnabled && sourceAmountUSD <= reservedRail.maxAmountUSD),
+          rejectionReason: 'The selected route is no longer available'
+        }
+      : await liquidityManager.checkRailEligibility(selectedRail, sourceAmountUSD);
     if (!eligibility.isEligible) {
       await Transaction.findByIdAndUpdate(transactionId, { status: 'FAILED' });
       await auditEngine.logEvent({
@@ -59,17 +71,19 @@ class SettlementEngine {
     const railAdapter = RAIL_MAP[selectedRail];
     if (!railAdapter) throw new Error(`Unsupported settlement rail ${selectedRail}`);
 
-    let principalDebited = false;
-    let feeDebited = false;
-    let liquidityConsumed = false;
+    let principalDebited = Boolean(transactionDoc.fundsReserved);
+    let feeDebited = Boolean(transactionDoc.fundsReserved && feeAmount > 0);
+    let liquidityConsumed = Boolean(transactionDoc.liquidityReserved);
     let recipientCredited = false;
     let ledgerAttempted = false;
 
     try {
-      await portfolioController.debitUserWallet(senderId, sourceCurrency, sourceAmount);
-      principalDebited = true;
-      if (railFeeUSD > 0) {
-        await portfolioController.debitUserWallet(senderId, 'USD', railFeeUSD);
+      if (!transactionDoc.fundsReserved) {
+        await portfolioController.debitUserWallet(senderId, sourceCurrency, sourceAmount);
+        principalDebited = true;
+      }
+      if (!transactionDoc.fundsReserved && feeAmount > 0) {
+        await portfolioController.debitUserWallet(senderId, feeCurrency, feeAmount);
         feeDebited = true;
       }
 
@@ -84,8 +98,10 @@ class SettlementEngine {
         selectedRail
       });
 
-      await liquidityManager.consumeLiquidity(selectedRail, sourceAmountUSD);
-      liquidityConsumed = true;
+      if (!transactionDoc.liquidityReserved) {
+        liquidityConsumed = await liquidityManager.consumeLiquidity(selectedRail, sourceAmountUSD);
+        if (!liquidityConsumed) throw new Error(`Insufficient remaining liquidity on ${selectedRail}`);
+      }
       await portfolioController.creditUserWallet(actualRecipientId, destinationCurrency, destinationAmount);
       recipientCredited = true;
 
@@ -102,11 +118,14 @@ class SettlementEngine {
         sourceAmount,
         destinationAmount,
         railFeeUSD,
+        railFeeCurrency: feeCurrency,
+        railFeeAmount: feeAmount,
         selectedRail
       });
 
       const updatedTransaction = await Transaction.findByIdAndUpdate(transactionId, {
         status: 'COMPLETED',
+        settledAt: new Date(),
         clearingReference: railResult.clearingReference,
         iso20022Message: railResult.iso20022 ? railResult.iso20022.pacs008 : null,
         simulationDurationMs: railResult.simulationDurationMs
@@ -160,7 +179,7 @@ class SettlementEngine {
         await rollback('recipient credit', () => portfolioController.debitUserWallet(actualRecipientId, destinationCurrency, destinationAmount));
       }
       if (feeDebited) {
-        await rollback('rail fee', () => portfolioController.creditUserWallet(senderId, 'USD', railFeeUSD));
+        await rollback('rail fee', () => portfolioController.creditUserWallet(senderId, feeCurrency, feeAmount));
       }
       if (principalDebited) {
         await rollback('sender principal', () => portfolioController.creditUserWallet(senderId, sourceCurrency, sourceAmount));
@@ -168,7 +187,14 @@ class SettlementEngine {
       if (liquidityConsumed) {
         await rollback('rail liquidity', () => liquidityManager.restoreLiquidity(selectedRail, sourceAmountUSD));
       }
-      await rollback('transaction status', () => Transaction.findByIdAndUpdate(transactionId, { status: 'FAILED' }));
+      await rollback('transaction status', () => Transaction.findByIdAndUpdate(transactionId, {
+        status: 'FAILED',
+        ...(rollbackErrors.length === 0 ? { fundsReserved: false, liquidityReserved: false } : {})
+      }));
+      if (rollbackErrors.length === 0) {
+        transactionDoc.fundsReserved = false;
+        transactionDoc.liquidityReserved = false;
+      }
       await rollback('failure audit', () => auditEngine.logEvent({
         transactionId: String(transactionId),
         actor: String(senderId),
@@ -184,5 +210,34 @@ class SettlementEngine {
     }
   }
 }
+
+SettlementEngine.prototype.releaseReservations = async function releaseReservations(transactionId) {
+  const transaction = await Transaction.findById(transactionId);
+  if (!transaction || (!transaction.fundsReserved && !transaction.liquidityReserved)) return;
+
+  if (transaction.fundsReserved) {
+    await portfolioController.creditUserWallet(transaction.sender, transaction.sourceCurrency, transaction.sourceAmount);
+    const feeAmount = Number(transaction.railFeeAmount) || Number(transaction.railFeeUSD || 0);
+    if (feeAmount > 0) {
+      await portfolioController.creditUserWallet(
+        transaction.sender,
+        transaction.railFeeCurrency || 'USD',
+        feeAmount
+      );
+    }
+  }
+  if (transaction.liquidityReserved) {
+    const sourceAmountUSD = Math.max(
+      0,
+      Number(transaction.totalSenderDebitUSD) - Number(transaction.railFeeUSD || 0) || Number(transaction.sourceAmount)
+    );
+    await liquidityManager.restoreLiquidity(transaction.selectedRail, sourceAmountUSD);
+  }
+  await Transaction.findByIdAndUpdate(transaction._id, {
+    status: 'FAILED',
+    fundsReserved: false,
+    liquidityReserved: false
+  });
+};
 
 module.exports = new SettlementEngine();

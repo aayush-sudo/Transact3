@@ -2,6 +2,7 @@ const { swiftRail, instantRail, cardPushRail } = require('../rails');
 
 const liquidityManager = require('./liquidityManager');
 const fxAnalysisEngine = require('./fxAnalysisEngine');
+const fxForecastingEngine = require('./fxForecastingEngine');
 const fastApiClient = require('./fastapiClient');
 const { getExchangeRates } = require('./currencyService');
 const { isCurrencySupported } = require('../config/currencies');
@@ -46,6 +47,12 @@ class MultiRailOrchestrationEngine {
 
     // 2. FX Analysis & Current Exchange Rate
     const fxAnalysis = await fxAnalysisEngine.analyzePair(srcCurr, destCurr);
+    const timingRecommendation = await fxForecastingEngine.evaluateTiming(
+      srcCurr,
+      destCurr,
+      priority === 'FASTEST' ? 'SPEED' : priority,
+      24
+    );
     const fxRate = fxAnalysis.currentRate;
 
     // Rates to USD for liquidity & fee normalization
@@ -249,6 +256,7 @@ class MultiRailOrchestrationEngine {
       fxCostUSD,
       spreadBps,
       fxAnalysis,
+      timingRecommendation,
       priorityProfile: pref,
       recommendedRail: recommended,
       evaluatedRails: finalEvaluatedRails,

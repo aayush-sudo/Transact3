@@ -52,9 +52,12 @@ async function startApi() {
     cwd: SERVER_DIRECTORY,
     env: {
       ...process.env,
+      NODE_ENV: 'test',
       MONGO_URI: mongoServer.getUri(),
       PORT: String(port),
       JWT_SECRET: 'transact3-api-test-secret',
+      RAZORPAY_KEY_ID: '',
+      RAZORPAY_KEY_SECRET: '',
       FASTAPI_URL: 'http://127.0.0.1:1'
     },
     stdio: ['ignore', 'pipe', 'pipe']
@@ -100,9 +103,28 @@ after(async () => {
   if (mongoServer) await mongoServer.stop();
 });
 
-test('authenticated payment settles once to the quoted recipient and survives restart', async () => {
+test('authenticated payment schedules once, reserves capacity, and settles at its due time', async () => {
   const unauthenticated = await request('/user/recipients');
   assert.equal(unauthenticated.response.status, 401);
+
+  const invalidEmail = await request('/user/register', {
+    method: 'POST',
+    body: { name: 'Invalid', email: 'not-an-email', password: 'StrongPass1!' }
+  });
+  assert.equal(invalidEmail.response.status, 400);
+  const weakPassword = await request('/user/register', {
+    method: 'POST',
+    body: { name: 'Invalid', email: 'valid@example.com', password: 'weakpass1' }
+  });
+  assert.equal(weakPassword.response.status, 400);
+  const newAccount = await request('/user/register', {
+    method: 'POST',
+    body: { name: 'New Account', email: 'new.account@example.com', password: 'StrongPass1!' }
+  });
+  assert.equal(newAccount.response.status, 201, newAccount.body.message);
+  const newAccountPortfolio = await request('/portfolio', { token: newAccount.body.token });
+  assert.equal(newAccountPortfolio.body.data.holdings.find(holding => holding.currency === 'INR').amount, 10000);
+  assert.equal(newAccountPortfolio.body.data.holdings.find(holding => holding.currency === 'USD').amount, 0);
 
   const railsStatus = await request('/orchestration/rails');
   assert.equal(railsStatus.response.status, 200);
@@ -111,6 +133,12 @@ test('authenticated payment settles once to the quoted recipient and survives re
   const aliceToken = await login('alice@transact3.com');
   const bobToken = await login('bob@transact3.com');
   const adminToken = await login('treasury@transact3.io');
+  const unavailableFunding = await request('/portfolio/funding/order', {
+    method: 'POST',
+    token: aliceToken,
+    body: { amount: 100 }
+  });
+  assert.equal(unavailableFunding.response.status, 503);
   const comparison = await request('/orchestration/route', {
     method: 'POST',
     token: aliceToken,
@@ -152,6 +180,8 @@ test('authenticated payment settles once to the quoted recipient and survives re
   const quote = quoteResult.body.data.quote;
   const cardRail = quote.evaluatedRails.find(rail => rail.id === 'CARD_PAYOUT' && rail.is_eligible);
   assert.ok(cardRail, 'Card payout should be eligible for this test quote');
+  const capacityBefore = await request('/orchestration/rails');
+  const cardCapacityBefore = capacityBefore.body.data.find(rail => rail.railId === cardRail.id).availableLiquidityUSD;
 
   const unauthorizedConfirmation = await request('/transaction/confirm', {
     method: 'POST',
@@ -170,7 +200,9 @@ test('authenticated payment settles once to the quoted recipient and survives re
     token: aliceToken,
     body: paymentRequest
   });
-  assert.equal(confirmation.response.status, 201, confirmation.body.message);
+  assert.equal(confirmation.response.status, 202, confirmation.body.message);
+  assert.equal(confirmation.body.data.transaction.status, 'SCHEDULED');
+  assert.ok(new Date(confirmation.body.data.scheduledFor) > new Date(), 'Settlement should be scheduled in the future');
   assert.equal(String(confirmation.body.data.transaction.recipient), String(quote.recipientId));
   assert.equal(confirmation.body.data.transaction.receiverEmail, 'bob@transact3.com');
 
@@ -181,14 +213,17 @@ test('authenticated payment settles once to the quoted recipient and survives re
   const bobInrBefore = bobBefore.body.data.holdings.find(holding => holding.currency === 'INR').amount;
   const bobInrAfter = bobAfter.body.data.holdings.find(holding => holding.currency === 'INR').amount;
   assert.equal(Number((aliceUsdBefore - aliceUsdAfter).toFixed(2)), Number((quote.sourceAmount + confirmation.body.data.transaction.railFeeUSD).toFixed(2)));
-  assert.ok(bobInrAfter > bobInrBefore, 'Bob should receive the destination-currency credit');
+  assert.equal(bobInrAfter, bobInrBefore, 'Recipient is credited only when scheduled settlement runs');
+  const capacityAfter = await request('/orchestration/rails');
+  const cardCapacityAfter = capacityAfter.body.data.find(rail => rail.railId === cardRail.id).availableLiquidityUSD;
+  assert.equal(Number((cardCapacityBefore - cardCapacityAfter).toFixed(2)), Number(quote.sourceAmountUSD.toFixed(2)));
 
   const replay = await request('/transaction/confirm', {
     method: 'POST',
     token: aliceToken,
     body: paymentRequest
   });
-  assert.equal(replay.response.status, 201);
+  assert.equal(replay.response.status, 202);
   assert.equal(String(replay.body.data.transaction._id), String(confirmation.body.data.transaction._id));
 
   const conflictingReplay = await request('/transaction/confirm', {
@@ -252,7 +287,17 @@ test('authenticated payment settles once to the quoted recipient and survives re
       idempotencyKey: `RESTART-${postRestartQuote.body.data.quote.quoteId}`
     }
   });
-  assert.equal(postRestartPayment.response.status, 201, postRestartPayment.body.message);
+  assert.equal(postRestartPayment.response.status, 202, postRestartPayment.body.message);
+
+  const scheduledId = postRestartPayment.body.data.transaction._id;
+  const dueBy = Date.now() + 8000;
+  let scheduledStatus = 'SCHEDULED';
+  while (Date.now() < dueBy && scheduledStatus !== 'COMPLETED') {
+    await new Promise(resolve => setTimeout(resolve, 250));
+    const status = await request(`/transaction/${scheduledId}`, { token: aliceAfterRestart });
+    scheduledStatus = status.body.data?.transaction?.status;
+  }
+  assert.equal(scheduledStatus, 'COMPLETED', 'Due transfers should settle once through the scheduled worker');
 
   const adminAfterRestart = await login('treasury@transact3.io');
   const audit = await request('/admin/verify-audit-chain', { token: adminAfterRestart });

@@ -62,7 +62,7 @@ const protect = async (req, res, next) => {
 
   try {
     const token = authorization.slice('Bearer '.length).trim();
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret123');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const foundUser = await User.findById(decoded.id).select('-password');
     if (!foundUser) {
       return res.status(401).json({ success: false, message: 'Invalid authentication credentials' });
@@ -199,13 +199,13 @@ const checkIdempotency = async (req, res, next) => {
 // 6. Global Error Handler Middleware
 // ====================================================================
 const errorHandler = (err, req, res, next) => {
-  console.error('[Error Handler]', err);
+  console.error('[Error Handler]', err.message);
 
-  const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
+  const statusCode = err.statusCode || (err.name === 'ValidationError' ? 400 : err.code === 11000 ? 409 : res.statusCode === 200 ? 500 : res.statusCode);
 
   res.status(statusCode).json({
     success: false,
-    message: err.message || 'Server error during payment orchestration',
+    message: err.safeMessage || err.message || 'Server error during payment orchestration',
     requestId: req.requestId
   });
 };

@@ -1,21 +1,8 @@
 const Portfolio = require('../models/Portfolio');
 const User = require('../models/User');
-const ledgerEngine = require('../services/ledgerEngine');
 const { getExchangeRates } = require('../services/currencyService');
-const { isCurrencySupported, SUPPORTED_CURRENCY_CODES } = require('../config/currencies');
+const { SUPPORTED_CURRENCY_CODES } = require('../config/currencies');
 const { roundToPrecision, safeAdd, safeSubtract } = require('../utils/mathUtils');
-
-const DEFAULT_PORTFOLIO_HOLDINGS = [
-  { currency: 'USD', amount: 10000, averageBuyPrice: 1.0 },
-  { currency: 'EUR', amount: 2000, averageBuyPrice: 1.08 },
-  { currency: 'GBP', amount: 500, averageBuyPrice: 1.27 },
-  { currency: 'INR', amount: 100000, averageBuyPrice: 0.0115 },
-  { currency: 'AED', amount: 5000, averageBuyPrice: 0.272 },
-  { currency: 'SGD', amount: 2500, averageBuyPrice: 0.74 },
-  { currency: 'AUD', amount: 2000, averageBuyPrice: 0.66 },
-  { currency: 'CAD', amount: 2000, averageBuyPrice: 0.735 },
-  { currency: 'JPY', amount: 500000, averageBuyPrice: 0.0066 }
-];
 
 // Helper to get or initialize a user's portfolio
 async function getOrCreatePortfolio(userId) {
@@ -23,7 +10,11 @@ async function getOrCreatePortfolio(userId) {
   if (!portfolio) {
     portfolio = await Portfolio.create({
       user: userId,
-      holdings: DEFAULT_PORTFOLIO_HOLDINGS
+      holdings: SUPPORTED_CURRENCY_CODES.map(currency => ({
+        currency,
+        amount: 0,
+        averageBuyPrice: 1
+      }))
     });
   }
 
@@ -89,85 +80,22 @@ exports.getPortfolio = async (req, res) => {
   }
 };
 
-// @desc    Add simulated funds to a holding & record in double-entry ledger
-// @route   POST /api/portfolio/holdings
-// @access  Private
-exports.addHolding = async (req, res) => {
-  try {
-    const userId = req.user ? (req.user._id || req.user.id) : null;
-    if (!userId) {
-      return res.status(401).json({ success: false, message: 'Not authorized' });
-    }
-
-    const { currency, amount } = req.body;
-    const depositAmount = Number(amount);
-
-    if (!currency || !isCurrencySupported(currency)) {
-      return res.status(400).json({
-        success: false,
-        message: `Unsupported currency '${currency}'. Supported currencies: ${SUPPORTED_CURRENCY_CODES.join(', ')}`
-      });
-    }
-
-    if (isNaN(depositAmount) || depositAmount <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Deposit amount must be a positive number'
-      });
-    }
-
-    const curr = currency.toUpperCase();
-    const portfolio = await getOrCreatePortfolio(userId);
-
-    const holding = portfolio.holdings.find(h => h.currency === curr);
-    if (holding) {
-      holding.amount = safeAdd(holding.amount, depositAmount);
-    } else {
-      portfolio.holdings.push({ currency: curr, amount: depositAmount, averageBuyPrice: 1.0 });
-    }
-
-    await portfolio.save();
-
-    // If depositing USD, also sync User.walletBalance
-    if (curr === 'USD') {
-      await User.findByIdAndUpdate(userId, { $inc: { walletBalance: depositAmount } });
-    }
-
-    // Record simulated deposit in Double-Entry Ledger
-    await ledgerEngine.recordDeposit({
-      userId,
-      userEmail: req.user.email,
-      currency: curr,
-      amount: depositAmount,
-      description: `Simulated User Deposit: +${depositAmount} ${curr}`
-    });
-
-    res.status(200).json({
-      success: true,
-      message: `Successfully deposited ${depositAmount} ${curr} into your wallet. Financial ledger entry recorded.`,
-      data: portfolio
-    });
-  } catch (error) {
-    console.error('[PortfolioController] Deposit error:', error.message);
-    res.status(500).json({ success: false, message: 'Failed to update holding' });
-  }
-};
-
 // Atomic Helper: Debit user wallet
 exports.debitUserWallet = async (userId, currency, amount) => {
   const curr = currency.toUpperCase();
   const debitAmount = roundToPrecision(amount, 2);
 
   const portfolio = await getOrCreatePortfolio(userId);
-  const holding = portfolio.holdings.find(h => h.currency === curr);
-
-  if (!holding || holding.amount < debitAmount) {
-    const available = holding ? holding.amount : 0;
-    throw new Error(`Insufficient ${curr} balance: Available ${available}, required ${debitAmount}`);
+  const updated = await Portfolio.findOneAndUpdate(
+    { _id: portfolio._id, holdings: { $elemMatch: { currency: curr, amount: { $gte: debitAmount } } } },
+    { $inc: { 'holdings.$.amount': -debitAmount } },
+    { new: true }
+  );
+  if (!updated) {
+    const holding = portfolio.holdings.find(item => item.currency === curr);
+    throw new Error(`Insufficient ${curr} balance: Available ${holding ? holding.amount : 0}, required ${debitAmount}`);
   }
-
-  holding.amount = safeSubtract(holding.amount, debitAmount);
-  await portfolio.save();
+  const holding = updated.holdings.find(item => item.currency === curr);
 
   if (curr === 'USD') {
     await User.findByIdAndUpdate(userId, { $inc: { walletBalance: -debitAmount } });

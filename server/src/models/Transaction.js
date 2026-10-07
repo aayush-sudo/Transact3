@@ -7,6 +7,7 @@ const TRANSACTION_STATUSES = [
   'ROUTE_SELECTED',
   'AWAITING_CONFIRMATION',
   'PROCESSING',
+  'SCHEDULED',
   'SETTLING',
   'COMPLETED',
   'COMPLETED_VIA_FALLBACK',
@@ -121,6 +122,8 @@ const TransactionSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
+  railFeeCurrency: { type: String, default: 'USD', uppercase: true },
+  railFeeAmount: { type: Number, default: 0 },
   totalSenderDebitUSD: {
     type: Number,
     required: true,
@@ -129,6 +132,11 @@ const TransactionSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
+  scheduledFor: Date,
+  timingRecommendation: { type: Object },
+  fundsReserved: { type: Boolean, default: false },
+  liquidityReserved: { type: Boolean, default: false },
+  settledAt: Date,
   simulationDurationMs: {
     type: Number,
     default: 1500,

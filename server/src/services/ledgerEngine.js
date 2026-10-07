@@ -2,16 +2,16 @@ const LedgerEntry = require('../models/LedgerEntry');
 const { roundToPrecision } = require('../utils/mathUtils');
 
 class LedgerEngine {
-  /**
-   * Record simulated deposit with balanced double-entry
-   */
+  /** Record an externally funded wallet credit with balanced double-entry. */
   async recordDeposit(params) {
     const {
       userId,
       userEmail,
       currency,
       amount,
-      description = 'Simulated Treasury / Wallet Deposit'
+      description = 'Wallet Deposit',
+      externalReference,
+      sourceName
     } = params;
 
     const timestamp = new Date();
@@ -19,21 +19,25 @@ class LedgerEngine {
     const curr = currency.toUpperCase();
 
     const entries = [
-      // 1. Debit Simulated External Reserve Pool
+      // 1. Debit the recorded external funding source.
       {
         userId: null,
-        accountId: `EXT-SIMULATED-FUNDING-${curr}`,
-        accountName: `External Simulated Funding Pool (${curr})`,
+        quoteId: externalReference,
+        accountId: externalReference?.startsWith('TEST-CREDIT-')
+          ? `PLATFORM-TEST-FUNDS-${curr}`
+          : `${externalReference ? 'EXT-RAZORPAY' : 'EXT-EXTERNAL'}-FUNDING-${curr}`,
+        accountName: sourceName || `${externalReference ? 'Razorpay' : 'External'} Funding (${curr})`,
         currency: curr,
         amount: safeAmount,
         entryType: 'DEPOSIT',
         direction: 'DEBIT',
-        description: `External liquidity injected for user deposit`,
+        description: `${sourceName || 'External funds'} recorded for wallet credit`,
         timestamp
       },
       // 2. Credit User Multi-Currency Wallet
       {
         userId,
+        quoteId: externalReference,
         accountId: `USER-WALLET-${userId}-${curr}`,
         accountName: `User Wallet (${userEmail || userId})`,
         currency: curr,
@@ -45,7 +49,17 @@ class LedgerEngine {
       }
     ];
 
-    await LedgerEntry.insertMany(entries);
+    if (externalReference) {
+      for (const entry of entries) {
+        await LedgerEntry.updateOne(
+          { quoteId: externalReference, accountId: entry.accountId, entryType: 'DEPOSIT' },
+          { $setOnInsert: entry },
+          { upsert: true }
+        );
+      }
+    } else {
+      await LedgerEntry.insertMany(entries);
+    }
 
     return {
       success: true,
@@ -71,6 +85,8 @@ class LedgerEngine {
       sourceAmount,
       destinationAmount,
       railFeeUSD,
+      railFeeCurrency = 'USD',
+      railFeeAmount = railFeeUSD,
       selectedRail
     } = params;
 
@@ -79,8 +95,6 @@ class LedgerEngine {
     const destCurr = destinationCurrency.toUpperCase();
     const safeSourceAmount = roundToPrecision(sourceAmount, 2);
     const safeDestAmount = roundToPrecision(destinationAmount, 2);
-    const safeFeeUSD = roundToPrecision(railFeeUSD, 2);
-
     const entries = [
       // 1. Debit Sender User Account for Principal
       {
@@ -102,14 +116,14 @@ class LedgerEngine {
         transactionId,
         quoteId,
         userId: senderId,
-        accountId: `USER-WALLET-${senderId}-USD`,
+        accountId: `USER-WALLET-${senderId}-${railFeeCurrency}`,
         accountName: `Sender Wallet (${senderEmail})`,
-        currency: 'USD',
-        amount: safeFeeUSD,
+        currency: railFeeCurrency,
+        amount: roundToPrecision(railFeeAmount, 2),
         entryType: 'FEE',
         direction: 'DEBIT',
         settlementRail: selectedRail,
-        description: `Rail transaction fee for ${selectedRail}: $${safeFeeUSD}`,
+        description: `Rail transaction fee for ${selectedRail}: ${roundToPrecision(railFeeAmount, 2)} ${railFeeCurrency}`,
         timestamp
       },
       // 3. Credit Rail Clearing Fee Revenue Account
@@ -118,8 +132,8 @@ class LedgerEngine {
         quoteId,
         accountId: `FEE-REVENUE-${selectedRail}`,
         accountName: `Rail Fee Revenue (${selectedRail})`,
-        currency: 'USD',
-        amount: safeFeeUSD,
+        currency: railFeeCurrency,
+        amount: roundToPrecision(railFeeAmount, 2),
         entryType: 'FEE',
         direction: 'CREDIT',
         settlementRail: selectedRail,

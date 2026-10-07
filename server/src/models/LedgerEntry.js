@@ -56,5 +56,9 @@ LedgerEntrySchema.index({ accountId: 1, timestamp: -1 });
 LedgerEntrySchema.index({ transactionId: 1 });
 LedgerEntrySchema.index({ userId: 1, timestamp: -1 });
 LedgerEntrySchema.index({ entryType: 1 });
+LedgerEntrySchema.index(
+  { quoteId: 1, accountId: 1 },
+  { unique: true, partialFilterExpression: { entryType: 'DEPOSIT', quoteId: { $type: 'string' } } }
+);
 
 module.exports = mongoose.model('LedgerEntry', LedgerEntrySchema);
