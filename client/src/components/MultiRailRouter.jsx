@@ -304,7 +304,7 @@ const MultiRailRouter = () => {
                   })}
                 </div>
                 <p className="text-[11px] text-sky-900">
-                  Source: Wise public comparison feed · fetched {providerQuotes.timestamp ? new Date(providerQuotes.timestamp).toLocaleString() : 'recently'}. Quote collection dates vary by provider. Offers are non-binding; confirm directly before paying.
+                  Source: public provider comparison feed · fetched {providerQuotes.timestamp ? new Date(providerQuotes.timestamp).toLocaleString() : 'recently'}. Quote collection dates vary by provider. Offers are non-binding; confirm directly before paying.
                 </p>
               </>
             ) : (

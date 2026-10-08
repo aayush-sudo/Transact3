@@ -46,11 +46,11 @@ The Transact3 platform is structured into clean, decoupled tiers:
 
 Transact3 presents estimated characteristics for three route types. The named payment networks are examples of route categories and are not connected to Transact3:
 
-The fees in this table are calibrated model inputs, **not live tariffs fetched from the named networks**. Route comparison can also display separate provider-reported snapshots from Wise's public comparison feed when that feed is available. Each provider's quote collection time is shown because quote ages vary; snapshots are indicative and must be confirmed with the provider before payment.
+The fees in this table are calibrated model inputs, **not live tariffs fetched from the named networks**. Route comparison can also display separate provider-reported snapshots from a public comparison feed when available. Each provider's quote collection time is shown because quote ages vary; snapshots are indicative and must be confirmed with the provider before payment.
 
 | Rail ID | Route Category | Typical Use | Estimated Base Fee (USD) | Variable (bps) | Indicative Delivery Time |
 | :--- | :--- | :--- | :---: | :---: | :---: |
-| **`REGIONAL_INSTANT`** | Regional instant | Domestic instant clearing categories | **$1.50** | **2 bps** (0.02%) | ~1 second |
+| **`REGIONAL_INSTANT`** | Domestic instant payment (small amounts) | Everyday, lower-value domestic payments; timing is illustrative and settlement stays within the platform | **$1.50** | **2 bps** (0.02%) | ~1 second (estimate) |
 | **`CARD_PUSH`** | Card payout | Debit-to-card payout categories | **$3.50** | **15 bps** (0.15%) | ~9 minutes |
 | **`SWIFT_BATCH`** | Correspondent transfer | Multi-hop bank transfer categories | **$25.00** | **10 bps** (0.10%) | 24 to 48 hours |
 
