@@ -4,12 +4,11 @@ const { calculateRailFee, roundToPrecision } = require('../utils/mathUtils');
 
 /**
  * RailPricingService
- * Institutional & Live API Cross-Border Payment Rail Pricing Engine.
+ * Modeled route pricing plus an independent public provider-comparison feed.
  *
  * Supports:
- * 1. Live market pricing queries via Wise Platform comparison engine (real-time bank & fintech fee benchmarks).
- * 2. Institutional rule-based fee breakdown calibrated to SWIFT GPI, FedNow, Visa Direct, and RTGS clearing tariffs.
- * 3. Detailed itemization: Base Access Fee, Variable Volume Bps, Intermediary Correspondent Deducts, Weekend Surcharges.
+ * Provider comparison snapshots are informational and do not represent the modeled routes.
+ * Modeled route fees are calibrated estimates, not provider tariffs.
  */
 class RailPricingService {
   constructor() {
@@ -25,11 +24,11 @@ class RailPricingService {
     const src = (sourceCurrency || 'USD').toUpperCase();
     const dst = (destinationCurrency || 'EUR').toUpperCase();
     const amt = Number(amount) || 1000;
-    const cacheKey = `WISE_${src}_${dst}_${Math.round(amt)}`;
+    const cacheKey = `WISE_${src}_${dst}_${amt.toFixed(2)}`;
 
     const cached = this.cache.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp < this.cacheTTLMs)) {
-      return { success: true, data: cached.data, source: 'CACHED_LIVE_API' };
+      return { success: true, data: cached.data, source: 'CACHED_LIVE_API', timestamp: new Date(cached.timestamp) };
     }
 
     try {
@@ -39,23 +38,42 @@ class RailPricingService {
         headers: { 'User-Agent': 'Transact3-Payment-Engine/1.0' }
       });
 
-      if (response.data && Array.isArray(response.data.providers) && response.data.providers.length > 0) {
-        const providers = response.data.providers.map(p => ({
-          name: p.name,
-          fee: p.quotes && p.quotes[0] ? p.quotes[0].fee : null,
-          markupPct: p.quotes && p.quotes[0] ? p.quotes[0].markup : null,
-          rate: p.quotes && p.quotes[0] ? p.quotes[0].rate : null,
-          receivedAmount: p.quotes && p.quotes[0] ? p.quotes[0].receivedAmount : null
-        }));
+      if (response.data && Array.isArray(response.data.providers)) {
+        const providers = response.data.providers.flatMap(provider => {
+          const quote = provider.quotes?.[0];
+          if (!quote || !Number.isFinite(Number(quote.rate)) || !Number.isFinite(Number(quote.receivedAmount))) {
+            return [];
+          }
+          return [{
+            name: provider.name,
+            type: provider.type || 'moneyTransferProvider',
+            fee: quote.fee != null && Number.isFinite(Number(quote.fee)) ? Number(quote.fee) : null,
+            feeCurrency: typeof quote.feeCurrency === 'string' ? quote.feeCurrency : null,
+            markupPct: quote.markup != null && Number.isFinite(Number(quote.markup)) ? Number(quote.markup) : null,
+            rate: Number(quote.rate),
+            receivedAmount: Number(quote.receivedAmount),
+            deliveryEstimation: quote.deliveryEstimation || null,
+            dateCollected: quote.dateCollected || null
+          }];
+        });
 
         this.cache.set(cacheKey, { data: providers, timestamp: Date.now() });
-        return { success: true, data: providers, source: 'LIVE_API' };
+        return { success: true, data: providers, source: 'LIVE_PROVIDER_COMPARISON', timestamp: new Date() };
       }
-    } catch (err) {
-      // Graceful fallback to calibrated engine
+      return {
+        success: false,
+        data: [],
+        source: 'UNAVAILABLE',
+        message: 'Provider comparison returned no current quotes.'
+      };
+    } catch {
+      return {
+        success: false,
+        data: [],
+        source: 'UNAVAILABLE',
+        message: 'Live provider comparisons are temporarily unavailable.'
+      };
     }
-
-    return { success: false, data: null, source: 'CALIBRATED_ENGINE' };
   }
 
   /**
@@ -139,7 +157,7 @@ class RailPricingService {
         weekendSurchargeUSD: 10.00,
         settlementTime: '24–48 hours (delayed over weekend)',
         bestFor: 'Large legacy corporate wires requiring broad global bank reach',
-        realWorldSource: 'SWIFT GPI / Federal Reserve International Service Tariff'
+        pricingSource: 'CALIBRATED_MODEL_ESTIMATE'
       },
       {
         railId: 'INSTANT_PAYMENT_LINK',
@@ -151,7 +169,7 @@ class RailPricingService {
         weekendSurchargeUSD: 0.00,
         settlementTime: '~1–2 seconds (24/7/365)',
         bestFor: 'Retail and instant B2B payments under $100,000',
-        realWorldSource: 'FedNow / SEPA Instant Credit Transfer (SCT Inst) Scheme'
+        pricingSource: 'CALIBRATED_MODEL_ESTIMATE'
       },
       {
         railId: 'CARD_PAYOUT',
@@ -163,7 +181,7 @@ class RailPricingService {
         weekendSurchargeUSD: 0.00,
         settlementTime: '~5–15 minutes',
         bestFor: 'Fast disbursements directly to debit/credit cards',
-        realWorldSource: 'Visa Direct / Mastercard Send Global Payout Tariffs'
+        pricingSource: 'CALIBRATED_MODEL_ESTIMATE'
       },
       {
         railId: 'RTGS_SETTLEMENT',
@@ -175,7 +193,7 @@ class RailPricingService {
         weekendSurchargeUSD: 0.00,
         settlementTime: '~15 minutes (operating window 07:00–18:00 UTC)',
         bestFor: 'High-value treasury & corporate wires ($50k–$50M)',
-        realWorldSource: 'Federal Reserve Fedwire Funds Service / ECB TARGET2'
+        pricingSource: 'CALIBRATED_MODEL_ESTIMATE'
       }
     ];
   }

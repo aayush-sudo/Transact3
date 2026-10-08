@@ -26,8 +26,8 @@ const RAIL_CONFIG = {
   },
   INSTANT_PAYMENT_LINK: {
     id: 'INSTANT_PAYMENT_LINK',
-    name: 'Cross-Border Instant Payment',
-    description: 'Interconnected domestic instant-payment systems facilitating fast retail cross-border transfers.',
+    name: 'Modeled cross-border instant route',
+    description: 'Illustrative timing for interconnected domestic instant-payment systems; no live payment network is connected.',
     baseFeeUSD: 1.50,
     variableFeeBps: 2, // 2 bps = 0.0002 (0.02%)
     variableFeePct: 0.0002,

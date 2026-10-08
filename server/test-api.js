@@ -56,6 +56,7 @@ async function startApi() {
       MONGO_URI: mongoServer.getUri(),
       PORT: String(port),
       JWT_SECRET: 'transact3-api-test-secret',
+      EXCHANGE_RATE_API_KEY: '',
       RAZORPAY_KEY_ID: '',
       RAZORPAY_KEY_SECRET: '',
       FASTAPI_URL: 'http://127.0.0.1:1'
@@ -129,6 +130,24 @@ test('authenticated payment schedules once, reserves capacity, and settles at it
   const railsStatus = await request('/orchestration/rails');
   assert.equal(railsStatus.response.status, 200);
   assert.equal(railsStatus.body.data.length, 3);
+  const invalidProviderPair = await request('/orchestration/provider-quotes', {
+    method: 'POST',
+    body: { sourceCurrency: 'XXX', destinationCurrency: 'INR', amount: 100 }
+  });
+  assert.equal(invalidProviderPair.response.status, 400);
+  const converted = await request('/currency/convert', {
+    method: 'POST',
+    body: { base: 'USD', target: 'INR', amount: 123.45 }
+  });
+  assert.equal(converted.response.status, 200);
+  assert.equal(converted.body.amount, 123.45);
+  assert.equal(converted.body.is_mock, true);
+  assert.equal(converted.body.convertedAmount, Number((123.45 * converted.body.rate).toFixed(2)));
+  const invalidConversion = await request('/currency/convert', {
+    method: 'POST',
+    body: { base: 'USD', target: 'INR', amount: 0 }
+  });
+  assert.equal(invalidConversion.response.status, 400);
 
   const aliceToken = await login('alice@transact3.com');
   const bobToken = await login('bob@transact3.com');
@@ -153,6 +172,10 @@ test('authenticated payment schedules once, reserves capacity, and settles at it
   assert.equal(comparison.response.status, 200, comparison.body.message);
   assert.equal(comparison.body.success, true);
   assert.equal(comparison.body.data.evaluatedRails.length, 3);
+  assert.ok(
+    comparison.body.data.evaluatedRails.every(rail => rail.pricing_source === 'CALIBRATED_INSTITUTIONAL'),
+    'Modeled route prices must be identified as calibrated estimates'
+  );
   assert.ok(comparison.body.data.recommendedRail, 'Comparison should recommend an eligible route');
 
   const deniedAdminAccess = await request('/admin/metrics', { token: aliceToken });

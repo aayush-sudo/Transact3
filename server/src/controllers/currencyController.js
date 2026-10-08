@@ -1,4 +1,5 @@
 const { getExchangeRates, getHistoricalRates } = require('../services/currencyService');
+const { isCurrencySupported } = require('../config/currencies');
 
 // @desc    Get latest exchange rates
 // @route   GET /api/currency/latest?base=USD
@@ -23,27 +24,39 @@ exports.getLatestRates = async (req, res) => {
 exports.convertCurrency = async (req, res) => {
   try {
     const { base, target, amount } = req.body;
-    
-    if (!base || !target || !amount) {
+    const normalizedBase = typeof base === 'string' ? base.toUpperCase() : '';
+    const normalizedTarget = typeof target === 'string' ? target.toUpperCase() : '';
+    const numericAmount = Number(amount);
+
+    if (!normalizedBase || !normalizedTarget || !Number.isFinite(numericAmount) || numericAmount <= 0) {
       return res.status(400).json({ success: false, message: 'Please provide base, target, and amount' });
     }
+    if (!isCurrencySupported(normalizedBase) || !isCurrencySupported(normalizedTarget) || numericAmount > 1e12) {
+      return res.status(400).json({ success: false, message: 'Unsupported currency or amount is too large' });
+    }
+    if (normalizedBase === normalizedTarget) {
+      return res.status(400).json({ success: false, message: 'Choose two different currencies' });
+    }
 
-    const data = await getExchangeRates(base);
+    const data = await getExchangeRates(normalizedBase);
     
-    const rate = data.conversion_rates[target];
+    const rate = data.conversion_rates[normalizedTarget];
     if (!rate) {
       return res.status(400).json({ success: false, message: 'Invalid target currency' });
     }
 
-    const convertedAmount = (amount * rate).toFixed(2);
+    const convertedAmount = Number((numericAmount * rate).toFixed(normalizedTarget === 'JPY' ? 0 : 2));
 
     res.status(200).json({
       success: true,
-      base,
-      target,
+      base: normalizedBase,
+      target: normalizedTarget,
       rate,
-      amount,
-      convertedAmount
+      amount: numericAmount,
+      convertedAmount,
+      source: data.source,
+      timestamp: data.timestamp,
+      is_mock: data.is_mock
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to convert currency' });

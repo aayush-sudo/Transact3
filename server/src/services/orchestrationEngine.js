@@ -102,6 +102,7 @@ class MultiRailOrchestrationEngine {
         base_fee_usd: rail.config.baseFeeUSD,
         variable_fee_bps: rail.config.variableFeeBps,
         est_fee_usd: feeDetails.totalFeeUSD,
+        pricing_source: feeDetails.pricingSource,
         fixed_fee_usd: feeDetails.fixedFeeUSD,
         variable_fee_usd: feeDetails.variableFeeUSD,
         est_latency_hours: estLatencyHours,
@@ -234,7 +235,8 @@ class MultiRailOrchestrationEngine {
         icon: match ? match.icon : 'Zap',
         fixed_fee_usd: match ? match.fixed_fee_usd : 0,
         variable_fee_usd: match ? match.variable_fee_usd : 0,
-        simulation_duration_ms: match ? match.simulation_duration_ms : 1200
+        simulation_duration_ms: match ? match.simulation_duration_ms : 1200,
+        pricing_source: match ? match.pricing_source : 'CALIBRATED_INSTITUTIONAL'
       };
     });
 

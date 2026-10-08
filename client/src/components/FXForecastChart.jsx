@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -11,7 +11,6 @@ import {
   Legend,
   Filler
 } from 'chart.js';
-import { TrendingUp, Clock, AlertCircle } from 'lucide-react';
 import api from '../services/api';
 
 ChartJS.register(
@@ -29,11 +28,7 @@ const FXForecastChart = ({ base = 'USD', target = 'INR' }) => {
   const [forecastData, setForecastData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchForecast();
-  }, [base, target]);
-
-  const fetchForecast = async () => {
+  const fetchForecast = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await api.post('/orchestration/fx-forecast', {
@@ -46,12 +41,17 @@ const FXForecastChart = ({ base = 'USD', target = 'INR' }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [base, target]);
+
+  useEffect(() => {
+    const initialFetch = setTimeout(fetchForecast, 0);
+    return () => clearTimeout(initialFetch);
+  }, [fetchForecast]);
 
   if (loading) {
     return (
-      <div className="bg-gray-800/80 rounded-2xl p-6 border border-gray-700/60 flex items-center justify-center min-h-[300px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-400" />
+      <div className="flex min-h-[300px] items-center justify-center rounded-2xl border border-slate-200 bg-white p-6">
+        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-emerald-700" />
       </div>
     );
   }
@@ -94,37 +94,37 @@ const FXForecastChart = ({ base = 'USD', target = 'INR' }) => {
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: '#1f2937',
-        titleColor: '#10b981',
-        bodyColor: '#f3f4f6',
-        borderColor: '#374151',
+        backgroundColor: '#ffffff',
+        titleColor: '#047857',
+        bodyColor: '#334155',
+        borderColor: '#cbd5e1',
         borderWidth: 1
       }
     },
     scales: {
-      x: { grid: { color: 'rgba(55, 65, 81, 0.3)' }, ticks: { color: '#9ca3af' } },
-      y: { grid: { color: 'rgba(55, 65, 81, 0.3)' }, ticks: { color: '#9ca3af' } }
+      x: { grid: { color: 'rgba(148, 163, 184, 0.25)' }, ticks: { color: '#64748b' } },
+      y: { grid: { color: 'rgba(148, 163, 184, 0.25)' }, ticks: { color: '#64748b' } }
     }
   };
 
   return (
-    <div className="bg-gray-800/80 backdrop-blur-md rounded-2xl p-5 border border-gray-700/60 shadow-xl space-y-4">
+    <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold uppercase tracking-widest text-emerald-400">PREDICTIVE FX ENGINE</span>
-            <span className="text-[10px] font-mono font-extrabold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
+            <span className="text-xs font-bold uppercase tracking-widest text-emerald-700">Predictive FX outlook</span>
+            <span className="rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-mono font-extrabold text-emerald-800">
               {forecastData.confidencePct}% Confidence
             </span>
           </div>
-          <h3 className="text-lg font-bold text-white mt-0.5">
+          <h3 className="mt-0.5 text-lg font-bold text-slate-900">
             {base}/{target} Exchange Rate Forecast
           </h3>
         </div>
 
         <div className="text-right font-mono">
-          <span className="text-xl font-extrabold text-white">1 {base} = {current} {target}</span>
-          <p className="text-xs text-gray-400">Current Reference Rate</p>
+          <span className="text-xl font-extrabold text-slate-900">1 {base} = {current} {target}</span>
+          <p className="text-xs text-slate-500">Current reference rate</p>
         </div>
       </div>
 
@@ -134,22 +134,22 @@ const FXForecastChart = ({ base = 'USD', target = 'INR' }) => {
       </div>
 
       {/* Horizon Predictions Grid */}
-      <div className="grid grid-cols-4 gap-2 pt-2 border-t border-gray-700/60">
-        <div className="bg-gray-900/60 p-2.5 rounded-xl text-center border border-gray-700/30 font-mono">
-          <span className="text-[10px] text-gray-400 block font-semibold">+6 Hours</span>
-          <span className="text-sm font-bold text-gray-200">{preds.h6}</span>
+      <div className="grid grid-cols-4 gap-2 border-t border-slate-200 pt-2">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-center font-mono">
+          <span className="block text-[10px] font-semibold text-slate-500">+6 Hours</span>
+          <span className="text-sm font-bold text-slate-800">{preds.h6}</span>
         </div>
-        <div className="bg-gray-900/60 p-2.5 rounded-xl text-center border border-gray-700/30 font-mono">
-          <span className="text-[10px] text-gray-400 block font-semibold">+12 Hours</span>
-          <span className="text-sm font-bold text-emerald-400">{preds.h12}</span>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-center font-mono">
+          <span className="block text-[10px] font-semibold text-slate-500">+12 Hours</span>
+          <span className="text-sm font-bold text-emerald-800">{preds.h12}</span>
         </div>
-        <div className="bg-gray-900/60 p-2.5 rounded-xl text-center border border-gray-700/30 font-mono">
-          <span className="text-[10px] text-gray-400 block font-semibold">+24 Hours</span>
-          <span className="text-sm font-bold text-gray-200">{preds.h24}</span>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-center font-mono">
+          <span className="block text-[10px] font-semibold text-slate-500">+24 Hours</span>
+          <span className="text-sm font-bold text-slate-800">{preds.h24}</span>
         </div>
-        <div className="bg-gray-900/60 p-2.5 rounded-xl text-center border border-gray-700/30 font-mono">
-          <span className="text-[10px] text-gray-400 block font-semibold">+48 Hours</span>
-          <span className="text-sm font-bold text-gray-200">{preds.h48}</span>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-center font-mono">
+          <span className="block text-[10px] font-semibold text-slate-500">+48 Hours</span>
+          <span className="text-sm font-bold text-slate-800">{preds.h48}</span>
         </div>
       </div>
     </div>

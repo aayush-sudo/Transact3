@@ -17,6 +17,9 @@ const MultiRailRouter = () => {
   const [recipients, setRecipients] = useState([]);
   const [recipientEmail, setRecipientEmail] = useState('');
   const [loading, setLoading] = useState(false);
+  const [providerQuotes, setProviderQuotes] = useState(null);
+  const [providerQuotesLoading, setProviderQuotesLoading] = useState(false);
+  const [providerQuotesError, setProviderQuotesError] = useState('');
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [error, setError] = useState(null);
 
@@ -48,6 +51,8 @@ const MultiRailRouter = () => {
     setError(null);
     setRouteAnalysis(null);
     setSelectedRailId(null);
+    setProviderQuotes(null);
+    setProviderQuotesError('');
     try {
       const { data } = await api.post('/orchestration/route', {
         sourceCurrency,
@@ -58,6 +63,28 @@ const MultiRailRouter = () => {
       });
       setRouteAnalysis(data.data);
       setSelectedRailId(data.data.recommendedRail?.id || null);
+      setProviderQuotesLoading(true);
+      try {
+        const { data: comparison } = await api.post('/orchestration/provider-quotes', {
+          sourceCurrency,
+          destinationCurrency,
+          amount: data.data.sourceAmount
+        });
+        const fetchedAt = Date.now();
+        setProviderQuotes({
+          ...comparison.data,
+          data: comparison.data.data.map((provider) => ({
+            ...provider,
+            isStale: provider.dateCollected
+              ? fetchedAt - new Date(provider.dateCollected).getTime() > 24 * 60 * 60 * 1000
+              : false
+          }))
+        });
+      } catch (providerError) {
+        setProviderQuotesError(providerError.response?.data?.message || 'Live provider comparisons are temporarily unavailable.');
+      } finally {
+        setProviderQuotesLoading(false);
+      }
     } catch (err) {
       setError(err.response?.data?.message || 'Could not compare routes. Please try again.');
     } finally {
@@ -209,6 +236,81 @@ const MultiRailRouter = () => {
               </div>
             </div>
           )}
+          <section className="space-y-3 rounded-xl border border-sky-200 bg-sky-50 p-4">
+            <div>
+              <h3 className="font-bold text-sky-950">Provider comparison snapshots</h3>
+              <p className="mt-1 text-xs text-sky-900">
+                Independent provider-reported quotes for {routeAnalysis.sourceAmount} {sourceCurrency} → {destinationCurrency}; collection times vary and these are not binding offers.
+              </p>
+            </div>
+            {providerQuotesLoading ? (
+              <p className="flex items-center gap-2 text-sm text-sky-900"><Loader2 size={15} className="animate-spin" /> Fetching current provider comparisons…</p>
+            ) : providerQuotesError ? (
+              <p role="status" className="text-sm text-amber-900">{providerQuotesError}</p>
+            ) : providerQuotes?.data?.length ? (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {providerQuotes.data.slice(0, 6).map((provider, index) => {
+                    const collectedAt = provider.dateCollected ? new Date(provider.dateCollected) : null;
+                    return (
+                      <article key={`${provider.name}-${index}`} className="rounded-lg border border-sky-200 bg-white p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <h4 className="text-sm font-bold text-slate-900">{provider.name}</h4>
+                          <div className="flex flex-col items-end gap-1">
+                            <span className="text-[10px] uppercase text-slate-500">
+                              {provider.type === 'bank' ? 'Bank' : 'Transfer provider'}
+                            </span>
+                            {provider.isStale && <span className="text-[10px] font-semibold text-amber-700">Older than 24 hours</span>}
+                          </div>
+                        </div>
+                        <dl className="mt-2 space-y-1.5 text-xs">
+                          <div className="flex justify-between gap-2">
+                            <dt className="text-slate-500">Provider fee{provider.feeCurrency ? ` (${provider.feeCurrency})` : ' (currency not supplied)'}</dt>
+                            <dd className="font-semibold text-slate-900">
+                              {provider.fee == null ? 'Not reported' : Number(provider.fee).toFixed(2)}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between gap-2">
+                            <dt className="text-slate-500">Quoted rate</dt>
+                            <dd className="font-semibold text-slate-900">{Number(provider.rate).toLocaleString(undefined, { maximumFractionDigits: 6 })}</dd>
+                          </div>
+                          <div className="flex justify-between gap-2">
+                            <dt className="text-slate-500">Recipient receives</dt>
+                            <dd className="font-semibold text-slate-900">{Number(provider.receivedAmount).toLocaleString(undefined, { maximumFractionDigits: 2 })} {destinationCurrency}</dd>
+                          </div>
+                          {provider.markupPct != null && (
+                            <div className="flex justify-between gap-2">
+                              <dt className="text-slate-500">Reported markup</dt>
+                              <dd className="font-semibold text-slate-900">{Number(provider.markupPct).toFixed(2)}%</dd>
+                            </div>
+                          )}
+                          <div className="flex justify-between gap-2">
+                            <dt className="text-slate-500">Quote collected</dt>
+                            <dd className="font-semibold text-slate-900">
+                              {collectedAt ? collectedAt.toLocaleString() : 'Not supplied'}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between gap-2">
+                            <dt className="text-slate-500">Delivery estimate</dt>
+                            <dd className="font-semibold text-slate-900">
+                              {provider.deliveryEstimation?.deliveryDate?.min
+                                ? new Date(provider.deliveryEstimation.deliveryDate.min).toLocaleString()
+                                : 'Not supplied'}
+                            </dd>
+                          </div>
+                        </dl>
+                      </article>
+                    );
+                  })}
+                </div>
+                <p className="text-[11px] text-sky-900">
+                  Source: Wise public comparison feed · fetched {providerQuotes.timestamp ? new Date(providerQuotes.timestamp).toLocaleString() : 'recently'}. Quote collection dates vary by provider. Offers are non-binding; confirm directly before paying.
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-sky-900">{providerQuotes?.message || 'No current provider quotes were returned for this currency pair.'}</p>
+            )}
+          </section>
           {routeAnalysis.timingRecommendation && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
               <p className="font-bold">
@@ -224,7 +326,7 @@ const MultiRailRouter = () => {
             <div className="flex items-end justify-between gap-2">
               <div>
                 <h3 className="font-bold text-slate-900">Three route options</h3>
-                <p className="text-xs text-slate-500">Ranked against your selected preference</p>
+                <p className="text-xs text-slate-500">Ranked against your selected preference; route fees below are modeled baselines, not provider tariffs.</p>
               </div>
               <span className="text-xs text-slate-500">{routeAnalysis.evaluatedRails?.length || 0} routes</span>
             </div>
@@ -252,7 +354,7 @@ const MultiRailRouter = () => {
                     {!rail.is_eligible && <p className="mt-2 text-xs text-rose-700">{rail.rejection_reason}</p>}
                     <dl className="mt-4 space-y-2 border-t border-slate-200 pt-3 text-xs">
                       <div className="flex justify-between gap-2">
-                        <dt className="text-slate-500">Estimated route fee</dt>
+                        <dt className="text-slate-500">Modeled fee estimate</dt>
                         <dd className="font-semibold text-slate-900">${Number(rail.est_fee_usd || 0).toFixed(2)}</dd>
                       </div>
                       <div className="flex justify-between gap-2">
@@ -280,7 +382,7 @@ const MultiRailRouter = () => {
                 Settlement is scheduled using the selected route estimate and FX guidance. Your wallet balance and route capacity are reserved until settlement.
               </p>
               <p className="text-xs text-slate-500">
-                This release models payout settlement internally; external payouts are not yet connected. Wallet funding uses Razorpay test mode.
+                This is an internal route simulation only. No instant-payment, card, or bank network is connected; actual delivery depends on an enabled provider and corridor. Wallet funding uses Razorpay test mode.
               </p>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <label className="flex-1 text-sm font-semibold text-slate-800">
