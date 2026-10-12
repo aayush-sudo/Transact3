@@ -30,8 +30,9 @@ Funds are reserved when a transfer is scheduled and credited to the recipient on
 | Route ID | Route Category | Reference Technology | Indicative Delivery Time | Estimated Base Fee | Typical Use |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **`SWIFT_BATCH`** | Correspondent transfer | Bank-to-bank network category | 36 Hours | \$25.00 + 10 bps | Large, non-urgent transfers |
-| **`REGIONAL_INSTANT`** | Regional instant | Domestic instant network category | 1 Second | \$1.50 + 2 bps | Fast low-to-medium value transfers |
-| **`CARD_PUSH`** | Card payout | Debit-to-card network category | 9 Mins | \$3.50 + 15 bps | Account-to-card payouts |
+| **`REGIONAL_INSTANT`** | Destination-local instant | Modeled local instant-clearing category | Under 60 seconds when eligible; retail threshold ≤ $1,000 USD equivalent | \$1.50 + 2 bps | Eligible low-value transfers |
+| **`CARD_PUSH`** | Card payout | Debit-to-card network category | Corridor- and notional-specific estimate | \$3.50 + 15 bps | Account-to-card payouts |
+| **`SWIFT_BATCH`** | Correspondent transfer | Modeled bank-clearing category | Corridor business windows, cutoffs, amount, and weekends determine the estimate | \$25.00 + 10 bps | Large or instant-ineligible transfers |
 
 ---
 
@@ -59,7 +60,7 @@ $$\text{Utility Score} = (w_{\text{reliability}} \cdot \text{Reliability}_R) - \
 
 ## 📊 Datasets & Data Architecture
 
-1. **Real-Time Exchange Rates**: Live REST ingestion via `ExchangeRate-API` across 15 global currency pairs.
+1. **Exchange Rates**: Live REST ingestion via `ExchangeRate-API` for the 10 supported currencies, with indicative fallback rates when the provider is unavailable.
 2. **Historical Time-Series OHLCV Dataset**: 90-day/365-day price series used for moving averages, volatility indicators, and model accuracy benchmarking (**MAE**, **RMSE**, **MAPE**).
 3. **Calibrated Payment Rail Benchmarks**: Industry parameters calibrated from published SWIFT GPI, FedNow, Visa Direct, and Circle USDC vault metrics.
 

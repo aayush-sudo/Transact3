@@ -13,6 +13,7 @@ const portfolioController = require('./portfolioController');
 const amlService = require('../services/amlService');
 const graphRouterService = require('../services/graphRouterService');
 const iso20022 = require('../utils/iso20022');
+const { getSettlementPlan } = require('../services/settlementPolicy');
 const { isCurrencySupported } = require('../config/currencies');
 const { roundToPrecision } = require('../utils/mathUtils');
 
@@ -176,8 +177,15 @@ exports.confirmAndExecuteTransaction = async (req, res, next) => {
       });
     }
 
+    const sourceAmount = Number(quotedRail.source_amount ?? quote.sourceAmount);
+    const destinationAmount = Number(quotedRail.destination_amount ?? quote.destinationAmount);
+    const sourceAmountUSD = Number(quotedRail.source_amount_usd ?? quote.sourceAmountUSD ?? sourceAmount);
+    const quotedRate = Number(quotedRail.quoted_rate ?? quote.quotedRate ?? 1);
+    const spreadBps = Number(quotedRail.spread_bps ?? quote.spreadBps ?? 30);
+    const fxCostUSD = Number(quotedRail.fx_cost_usd ?? quote.fxCostUSD ?? 0);
+
     // Strict eligibility check on the chosen rail
-    const eligibility = await liquidityManager.checkRailEligibility(railToUse, quote.sourceAmountUSD || quote.sourceAmount);
+    const eligibility = await liquidityManager.checkRailEligibility(railToUse, sourceAmountUSD);
     if (!eligibility.isEligible) {
       return res.status(400).json({
         success: false,
@@ -185,16 +193,25 @@ exports.confirmAndExecuteTransaction = async (req, res, next) => {
       });
     }
 
-    const sourceAmountUSD = Number(quote.sourceAmountUSD) || (quote.sourceCurrency === 'USD' ? Number(quote.sourceAmount) : Number(quote.sourceAmount));
     const railFeeBreakdown = railAdapter.getFeeBreakdown(sourceAmountUSD);
     const activeRailFeeUSD = railFeeBreakdown.totalFeeUSD;
-    const activeLatencyHours = Number(quotedRail.est_latency_hours) || railAdapter.estimateLatency();
+    const settlementPlan = getSettlementPlan(
+      quote.sourceCurrency,
+      quote.destinationCurrency,
+      sourceAmountUSD,
+      railToUse
+    );
+    const activeLatencyHours = settlementPlan.maximumSettlementHours || Number(quotedRail.est_latency_hours) || railAdapter.estimateLatency();
     const timingRecommendation = quote.timingRecommendation || { deferHours: 0 };
     const deferHours = Math.max(0, Number(timingRecommendation.deferHours) || 0);
-    const scheduledFor = new Date(Date.now() + Math.max(activeLatencyHours, deferHours) * 3600000);
+    const earliestScheduledAt = new Date(settlementPlan.earliestSettlementAt || Date.now());
+    const latestScheduledAt = new Date(settlementPlan.latestSettlementAt || (Date.now() + activeLatencyHours * 3600000));
+    const deferredScheduledAt = new Date(Date.now() + deferHours * 3600000);
+    const estimatedCompletion = settlementPlan.is_instant ? earliestScheduledAt : latestScheduledAt;
+    const scheduledFor = new Date(Math.max(estimatedCompletion.getTime(), deferredScheduledAt.getTime()));
     const railFeeCurrency = quote.sourceCurrency;
     const railFeeAmount = roundToPrecision(
-      activeRailFeeUSD * (Number(quote.sourceAmount) / Math.max(Number(quote.sourceAmountUSD), 0.01)),
+      activeRailFeeUSD * (sourceAmount / Math.max(sourceAmountUSD, 0.01)),
       2
     );
     const totalSenderDebitUSD = roundToPrecision(sourceAmountUSD + activeRailFeeUSD, 2);
@@ -203,7 +220,7 @@ exports.confirmAndExecuteTransaction = async (req, res, next) => {
 
     // 3. Re-verify Sender Balance (Principal + Fee)
     const currentBalance = await portfolioController.checkUserBalance(senderId, quote.sourceCurrency);
-    const requiredSourceAmount = Number(quote.sourceAmount) + railFeeAmount;
+    const requiredSourceAmount = sourceAmount + railFeeAmount;
     if (currentBalance < requiredSourceAmount) {
       return res.status(400).json({
         success: false,
@@ -246,13 +263,13 @@ exports.confirmAndExecuteTransaction = async (req, res, next) => {
       paymentMode: quote.paymentMode || 'SEND_AMOUNT',
       sourceCurrency: quote.sourceCurrency,
       destinationCurrency: quote.destinationCurrency,
-      sourceAmount: quote.sourceAmount,
-      destinationAmount: quote.destinationAmount,
+      sourceAmount,
+      destinationAmount,
       referenceFXRate: quote.referenceRate || 1.0,
-      quotedFXRate: quote.quotedRate || 1.0,
-      executedFXRate: quote.quotedRate || 1.0,
-      fxSpreadBps: quote.spreadBps || 30,
-      fxCostUSD: quote.fxCostUSD || 0,
+      quotedFXRate: quotedRate,
+      executedFXRate: quotedRate,
+      fxSpreadBps: spreadBps,
+      fxCostUSD,
       fxSource: quote.fxAnalysis ? quote.fxAnalysis.source : 'LIVE_API',
       fxAnalysis: quote.fxAnalysis,
       selectedRail: railToUse,
@@ -264,12 +281,16 @@ exports.confirmAndExecuteTransaction = async (req, res, next) => {
       railFeeAmount,
       totalSenderDebitUSD,
       estimatedLatencyHours: activeLatencyHours,
+      settlementWindow: settlementPlan.settlementWindow,
+      appliedClearingRail: settlementPlan.appliedClearingRail,
+      isInstant: settlementPlan.is_instant,
+      instantIneligibilityReason: settlementPlan.instantIneligibilityReason,
       scheduledFor,
       timingRecommendation,
       simulationDurationMs: railAdapter.config.simulationDurationMs || 1200,
       riskScore: quote.riskScore || 15,
-      totalCostUSD: roundToPrecision((quote.fxCostUSD || 0) + activeRailFeeUSD, 2),
-      totalCostBps: roundToPrecision((((quote.fxCostUSD || 0) + activeRailFeeUSD) / (sourceAmountUSD || 1)) * 10000, 1),
+      totalCostUSD: roundToPrecision(fxCostUSD + activeRailFeeUSD, 2),
+      totalCostBps: roundToPrecision(((fxCostUSD + activeRailFeeUSD) / (sourceAmountUSD || 1)) * 10000, 1),
       aiSavingsUSD: quote.aiSavingsUSD || 0,
       clearingReference: clearingRef,
       status: 'PROCESSING'
@@ -279,7 +300,7 @@ exports.confirmAndExecuteTransaction = async (req, res, next) => {
     let feeReserved = false;
     let liquidityReserved = false;
     try {
-      await portfolioController.debitUserWallet(senderId, quote.sourceCurrency, quote.sourceAmount);
+      await portfolioController.debitUserWallet(senderId, quote.sourceCurrency, sourceAmount);
       principalReserved = true;
       if (railFeeAmount > 0) {
         await portfolioController.debitUserWallet(senderId, railFeeCurrency, railFeeAmount);
@@ -296,7 +317,7 @@ exports.confirmAndExecuteTransaction = async (req, res, next) => {
     } catch (error) {
       if (liquidityReserved) await liquidityManager.restoreLiquidity(railToUse, sourceAmountUSD);
       if (feeReserved) await portfolioController.creditUserWallet(senderId, railFeeCurrency, railFeeAmount);
-      if (principalReserved) await portfolioController.creditUserWallet(senderId, quote.sourceCurrency, quote.sourceAmount);
+      if (principalReserved) await portfolioController.creditUserWallet(senderId, quote.sourceCurrency, sourceAmount);
       await Transaction.findByIdAndUpdate(transactionDoc._id, { status: 'FAILED' });
       if (idempotencyClaimed) {
         await IdempotencyRecord.deleteOne({ idempotencyKey, userId: senderId });
@@ -309,12 +330,12 @@ exports.confirmAndExecuteTransaction = async (req, res, next) => {
 
     // 7. Calculate TCA
     const tca = tcaEngine.calculateTCA({
-      sourceAmountUSD: quote.sourceAmountUSD || quote.sourceAmount,
-      fxCostUSD: quote.fxCostUSD,
+      sourceAmountUSD,
+      fxCostUSD,
       railFeeUSD: activeRailFeeUSD,
-      spreadBps: quote.spreadBps,
+      spreadBps,
       referenceRate: quote.referenceRate,
-      executedRate: quote.quotedRate,
+      executedRate: quotedRate,
       selectedLatencyHours: activeLatencyHours
     });
 
@@ -327,7 +348,18 @@ exports.confirmAndExecuteTransaction = async (req, res, next) => {
       data: {
         transaction: transactionDoc,
         scheduledFor,
-        expectedSettlementDisplay: quotedRail.expected_settlement_display,
+        expectedSettlementDisplay: settlementPlan.settlementWindow,
+        settlementEstimate: {
+          minimumSettlementHours: settlementPlan.minimumSettlementHours,
+          maximumSettlementHours: settlementPlan.maximumSettlementHours,
+          earliestSettlementAt: earliestScheduledAt,
+          latestSettlementAt: latestScheduledAt,
+          appliedClearingRail: settlementPlan.appliedClearingRail,
+          is_instant: settlementPlan.is_instant,
+          instantFeasibility: settlementPlan.instantFeasibility,
+          instantIneligibilityReason: settlementPlan.instantIneligibilityReason
+        },
+        finalNetPayout: destinationAmount,
         timingRecommendation,
         tca,
         senderRemainingBalance: {

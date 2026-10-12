@@ -4,9 +4,11 @@ const liquidityManager = require('./liquidityManager');
 const fxAnalysisEngine = require('./fxAnalysisEngine');
 const fxForecastingEngine = require('./fxForecastingEngine');
 const fastApiClient = require('./fastapiClient');
+const fxRateEngine = require('./fxRateEngine');
 const { getExchangeRates } = require('./currencyService');
 const { isCurrencySupported } = require('../config/currencies');
 const { getCorridorConfig } = require('../config/corridors');
+const { getInstantEligibility, getSettlementPlan } = require('./settlementPolicy');
 const { roundToPrecision, safeAdd, safeDivide, safeMultiply } = require('../utils/mathUtils');
 
 const ALL_RAIL_ADAPTERS = [
@@ -60,7 +62,7 @@ class MultiRailOrchestrationEngine {
     const usdRates = usdRatesData.conversion_rates || {};
     const srcVsUSD = usdRates[srcCurr] || 1.0;
 
-    // 3. Calculate Source & Destination amounts based on payment mode
+    // 3. Establish amount and instant-rail feasibility before scoring routes.
     let sourceAmount = numAmount;
     let destinationAmount = numAmount;
 
@@ -68,19 +70,11 @@ class MultiRailOrchestrationEngine {
       sourceAmount = numAmount;
       destinationAmount = numAmount;
     } else if (paymentMode === 'RECIPIENT_GETS') {
-      // User specified exact amount recipient must get: calculate required sourceAmount backwards
       destinationAmount = numAmount;
       sourceAmount = roundToPrecision(numAmount / fxRate, 2);
-    } else {
-      // User specified send amount: calculate destination amount
-      sourceAmount = numAmount;
-      destinationAmount = roundToPrecision(numAmount * fxRate, 2);
     }
 
-    // Amount in USD for global limits and rail checks
-    const sourceAmountUSD = roundToPrecision(sourceAmount / srcVsUSD, 2);
-    const spreadBps = corridorConfig.baseSpreadBps || 30;
-    const fxCostUSD = roundToPrecision(sourceAmountUSD * (spreadBps / 10000), 2);
+    let sourceAmountUSD = roundToPrecision(sourceAmount / srcVsUSD, 2);
 
     // 4. Evaluate all supported rails without skipping
     const railCandidatesForFastAPI = [];
@@ -90,9 +84,39 @@ class MultiRailOrchestrationEngine {
     const weights = PREFERENCE_WEIGHTS[pref];
 
     for (const rail of ALL_RAIL_ADAPTERS) {
-      const eligibility = await liquidityManager.checkRailEligibility(rail.id, sourceAmountUSD, corridorConfig);
-      const feeDetails = rail.getFeeBreakdown(sourceAmountUSD);
-      const estLatencyHours = rail.estimateLatency();
+      let routeSourceAmount = sourceAmount;
+      let routeSourceAmountUSD = sourceAmountUSD;
+      let routePricing = await fxRateEngine.calculateFXQuoteAsync(srcCurr, destCurr, routeSourceAmount, {
+        referenceRate: fxRate,
+        sourceAmountUSD: routeSourceAmountUSD,
+        settlementRail: rail.id
+      });
+      if (paymentMode === 'RECIPIENT_GETS' && srcCurr !== destCurr) {
+        routeSourceAmount = roundToPrecision(numAmount / routePricing.quotedRate, 2);
+        routeSourceAmountUSD = roundToPrecision(routeSourceAmount / srcVsUSD, 2);
+        routePricing = await fxRateEngine.calculateFXQuoteAsync(srcCurr, destCurr, routeSourceAmount, {
+          referenceRate: fxRate,
+          sourceAmountUSD: routeSourceAmountUSD,
+          settlementRail: rail.id
+        });
+      }
+      const routeDestinationAmount = paymentMode === 'RECIPIENT_GETS'
+        ? numAmount
+        : routePricing.destinationAmount;
+      const railInstantEligibility = getInstantEligibility(srcCurr, destCurr, routeSourceAmountUSD);
+      const standardBankingRequired = !railInstantEligibility.eligible;
+      const eligibility = await liquidityManager.checkRailEligibility(rail.id, routeSourceAmountUSD, corridorConfig);
+      const feeDetails = rail.getFeeBreakdown(routeSourceAmountUSD);
+      const settlementPlan = getSettlementPlan(srcCurr, destCurr, routeSourceAmountUSD, rail.id);
+      const forcedStandardRejection = standardBankingRequired && rail.id !== 'SWIFT_CORRESPONDENT'
+        ? railInstantEligibility.reason || 'Standard banking settlement is required for this corridor and amount.'
+        : null;
+      const localClearingUnavailable = rail.id === 'INSTANT_PAYMENT_LINK' && !railInstantEligibility.eligible
+        ? railInstantEligibility.reason
+        : null;
+      const rejectionReason = forcedStandardRejection || localClearingUnavailable || eligibility.rejectionReason;
+      const isEligible = eligibility.isEligible && !rejectionReason;
+      const estLatencyHours = settlementPlan.maximumSettlementHours || rail.estimateLatency();
 
       const candidate = {
         id: rail.id,
@@ -106,12 +130,27 @@ class MultiRailOrchestrationEngine {
         fixed_fee_usd: feeDetails.fixedFeeUSD,
         variable_fee_usd: feeDetails.variableFeeUSD,
         est_latency_hours: estLatencyHours,
-        expected_settlement_display: rail.config.expectedSettlementDisplay,
+        expected_settlement_display: settlementPlan.settlementWindow || rail.config.expectedSettlementDisplay,
+        minimum_settlement_hours: settlementPlan.minimumSettlementHours,
+        maximum_settlement_hours: settlementPlan.maximumSettlementHours,
+        applied_clearing_rail: settlementPlan.appliedClearingRail,
+        is_instant: settlementPlan.is_instant,
+        instant_feasibility: settlementPlan.instantFeasibility,
+        instant_ineligibility_reason: settlementPlan.instantIneligibilityReason,
+        earliest_settlement_at: settlementPlan.earliestSettlementAt,
+        latest_settlement_at: settlementPlan.latestSettlementAt,
         simulation_duration_ms: rail.config.simulationDurationMs || 1200,
         reliability_score: rail.config.reliabilityScore,
         available_liquidity_usd: eligibility.setting ? eligibility.setting.availableLiquidityUSD : 1000000,
-        is_eligible: eligibility.isEligible,
-        rejection_reason: eligibility.rejectionReason
+        is_eligible: isEligible,
+        rejection_reason: isEligible ? null : rejectionReason,
+        source_amount: routeSourceAmount,
+        source_amount_usd: routeSourceAmountUSD,
+        destination_amount: routeDestinationAmount,
+        quoted_rate: routePricing.quotedRate,
+        spread_bps: routePricing.spreadBps,
+        fx_cost_usd: routePricing.fxCostUSD,
+        final_net_payout: routeDestinationAmount
       };
 
       railCandidatesForFastAPI.push(candidate);
@@ -235,12 +274,40 @@ class MultiRailOrchestrationEngine {
         icon: match ? match.icon : 'Zap',
         fixed_fee_usd: match ? match.fixed_fee_usd : 0,
         variable_fee_usd: match ? match.variable_fee_usd : 0,
+        expected_settlement_display: match ? match.expected_settlement_display : rail.expected_settlement_display,
+        minimum_settlement_hours: match ? match.minimum_settlement_hours : rail.est_latency_hours,
+        maximum_settlement_hours: match ? match.maximum_settlement_hours : rail.est_latency_hours,
+        applied_clearing_rail: match ? match.applied_clearing_rail : rail.name,
+        is_instant: match ? match.is_instant : false,
+        instant_feasibility: match ? match.instant_feasibility : 'Ineligible',
+        instant_ineligibility_reason: match ? match.instant_ineligibility_reason : null,
+        earliest_settlement_at: match ? match.earliest_settlement_at : null,
+        latest_settlement_at: match ? match.latest_settlement_at : null,
+        source_amount: match ? match.source_amount : sourceAmount,
+        source_amount_usd: match ? match.source_amount_usd : sourceAmountUSD,
+        destination_amount: match ? match.destination_amount : destinationAmount,
+        quoted_rate: match ? match.quoted_rate : fxRate,
+        spread_bps: match ? match.spread_bps : spreadBps,
+        fx_cost_usd: match ? match.fx_cost_usd : fxCostUSD,
+        final_net_payout: match ? match.final_net_payout : destinationAmount,
+        is_eligible: Boolean(match && match.is_eligible && rail.is_eligible),
+        rejection_reason: match && !match.is_eligible ? match.rejection_reason : rail.rejection_reason,
         simulation_duration_ms: match ? match.simulation_duration_ms : 1200,
         pricing_source: match ? match.pricing_source : 'CALIBRATED_INSTITUTIONAL'
       };
     });
 
     const recommended = finalEvaluatedRails.find(r => r.is_eligible) || null;
+    if (!recommended) {
+      throw new Error('No payment rail met operational and liquidity constraints.');
+    }
+
+    sourceAmount = recommended.source_amount;
+    sourceAmountUSD = recommended.source_amount_usd;
+    destinationAmount = recommended.destination_amount;
+    const settlementPlan = getSettlementPlan(srcCurr, destCurr, sourceAmountUSD, recommended.id);
+    const spreadBps = recommended.spread_bps;
+    const fxCostUSD = recommended.fx_cost_usd;
 
     // SWIFT baseline comparison for TCA
     const swiftCandidate = finalEvaluatedRails.find(r => r.id === 'SWIFT_CORRESPONDENT' || r.id === 'SWIFT_BATCH') || { est_fee_usd: 25.0 + (sourceAmountUSD * 0.0010) };
@@ -255,8 +322,20 @@ class MultiRailOrchestrationEngine {
       destinationAmount,
       sourceAmountUSD,
       fxRate,
+      quotedRate: recommended.quoted_rate,
       fxCostUSD,
       spreadBps,
+      finalNetPayout: destinationAmount,
+      appliedClearingRail: settlementPlan.appliedClearingRail,
+      is_instant: settlementPlan.is_instant,
+      instantFeasibility: settlementPlan.instantFeasibility,
+      instantIneligibilityReason: settlementPlan.instantIneligibilityReason,
+      instantThresholdUSD: settlementPlan.instantThresholdUSD,
+      minimumSettlementHours: settlementPlan.minimumSettlementHours,
+      maximumSettlementHours: settlementPlan.maximumSettlementHours,
+      settlementWindow: settlementPlan.settlementWindow,
+      earliestSettlementAt: settlementPlan.earliestSettlementAt,
+      latestSettlementAt: settlementPlan.latestSettlementAt,
       fxAnalysis,
       timingRecommendation,
       priorityProfile: pref,

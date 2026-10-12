@@ -155,7 +155,7 @@ class RailPricingService {
         variableFeeBps: 10,
         variableFeeDescription: '10 bps (0.10%) volume assessment',
         weekendSurchargeUSD: 10.00,
-        settlementTime: '24–48 hours (delayed over weekend)',
+        settlementTime: 'Calculated per currency corridor, notional, local banking cutoff, and weekends',
         bestFor: 'Large legacy corporate wires requiring broad global bank reach',
         pricingSource: 'CALIBRATED_MODEL_ESTIMATE'
       },
@@ -167,8 +167,8 @@ class RailPricingService {
         variableFeeBps: 2,
         variableFeeDescription: '2 bps (0.02%) clearing fee',
         weekendSurchargeUSD: 0.00,
-        settlementTime: '~1–2 seconds (24/7/365)',
-        bestFor: 'Retail and instant B2B payments under $100,000',
+        settlementTime: 'Under 60 seconds when the corridor and retail amount are eligible',
+        bestFor: 'Eligible retail transfers up to $1,000 USD equivalent on configured local clearing corridors',
         pricingSource: 'CALIBRATED_MODEL_ESTIMATE'
       },
       {
@@ -179,7 +179,7 @@ class RailPricingService {
         variableFeeBps: 15,
         variableFeeDescription: '15 bps (0.15%) scheme cross-border assessment',
         weekendSurchargeUSD: 0.00,
-        settlementTime: '~5–15 minutes',
+        settlementTime: 'Calculated per currency corridor and notional',
         bestFor: 'Fast disbursements directly to debit/credit cards',
         pricingSource: 'CALIBRATED_MODEL_ESTIMATE'
       },

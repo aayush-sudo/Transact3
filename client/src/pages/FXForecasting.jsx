@@ -4,7 +4,7 @@ import api from '../services/api';
 import { ArrowRightLeft, BarChart2, Calculator, Loader2 } from 'lucide-react';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'INR', 'BRL', 'MXN', 'SGD', 'AED', 'CHF', 'CAD', 'AUD', 'HKD', 'SEK', 'ZAR'];
-const CONVERTER_CURRENCIES = ['USD', 'EUR', 'GBP', 'INR', 'AED', 'SGD', 'AUD', 'CAD', 'JPY'];
+const CONVERTER_CURRENCIES = ['USD', 'EUR', 'GBP', 'INR', 'BRL', 'AED', 'SGD', 'AUD', 'CAD', 'JPY'];
 
 const FXForecasting = () => {
   const [base, setBase] = useState('USD');
@@ -141,22 +141,55 @@ const FXForecasting = () => {
         </form>
         {conversionError && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800">{conversionError}</p>}
         {conversion && (
-          <div role="status" className="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-            <div>
-              <p className="text-sm text-slate-600">
-                {Number(conversion.amount).toLocaleString()} {conversion.base} at {Number(conversion.rate).toLocaleString(undefined, { maximumFractionDigits: 6 })}
-              </p>
-              <p className="text-2xl font-bold text-emerald-950">
-                {Number(conversion.convertedAmount).toLocaleString(undefined, { maximumFractionDigits: conversion.target === 'JPY' ? 0 : 2 })} {conversion.target}
-              </p>
+          <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Estimated net payout</p>
+                <p className="text-2xl font-bold text-emerald-950">
+                  {Number(conversion.finalNetPayout).toLocaleString(undefined, { maximumFractionDigits: conversion.target === 'JPY' ? 0 : 2 })} {conversion.target}
+                </p>
+              </div>
+              <div className="text-right text-xs text-slate-600">
+                <p>{conversion.is_mock ? 'Indicative fallback rate' : conversion.source === 'LIVE_API' ? 'Live reference rate' : 'Cached live reference rate'}</p>
+                <p>{conversion.timestamp ? new Date(conversion.timestamp).toLocaleString() : ''}</p>
+              </div>
             </div>
-            <div className="text-right text-xs text-slate-600">
-              <p>{conversion.is_mock ? 'Indicative fallback rate' : conversion.source === 'LIVE_API' ? 'Live rate' : 'Cached live rate'}</p>
-              <p>{conversion.timestamp ? new Date(conversion.timestamp).toLocaleString() : ''}</p>
-            </div>
+            <dl className="mt-4 grid gap-3 border-t border-emerald-200 pt-3 text-sm sm:grid-cols-2">
+              <div>
+                <dt className="text-xs text-slate-600">Source amount and pair</dt>
+                <dd className="font-semibold text-slate-900">{conversion.currencyPair}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-600">Mid-market / quoted rate · FX spread</dt>
+                <dd className="font-semibold text-slate-900">{conversion.rate} / {conversion.quotedRate} {conversion.target} per {conversion.base} · {conversion.spreadBps} bps</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-600">Estimated clearing rail / settlement</dt>
+                <dd className="font-semibold text-slate-900">{conversion.appliedClearingRail} · {conversion.estimatedSettlementDuration}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-600">Instant feasibility</dt>
+                <dd className="font-semibold text-slate-900">
+                  {conversion.instantFeasibility}
+                  {!conversion.is_instant && conversion.instantIneligibilityReason
+                    ? ` — ${conversion.instantIneligibilityReason}`
+                    : ''}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-600">Estimated rail fee (charged separately)</dt>
+                <dd className="font-semibold text-slate-900">{conversion.railFeeEstimateUSD} USD</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-600">Mid-market reference amount</dt>
+                <dd className="font-semibold text-slate-900">
+                  {Number(conversion.convertedAmount).toLocaleString(undefined, { maximumFractionDigits: conversion.target === 'JPY' ? 0 : 2 })} {conversion.target}
+                </dd>
+              </div>
+            </dl>
           </div>
         )}
-        <p className="text-xs text-slate-500">Indicative conversion only; provider fees, exchange-rate markups, and final delivered amounts may differ.</p>
+        <p className="text-xs text-slate-500">All rails and delivery windows are modeled estimates, not external network integrations or payout guarantees. The displayed rail fee is separate from the net payout; actual provider pricing and delivery may differ.</p>
       </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

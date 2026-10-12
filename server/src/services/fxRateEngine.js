@@ -1,5 +1,5 @@
-const { getExchangeRates } = require('./currencyService');
-const { getCorridorConfig } = require('../config/corridors');
+const { getExchangeRates, formatAmount } = require('./currencyService');
+const { calculateSpreadBps } = require('./settlementPolicy');
 
 // Standard reference rates table for fast reference & fallback across 15 currencies
 const BASE_RATES_VS_USD = {
@@ -46,22 +46,25 @@ class FXRateEngine {
     return this.calculateFXQuoteAsync(sourceCurrency, destinationCurrency, amount);
   }
 
-  async calculateFXQuoteAsync(sourceCurrency, destinationCurrency, amount) {
+  async calculateFXQuoteAsync(sourceCurrency, destinationCurrency, amount, options = {}) {
     const src = sourceCurrency.toUpperCase();
     const dst = destinationCurrency.toUpperCase();
-    const referenceRate = await this.getReferenceRate(src, dst);
-
-    const corridor = getCorridorConfig(src, dst);
-    const spreadBps = corridor.baseSpreadBps || 35; // Spread in basis points (e.g. 35 bps = 0.35%)
+    const referenceRate = options.referenceRate || await this.getReferenceRate(src, dst);
+    let sourceAmountUSD = Number(options.sourceAmountUSD);
+    if (!Number.isFinite(sourceAmountUSD) || sourceAmountUSD < 0) {
+      const usdRates = await getExchangeRates('USD');
+      sourceAmountUSD = Number(amount) / (Number(usdRates.conversion_rates?.[src]) || 1);
+    }
+    const spreadBps = calculateSpreadBps(
+      src,
+      dst,
+      sourceAmountUSD,
+      options.settlementRail || 'SWIFT_CORRESPONDENT'
+    );
     const spreadFraction = spreadBps / 10000;
 
-    // Customer rate is slightly lower than reference rate (bank keeps the spread)
     const quotedRate = parseFloat((referenceRate * (1 - spreadFraction)).toFixed(6));
-    const destinationAmount = parseFloat((amount * quotedRate).toFixed(2));
-
-    // Calculate FX cost in USD equivalent
-    const srcVsUSD = BASE_RATES_VS_USD[src] || 1.0;
-    const sourceAmountUSD = amount / srcVsUSD;
+    const destinationAmount = formatAmount(Number(amount) * quotedRate, dst);
     const fxCostUSD = parseFloat((sourceAmountUSD * spreadFraction).toFixed(2));
 
     return {
@@ -74,6 +77,7 @@ class FXRateEngine {
       spreadBps,
       spreadFraction,
       fxCostUSD,
+      sourceAmountUSD,
       timestamp: new Date()
     };
   }

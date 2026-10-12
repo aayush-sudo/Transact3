@@ -9,6 +9,7 @@ const DEFAULT_USD_RATES = {
   EUR: 0.92,
   GBP: 0.79,
   INR: 87.20,
+  BRL: 5.55,
   AED: 3.6725,
   SGD: 1.345,
   AUD: 1.52,

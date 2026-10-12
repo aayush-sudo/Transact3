@@ -46,17 +46,16 @@ const PaymentSchedulingModal = ({ isOpen, onClose, initialParams }) => {
       if (data.data.amlCompliance?.decision === 'MANUAL_REVIEW') {
         throw new Error('This recipient requires additional review before a payment can be scheduled.');
       }
-      const waitHours = Math.max(
-        route.est_latency_hours || 0,
-        quote.timingRecommendation?.deferHours || 0
-      );
+      const waitHours = Math.max(route.est_latency_hours || 0, quote.timingRecommendation?.deferHours || 0);
       setStepStatus(0, 'COMPLETED');
       setStepStatus(1, 'COMPLETED');
       setQuoteData({
         quote,
         route,
         senderBalance: data.data.senderBalance.available,
-        scheduledEstimate: new Date(Date.now() + waitHours * 3600000)
+        scheduledEstimate: (route.is_instant ? route.earliest_settlement_at : route.latest_settlement_at)
+          ? new Date(route.is_instant ? route.earliest_settlement_at : route.latest_settlement_at)
+          : new Date(Date.now() + waitHours * 3600000)
       });
     } catch (err) {
       quoteRequestStarted.current = false;
@@ -94,9 +93,9 @@ const PaymentSchedulingModal = ({ isOpen, onClose, initialParams }) => {
   };
 
   const feeAmount = quoteData
-    ? Number((quoteData.route.est_fee_usd * quoteData.quote.sourceAmount / Math.max(quoteData.quote.sourceAmountUSD, 0.01)).toFixed(2))
+    ? Number((quoteData.route.est_fee_usd * quoteData.route.source_amount / Math.max(quoteData.route.source_amount_usd, 0.01)).toFixed(2))
     : 0;
-  const totalDebit = quoteData ? Number((quoteData.quote.sourceAmount + feeAmount).toFixed(2)) : 0;
+  const totalDebit = quoteData ? Number((quoteData.route.source_amount + feeAmount).toFixed(2)) : 0;
   const hasEnoughFunds = quoteData && quoteData.senderBalance >= totalDebit;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm">
@@ -128,7 +127,7 @@ const PaymentSchedulingModal = ({ isOpen, onClose, initialParams }) => {
         </header>
 
         <p className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950">
-          Settlement follows the selected route estimate and any FX timing guidance. Confirming reserves the amount from your wallet; it is not settled immediately.
+          Route names and settlement windows are modeled estimates, not connections to external payment networks. Confirming reserves the amount from your wallet until modeled settlement.
         </p>
 
         <ol className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
@@ -159,11 +158,32 @@ const PaymentSchedulingModal = ({ isOpen, onClose, initialParams }) => {
             <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
               <div>
                 <dt className="text-xs text-slate-500">You send</dt>
-                <dd className="font-semibold text-slate-900">{quoteData.quote.sourceAmount} {quoteData.quote.sourceCurrency}</dd>
+                <dd className="font-semibold text-slate-900">{quoteData.route.source_amount} {quoteData.quote.sourceCurrency}</dd>
               </div>
               <div>
                 <dt className="text-xs text-slate-500">Recipient gets</dt>
-                <dd className="font-semibold text-slate-900">{quoteData.quote.destinationAmount} {quoteData.quote.destinationCurrency}</dd>
+                <dd className="font-semibold text-slate-900">{quoteData.route.final_net_payout} {quoteData.quote.destinationCurrency}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-500">Quoted exchange rate</dt>
+                <dd className="font-semibold text-slate-900">1 {quoteData.quote.sourceCurrency} = {quoteData.route.quoted_rate} {quoteData.quote.destinationCurrency} ({quoteData.route.spread_bps} bps spread)</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-500">Estimated clearing rail</dt>
+                <dd className="font-semibold text-slate-900">{quoteData.route.applied_clearing_rail}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-500">Settlement window</dt>
+                <dd className="font-semibold text-slate-900">{quoteData.route.expected_settlement_display}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-500">Instant feasibility</dt>
+                <dd className="font-semibold text-slate-900">
+                  {quoteData.route.instant_feasibility}
+                  {!quoteData.route.is_instant && quoteData.route.instant_ineligibility_reason
+                    ? ` — ${quoteData.route.instant_ineligibility_reason}`
+                    : ''}
+                </dd>
               </div>
               <div>
                 <dt className="text-xs text-slate-500">Route fee estimate</dt>

@@ -1,5 +1,4 @@
 import MultiRailRouter from '../components/MultiRailRouter';
-import RailStatusViewer from '../components/RailStatusViewer';
 import { ArrowLeftRight, Info } from 'lucide-react';
 
 const PaymentRouter = () => {
@@ -25,11 +24,6 @@ const PaymentRouter = () => {
       </div>
 
       <MultiRailRouter />
-
-      {/* Modeled route capacity */}
-      <div className="pt-4">
-        <RailStatusViewer />
-      </div>
     </div>
   );
 };

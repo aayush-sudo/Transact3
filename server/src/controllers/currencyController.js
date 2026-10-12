@@ -1,5 +1,6 @@
 const { getExchangeRates, getHistoricalRates } = require('../services/currencyService');
 const { isCurrencySupported } = require('../config/currencies');
+const { createCurrencyConversionQuote } = require('../services/currencyConversionService');
 
 // @desc    Get latest exchange rates
 // @route   GET /api/currency/latest?base=USD
@@ -38,25 +39,10 @@ exports.convertCurrency = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Choose two different currencies' });
     }
 
-    const data = await getExchangeRates(normalizedBase);
-    
-    const rate = data.conversion_rates[normalizedTarget];
-    if (!rate) {
-      return res.status(400).json({ success: false, message: 'Invalid target currency' });
-    }
-
-    const convertedAmount = Number((numericAmount * rate).toFixed(normalizedTarget === 'JPY' ? 0 : 2));
-
+    const quote = await createCurrencyConversionQuote(normalizedBase, normalizedTarget, numericAmount);
     res.status(200).json({
       success: true,
-      base: normalizedBase,
-      target: normalizedTarget,
-      rate,
-      amount: numericAmount,
-      convertedAmount,
-      source: data.source,
-      timestamp: data.timestamp,
-      is_mock: data.is_mock
+      ...quote
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to convert currency' });

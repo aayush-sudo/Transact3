@@ -50,14 +50,16 @@ The fees in this table are calibrated model inputs, **not live tariffs fetched f
 
 | Rail ID | Route Category | Typical Use | Estimated Base Fee (USD) | Variable (bps) | Indicative Delivery Time |
 | :--- | :--- | :--- | :---: | :---: | :---: |
-| **`REGIONAL_INSTANT`** | Domestic instant payment (small amounts) | Everyday, lower-value domestic payments; timing is illustrative and settlement stays within the platform | **$1.50** | **2 bps** (0.02%) | ~1 second (estimate) |
-| **`CARD_PUSH`** | Card payout | Debit-to-card payout categories | **$3.50** | **15 bps** (0.15%) | ~9 minutes |
-| **`SWIFT_BATCH`** | Correspondent transfer | Multi-hop bank transfer categories | **$25.00** | **10 bps** (0.10%) | 24 to 48 hours |
+| **`REGIONAL_INSTANT`** | Destination-local instant payment (small amounts) | Configured local clearing route for eligible retail amounts | **$1.50** | **2 bps** (0.02%) | Under 60 seconds when eligible |
+| **`CARD_PUSH`** | Card payout | Debit-to-card payout categories | **$3.50** | **15 bps** (0.15%) | Corridor- and notional-specific estimate |
+| **`SWIFT_BATCH`** | Correspondent transfer | Multi-hop bank transfer categories | **$25.00** | **10 bps** (0.10%) | Corridor-specific business hours with cutoffs/weekends |
 
 ### Rail Availability & Constraints
-- **Regional Instant**: Maximum transfer limit of $100,000 USD equivalent.
+- **Regional Instant**: Retail threshold of $1,000 USD equivalent; only configured destination-local routes are eligible. Larger transfers require standard banking settlement and include an explicit rejection reason.
 - **Card Push**: Maximum transfer limit of $25,000 USD equivalent.
 - **SWIFT**: Universally eligible fallback rail supporting all corridors up to $10,000,000 USD.
+
+Each conversion quote includes the mid-market reference rate, amount-tiered corridor spread, quoted rate, estimated rail fee, net payout after the FX spread, instant eligibility, modeled clearing rail, and a settlement window calculated for the source/destination banking windows and current notional. Network names, fees, and times are estimates only; the app is not connected to payout networks.
 
 ---
 
@@ -87,7 +89,7 @@ If a rail's pool is fully depleted or toggled off by an administrator, its eligi
 
 The FX intelligence service calculates mid-market conversion rates using cached live feeds from `ExchangeRate-API` (with deterministic fallback):
 
-1. **Spot Rate**: Clean mid-market exchange rate between any of the 9 supported currencies.
+1. **Spot Rate**: Clean mid-market exchange rate between any of the 10 supported currencies.
 2. **Simple Moving Average (SMA-20)**: Rolling trend indicator derived from recent 24-hour rate distributions.
 3. **Exponential Moving Average (EMA-12)**: Weighted trend indicator sensitive to recent price movements.
 4. **24-Hour Rolling Volatility ($\sigma_{24h}$)**: Percentage standard deviation indicating rate dispersion.

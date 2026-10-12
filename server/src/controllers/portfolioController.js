@@ -18,7 +18,7 @@ async function getOrCreatePortfolio(userId) {
     });
   }
 
-  // Ensure all 9 supported currencies exist in holdings
+  // Ensure all supported currencies exist in holdings
   const existingCodes = new Set(portfolio.holdings.map(h => h.currency));
   let modified = false;
   for (const code of SUPPORTED_CURRENCY_CODES) {

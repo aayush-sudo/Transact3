@@ -1,11 +1,12 @@
 /**
- * 9 Standardized Supported Currencies for Transact3
+ * 10 Standardized Supported Currencies for Transact3
  */
 const SUPPORTED_CURRENCIES = {
   USD: { code: 'USD', name: 'US Dollar', symbol: '$', region: 'Americas', precision: 2, baseVolatility: 0.0015, defaultPool: 50000000 },
   EUR: { code: 'EUR', name: 'Euro', symbol: '€', region: 'Europe', precision: 2, baseVolatility: 0.0018, defaultPool: 45000000 },
   GBP: { code: 'GBP', name: 'British Pound', symbol: '£', region: 'Europe', precision: 2, baseVolatility: 0.0022, defaultPool: 30000000 },
   INR: { code: 'INR', name: 'Indian Rupee', symbol: '₹', region: 'Asia-Pacific', precision: 2, baseVolatility: 0.0035, defaultPool: 280000000 },
+  BRL: { code: 'BRL', name: 'Brazilian Real', symbol: 'R$', region: 'Latin America', precision: 2, baseVolatility: 0.0045, defaultPool: 150000000 },
   AED: { code: 'AED', name: 'UAE Dirham', symbol: 'AED', region: 'Middle East', precision: 2, baseVolatility: 0.0010, defaultPool: 35000000 },
   SGD: { code: 'SGD', name: 'Singapore Dollar', symbol: 'S$', region: 'Asia-Pacific', precision: 2, baseVolatility: 0.0020, defaultPool: 25000000 },
   AUD: { code: 'AUD', name: 'Australian Dollar', symbol: 'A$', region: 'Asia-Pacific', precision: 2, baseVolatility: 0.0028, defaultPool: 20000000 },

@@ -1,14 +1,24 @@
-const fxRateEngine = require('../services/fxRateEngine');
 const quoteEngine = require('../services/quoteEngine');
 const fxForecastingEngine = require('../services/fxForecastingEngine');
 const fxBacktestingEngine = require('../services/fxBacktestingEngine');
 const orchestrationEngine = require('../services/orchestrationEngine');
+const { createCurrencyConversionQuote } = require('../services/currencyConversionService');
+const { isCurrencySupported } = require('../config/currencies');
 
 exports.getRates = async (req, res, next) => {
   try {
     const pair = req.params.pair || 'USD/EUR';
-    const [src, dst] = pair.split('/');
-    const quote = await fxRateEngine.calculateFXQuoteAsync(src || 'USD', dst || 'EUR', 1000);
+    const [src = 'USD', dst = 'EUR'] = pair.split(/[/-]/);
+    const sourceCurrency = src.toUpperCase();
+    const destinationCurrency = dst.toUpperCase();
+    const amount = Number(req.query.amount ?? 1000);
+    if (!isCurrencySupported(sourceCurrency) || !isCurrencySupported(destinationCurrency)) {
+      return res.status(400).json({ success: false, message: 'Unsupported currency pair.' });
+    }
+    if (sourceCurrency === destinationCurrency || !Number.isFinite(amount) || amount <= 0 || amount > 1e12) {
+      return res.status(400).json({ success: false, message: 'Choose different currencies and provide a valid amount.' });
+    }
+    const quote = await createCurrencyConversionQuote(sourceCurrency, destinationCurrency, amount);
     res.status(200).json({ success: true, data: quote });
   } catch (err) {
     next(err);

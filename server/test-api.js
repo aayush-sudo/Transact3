@@ -149,6 +149,60 @@ test('authenticated payment schedules once, reserves capacity, and settles at it
   assert.equal(converted.body.amount, 123.45);
   assert.equal(converted.body.is_mock, true);
   assert.equal(converted.body.convertedAmount, Number((123.45 * converted.body.rate).toFixed(2)));
+  assert.equal(converted.body.is_instant, true);
+  assert.equal(converted.body.instantFeasibility, 'Eligible');
+  assert.equal(converted.body.appliedClearingRail, 'UPI / IMPS (modeled)');
+  assert.equal(converted.body.estimatedSettlementDuration, '< 60 seconds (modeled local real-time clearing)');
+  assert.ok(converted.body.quotedRate < converted.body.rate);
+  assert.equal(converted.body.finalNetPayout, Number((123.45 * converted.body.quotedRate).toFixed(2)));
+
+  const largeConversion = await request('/currency/convert', {
+    method: 'POST',
+    body: { base: 'USD', target: 'INR', amount: 10000 }
+  });
+  assert.equal(largeConversion.response.status, 200);
+  assert.equal(largeConversion.body.is_instant, false);
+  assert.equal(largeConversion.body.instantFeasibility, 'Ineligible');
+  assert.match(largeConversion.body.instantIneligibilityReason, /exceeds the instant rail clearing threshold/i);
+  assert.match(largeConversion.body.appliedClearingRail, /SWIFT gpi/);
+  assert.match(largeConversion.body.estimatedSettlementDuration, /business day/i);
+  assert.ok(largeConversion.body.spreadBps < converted.body.spreadBps, 'Notional tiers should reduce the relative FX spread');
+
+  const fxRateQuote = await request('/fx/rates/USD-INR?amount=10000');
+  assert.equal(fxRateQuote.response.status, 200);
+  assert.equal(fxRateQuote.body.data.amount, 10000);
+  assert.equal(fxRateQuote.body.data.is_instant, false);
+  assert.match(fxRateQuote.body.data.appliedClearingRail, /SWIFT gpi/);
+  assert.equal(typeof fxRateQuote.body.data.finalNetPayout, 'number');
+
+  const unsupportedInstantCorridor = await request('/currency/convert', {
+    method: 'POST',
+    body: { base: 'EUR', target: 'JPY', amount: 500 }
+  });
+  assert.equal(unsupportedInstantCorridor.response.status, 200);
+  assert.equal(unsupportedInstantCorridor.body.is_instant, false);
+  assert.match(unsupportedInstantCorridor.body.instantIneligibilityReason, /No configured cross-border instant clearing route for JPY/);
+  assert.match(unsupportedInstantCorridor.body.estimatedSettlementDuration, /business day/i);
+
+  const brazilConversion = await request('/currency/convert', {
+    method: 'POST',
+    body: { base: 'USD', target: 'BRL', amount: 100 }
+  });
+  assert.equal(brazilConversion.response.status, 200);
+  assert.equal(brazilConversion.body.is_instant, true);
+  assert.equal(brazilConversion.body.appliedClearingRail, 'Pix (modeled)');
+
+  const largeRoutePreview = await request('/orchestration/route', {
+    method: 'POST',
+    body: { sourceCurrency: 'USD', destinationCurrency: 'INR', amount: 10000 }
+  });
+  assert.equal(largeRoutePreview.response.status, 200);
+  assert.deepEqual(
+    largeRoutePreview.body.data.evaluatedRails.filter(rail => rail.is_eligible).map(rail => rail.id),
+    ['SWIFT_CORRESPONDENT'],
+    'Amounts above the instant threshold must use standard banking settlement'
+  );
+
   const invalidConversion = await request('/currency/convert', {
     method: 'POST',
     body: { base: 'USD', target: 'INR', amount: 0 }
@@ -207,6 +261,13 @@ test('authenticated payment schedules once, reserves capacity, and settles at it
   });
   assert.equal(quoteResult.response.status, 200, quoteResult.body.message);
   const quote = quoteResult.body.data.quote;
+  assert.equal(quote.finalNetPayout, quote.destinationAmount);
+  assert.ok(quote.quotedRate < quote.referenceRate);
+  assert.ok(quote.evaluatedRails.every(rail =>
+    typeof rail.quoted_rate === 'number' &&
+    typeof rail.final_net_payout === 'number' &&
+    typeof rail.expected_settlement_display === 'string'
+  ));
   const cardRail = quote.evaluatedRails.find(rail => rail.id === 'CARD_PAYOUT' && rail.is_eligible);
   assert.ok(cardRail, 'Card payout should be eligible for this test quote');
   const capacityBefore = await request('/orchestration/rails');
@@ -234,6 +295,9 @@ test('authenticated payment schedules once, reserves capacity, and settles at it
   assert.ok(new Date(confirmation.body.data.scheduledFor) > new Date(), 'Settlement should be scheduled in the future');
   assert.equal(String(confirmation.body.data.transaction.recipient), String(quote.recipientId));
   assert.equal(confirmation.body.data.transaction.receiverEmail, 'bob@transact3.com');
+  assert.equal(confirmation.body.data.transaction.sourceAmount, cardRail.source_amount);
+  assert.equal(confirmation.body.data.transaction.destinationAmount, cardRail.final_net_payout);
+  assert.equal(confirmation.body.data.settlementEstimate.appliedClearingRail, cardRail.applied_clearing_rail);
 
   const aliceAfter = await request('/portfolio', { token: aliceToken });
   const bobAfter = await request('/portfolio', { token: bobToken });
@@ -241,11 +305,11 @@ test('authenticated payment schedules once, reserves capacity, and settles at it
   const aliceUsdAfter = aliceAfter.body.data.holdings.find(holding => holding.currency === 'USD').amount;
   const bobInrBefore = bobBefore.body.data.holdings.find(holding => holding.currency === 'INR').amount;
   const bobInrAfter = bobAfter.body.data.holdings.find(holding => holding.currency === 'INR').amount;
-  assert.equal(Number((aliceUsdBefore - aliceUsdAfter).toFixed(2)), Number((quote.sourceAmount + confirmation.body.data.transaction.railFeeUSD).toFixed(2)));
+  assert.equal(Number((aliceUsdBefore - aliceUsdAfter).toFixed(2)), Number((cardRail.source_amount + confirmation.body.data.transaction.railFeeUSD).toFixed(2)));
   assert.equal(bobInrAfter, bobInrBefore, 'Recipient is credited only when scheduled settlement runs');
   const capacityAfter = await request('/orchestration/rails');
   const cardCapacityAfter = capacityAfter.body.data.find(rail => rail.railId === cardRail.id).availableLiquidityUSD;
-  assert.equal(Number((cardCapacityBefore - cardCapacityAfter).toFixed(2)), Number(quote.sourceAmountUSD.toFixed(2)));
+  assert.equal(Number((cardCapacityBefore - cardCapacityAfter).toFixed(2)), Number(cardRail.source_amount_usd.toFixed(2)));
 
   const replay = await request('/transaction/confirm', {
     method: 'POST',
@@ -279,7 +343,7 @@ test('authenticated payment schedules once, reserves capacity, and settles at it
   const feeFailure = await request('/transaction/confirm', {
     method: 'POST',
     token: aliceToken,
-    body: { quoteId: feeQuote.quoteId, selectedRail: 'CARD_PAYOUT', idempotencyKey: `FEE-${feeQuote.quoteId}` }
+    body: { quoteId: feeQuote.quoteId, selectedRail: 'SWIFT_CORRESPONDENT', idempotencyKey: `FEE-${feeQuote.quoteId}` }
   });
   assert.equal(feeFailure.response.status, 400);
   assert.match(feeFailure.body.message, /Insufficient USD balance/);
