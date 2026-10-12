@@ -185,17 +185,18 @@ pip install -r requirements.txt
 ```env
 PORT=5001
 MONGO_URI=mongodb://127.0.0.1:27017/transact3
-JWT_SECRET=replace-with-a-long-random-secret
+JWT_SECRET=
 FASTAPI_URL=http://127.0.0.1:8000
 NODE_ENV=development
 ```
+Generate a unique JWT secret with `openssl rand -hex 32` and put its output in `JWT_SECRET` before starting the API.
 Start the persistent MongoDB service from the repository root before starting the API:
 
 ```bash
 docker compose up -d mongo
 ```
 
-Copy `server/.env.example` to `server/.env` and set private values for `JWT_SECRET`, `RAZORPAY_KEY_ID`, and `RAZORPAY_KEY_SECRET` using Razorpay test credentials. New accounts receive ₹10,000 in clearly recorded platform test funds in their INR wallet. To provision the requested Aayush and Anirudh accounts, set `BOOTSTRAP_USER_1_PASSWORD` and `BOOTSTRAP_USER_2_PASSWORD` in that local file. Keep passwords and provider keys out of source control. Users can also register in the app.
+Copy `server/.env.example` to `server/.env` and set private values for `JWT_SECRET`, `RAZORPAY_KEY_ID`, and `RAZORPAY_KEY_SECRET` using Razorpay test credentials. New accounts receive ₹10,000 in clearly recorded platform test funds in their INR wallet. Existing accounts are not recreated by the bootstrap process; users can also register in the app.
 
 **Frontend (`client/.env`)**:
 ```env

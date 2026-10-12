@@ -9,6 +9,10 @@ const { requestId, rateLimiter, errorHandler } = require('./middleware');
 // Load env vars
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
+if (!process.env.JWT_SECRET?.trim() || process.env.JWT_SECRET === 'replace-with-a-long-random-secret') {
+  throw new Error('JWT_SECRET is required. Set a unique secret in server/.env (generate one with: openssl rand -hex 32).');
+}
+
 // Connect to database
 connectDB();
 

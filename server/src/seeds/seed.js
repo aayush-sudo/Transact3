@@ -53,45 +53,24 @@ async function removeLegacyAccounts() {
   await User.deleteMany({ _id: { $in: userIds } });
 }
 
-async function seedBootstrapAccounts() {
-  const accounts = [
-    {
-      name: process.env.BOOTSTRAP_USER_1_NAME || 'Aayush',
-      email: process.env.BOOTSTRAP_USER_1_EMAIL || 'aayush@gmail.com',
-      password: process.env.BOOTSTRAP_USER_1_PASSWORD
-    },
-    {
-      name: process.env.BOOTSTRAP_USER_2_NAME || 'Anirudh',
-      email: process.env.BOOTSTRAP_USER_2_EMAIL || 'anirudh@gmail.com',
-      password: process.env.BOOTSTRAP_USER_2_PASSWORD
-    }
-  ];
-  if (process.env.BOOTSTRAP_ADMIN_EMAIL && process.env.BOOTSTRAP_ADMIN_PASSWORD) {
-    accounts.push({
-      name: process.env.BOOTSTRAP_ADMIN_NAME || 'Administrator',
-      email: process.env.BOOTSTRAP_ADMIN_EMAIL,
-      password: process.env.BOOTSTRAP_ADMIN_PASSWORD,
-      role: 'ADMIN'
-    });
+async function seedBootstrapAdmin() {
+  const { BOOTSTRAP_ADMIN_EMAIL, BOOTSTRAP_ADMIN_PASSWORD } = process.env;
+  if (!BOOTSTRAP_ADMIN_EMAIL || !BOOTSTRAP_ADMIN_PASSWORD) return;
+  if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,72}$/.test(BOOTSTRAP_ADMIN_PASSWORD) ||
+    Buffer.byteLength(BOOTSTRAP_ADMIN_PASSWORD, 'utf8') > 72) {
+    throw new Error(`Bootstrap password for ${BOOTSTRAP_ADMIN_EMAIL} does not meet password policy.`);
   }
 
-  for (const account of accounts) {
-    if (!account.password) continue;
-    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,72}$/.test(account.password) ||
-      Buffer.byteLength(account.password, 'utf8') > 72) {
-      throw new Error(`Bootstrap password for ${account.email} does not meet password policy.`);
-    }
-    const email = account.email.toLowerCase().trim();
-    if (await User.exists({ email })) continue;
-    const user = await User.create({
-      name: account.name,
-      email,
-      password: account.password,
-      role: account.role || 'USER',
-      walletBalance: 0
-    });
-    await provisionNewUserWallet(user);
-  }
+  const email = BOOTSTRAP_ADMIN_EMAIL.toLowerCase().trim();
+  if (await User.exists({ email })) return;
+  const user = await User.create({
+    name: process.env.BOOTSTRAP_ADMIN_NAME || 'Administrator',
+    email,
+    password: BOOTSTRAP_ADMIN_PASSWORD,
+    role: 'ADMIN',
+    walletBalance: 0
+  });
+  await provisionNewUserWallet(user);
 }
 
 async function seedTestAccounts() {
@@ -121,7 +100,7 @@ const seedDatabase = async ({ testFixtures = false } = {}) => {
     return;
   }
   await removeLegacyAccounts();
-  await seedBootstrapAccounts();
+  await seedBootstrapAdmin();
 };
 
 module.exports = seedDatabase;

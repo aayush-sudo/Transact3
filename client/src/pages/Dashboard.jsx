@@ -9,7 +9,7 @@ const Dashboard = () => (
         Make informed choices for international transfers.
       </h1>
       <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-        Fund your wallet in Razorpay test mode, compare estimated transfer routes, and schedule a modeled settlement with clear timing guidance.
+        Fund your wallet with your preferred payment method, compare estimated transfer routes, and schedule a settlement with clear timing guidance.
       </p>
       <Link to="/payment-router" className="btn-primary mt-7 inline-flex items-center gap-2">
         Compare transfer options <ArrowRight size={17} />
@@ -29,7 +29,7 @@ const Dashboard = () => (
           <h2 className="text-lg font-bold text-slate-900">Wallet</h2>
           <Wallet size={18} className="text-emerald-700" />
         </div>
-        <p className="mt-2 text-sm leading-6 text-slate-600">Manage balances, add INR using test checkout, and review scheduled transfers.</p>
+        <p className="mt-2 text-sm leading-6 text-slate-600">Manage balances, add funds, and review scheduled transfers.</p>
       </Link>
       <Link to="/fx-forecasting" className="card group transition-colors hover:border-emerald-300">
         <div className="flex items-center justify-between">

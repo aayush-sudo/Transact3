@@ -126,6 +126,12 @@ test('authenticated payment schedules once, reserves capacity, and settles at it
   const newAccountPortfolio = await request('/portfolio', { token: newAccount.body.token });
   assert.equal(newAccountPortfolio.body.data.holdings.find(holding => holding.currency === 'INR').amount, 10000);
   assert.equal(newAccountPortfolio.body.data.holdings.find(holding => holding.currency === 'USD').amount, 0);
+  const newAccountLogin = await request('/user/login', {
+    method: 'POST',
+    body: { email: 'new.account@example.com', password: 'StrongPass1!' }
+  });
+  assert.equal(newAccountLogin.response.status, 200, newAccountLogin.body.message);
+  assert.equal(newAccountLogin.body._id, newAccount.body._id);
 
   const railsStatus = await request('/orchestration/rails');
   assert.equal(railsStatus.response.status, 200);
