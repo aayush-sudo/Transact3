@@ -30,6 +30,11 @@ function mapIntentToAction(intent) {
     'PAYMENT_SCHEDULING': 'TRANSFER',
     'GREETING': 'GREETING',
     'GENERAL_PLATFORM_QUESTION': 'GENERAL',
+    'TRANSACT3_PLATFORM_QUESTION': 'PLATFORM_INFO',
+    'GENERAL_KNOWLEDGE': 'GENERAL_KNOWLEDGE',
+    'GENERAL_CONVERSATION': 'GENERAL_CONVERSATION',
+    'OUT_OF_SCOPE': 'OUT_OF_SCOPE',
+    'UNSUPPORTED_OPERATION': 'OUT_OF_SCOPE',
     'TRANSFER_EXPLANATION': 'GENERAL',
     'CLARIFICATION_RESPONSE': 'CLARIFICATION',
     'UNKNOWN': 'UNKNOWN'
@@ -165,7 +170,12 @@ exports.aiQuery = async (req, res, next) => {
     Object.assign(parsed, mergedParsed);
     
     // Now route based on intent
-    const actionType = mapIntentToAction(parsed.intent);
+    let actionType = mapIntentToAction(parsed.intent);
+    
+    // Override: if prompt contains timing keywords, route to FX_TIMING_ANALYSIS
+    if (/now or wait|should i convert|good time|wait for|rate to improve|better rate|should i wait|convert today|exchange today/i.test(prompt.toLowerCase())) {
+      actionType = 'FX_TIMING_ANALYSIS';
+    }
     
     // Handle GREETING
     if (actionType === 'GREETING') {
@@ -305,7 +315,7 @@ exports.aiQuery = async (req, res, next) => {
     }
     
     // Handle FX_TIMING_ANALYSIS action
-    if (actionType === 'FX_TIMING_ANALYSIS' || (actionType === 'FX_FORECAST' && /now or wait|should I convert|good time|wait for/i.test(prompt))) {
+    if (actionType === 'FX_TIMING_ANALYSIS' || actionType === 'FX_FORECAST' || (actionType === 'CONVERT' && /now or wait|should I convert|good time|wait for|rate to improve|better rate/i.test(prompt))) {
       const currencyCodes = ['USD', 'EUR', 'GBP', 'INR', 'BRL', 'AED', 'SGD', 'AUD', 'CAD', 'JPY'];
       const foundCurrencies = currencyCodes.filter(c => prompt.toUpperCase().includes(c));
       
@@ -509,6 +519,77 @@ ${txSummary}`;
         requiresClarification: false,
         actionType: 'UNKNOWN',
         assistantMessage: "I'm not sure I understood that. I can help you with: sending money, checking wallet balance, converting currency, FX forecasts, transaction history, and comparing providers. Could you rephrase your request?",
+        data: null
+      });
+    }
+    
+    // Handle GENERAL_KNOWLEDGE - answer using LLM without financial APIs
+    if (actionType === 'GENERAL_KNOWLEDGE') {
+      const apiKey = process.env.GROQ_API_KEY;
+      let answer = parsed.explanation || 'I can help with that.';
+      
+      if (apiKey) {
+        try {
+          const { callGroq, parseGroqJson } = require('../services/aiAgentService');
+          const response = await callGroq({
+            prompt: `Answer this question concisely and accurately: ${prompt}`,
+            history: [],
+            apiKey,
+            model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile'
+          });
+          const content = response?.choices?.[0]?.message?.content;
+          if (content) answer = content.trim();
+        } catch (err) {
+          // Fall back to parsed explanation
+        }
+      }
+      
+      return res.status(200).json({
+        success: true,
+        requiresClarification: false,
+        actionType: 'GENERAL_KNOWLEDGE',
+        assistantMessage: answer,
+        data: null
+      });
+    }
+    
+    // Handle GENERAL_CONVERSATION
+    if (actionType === 'GENERAL_CONVERSATION') {
+      const lower = prompt.toLowerCase().trim();
+      let answer = '';
+      if (/joke|funny/.test(lower)) {
+        answer = "Why did the scarecrow win an award? Because he was outstanding in his field! 😄 I'm your Transact3 AI Assistant - I can help with cross-border transfers, currency conversions, FX forecasts, and more. What would you like to do?";
+      } else {
+        answer = "Hello! I'm your Transact3 AI Assistant. I can help you with cross-border money transfers, currency conversions, FX forecasts, provider comparisons, wallet balance checks, and transaction history. How can I assist you today?";
+      }
+      return res.status(200).json({
+        success: true,
+        requiresClarification: false,
+        actionType: 'GENERAL_CONVERSATION',
+        assistantMessage: answer,
+        data: null
+      });
+    }
+    
+    // Handle TRANSACT3_PLATFORM_QUESTION
+    if (actionType === 'PLATFORM_INFO') {
+      const answer = parsed.explanation || `Transact3 is a cross-border money transfer platform that helps you compare transfer routes, exchange rates, and providers. You can send money internationally, check your wallet balance, view FX forecasts, and compare providers like Western Union and Citibank Singapore. I'm here to help you with all of these features. What would you like to know more about?`;
+      return res.status(200).json({
+        success: true,
+        requiresClarification: false,
+        actionType: 'PLATFORM_INFO',
+        assistantMessage: answer,
+        data: null
+      });
+    }
+    
+    // Handle OUT_OF_SCOPE
+    if (actionType === 'OUT_OF_SCOPE') {
+      return res.status(200).json({
+        success: true,
+        requiresClarification: false,
+        actionType: 'OUT_OF_SCOPE',
+        assistantMessage: "I'm your Transact3 AI Assistant, designed to help with cross-border transfers, currency conversions, FX forecasts, provider comparisons, and wallet-related questions. I can also help with general questions, but I may not have access to live information or specialised services for every topic. Is there anything related to your transfers I can help with?",
         data: null
       });
     }

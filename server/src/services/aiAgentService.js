@@ -73,7 +73,7 @@ Classify the user's intent and extract structured information. Never invent exch
 
 Return a single JSON object with exactly these keys:
 {
-  "intent": "TRANSFER_REQUEST" | "TRANSFER_COMPARISON" | "COMPETITOR_COMPARISON" | "CHEAPEST_TRANSFER" | "FASTEST_TRANSFER" | "CURRENCY_CONVERSION" | "WALLET_BALANCE" | "WALLET_HOLDINGS" | "FX_FORECAST" | "FX_TIMING_ANALYSIS" | "FX_INFORMATION" | "TRANSACTION_HISTORY" | "TRANSACTION_STATUS" | "PAYMENT_SCHEDULING" | "RECIPIENT_LOOKUP" | "RECIPIENT_TRANSFER" | "TRANSFER_EXPLANATION" | "WHAT_IF_ANALYSIS" | "GENERAL_PLATFORM_QUESTION" | "CLARIFICATION_RESPONSE" | "GREETING" | "UNKNOWN",
+  "intent": "TRANSFER_REQUEST" | "TRANSFER_COMPARISON" | "COMPETITOR_COMPARISON" | "CHEAPEST_TRANSFER" | "FASTEST_TRANSFER" | "CURRENCY_CONVERSION" | "WALLET_BALANCE" | "WALLET_HOLDINGS" | "FX_FORECAST" | "FX_TIMING_ANALYSIS" | "FX_INFORMATION" | "TRANSACTION_HISTORY" | "TRANSACTION_STATUS" | "PAYMENT_SCHEDULING" | "RECIPIENT_LOOKUP" | "RECIPIENT_TRANSFER" | "TRANSFER_EXPLANATION" | "WHAT_IF_ANALYSIS" | "GENERAL_PLATFORM_QUESTION" | "TRANSACT3_PLATFORM_QUESTION" | "GENERAL_KNOWLEDGE" | "GENERAL_CONVERSATION" | "OUT_OF_SCOPE" | "UNSUPPORTED_OPERATION" | "CLARIFICATION_RESPONSE" | "GREETING" | "UNKNOWN",
   "amount": number or null,
   "amountType": "SENDER_AMOUNT" | "RECIPIENT_AMOUNT",
   "sourceCurrency": three-letter ISO 4217 code or null,
@@ -88,13 +88,19 @@ Return a single JSON object with exactly these keys:
 }
 
 Intent classification rules:
+- GENERAL_KNOWLEDGE: User asks a general knowledge question (capital of France, who invented telephone, what is inflation, etc.). Do NOT ask for transfer details.
+- GENERAL_CONVERSATION: User greets, says hello, asks for a joke, makes small talk. Respond naturally.
+- TRANSACT3_PLATFORM_QUESTION: User asks about Transact3 platform, wallet, how it works, features. Answer using verified platform info.
+- OUT_OF_SCOPE: User requests live data (sports scores, weather, news) or specialized services not available. Explain limitations.
+- UNSUPPORTED_OPERATION: User requests something the platform cannot do. Explain what's supported.
 - TRANSFER_REQUEST: User wants to send/transfer money. Keywords: send, transfer, remit, pay, move money.
 - COMPETITOR_COMPARISON: User wants to compare providers/platforms. Keywords: compare, western union, citibank, which is cheaper/better/faster.
 - CHEAPEST_TRANSFER: User explicitly wants cheapest/lowest cost option.
 - FASTEST_TRANSFER: User explicitly wants fastest/quickest delivery.
-- CURRENCY_CONVERSION: User wants to convert or check exchange rates. Keywords: convert, exchange rate, rate.
+- CURRENCY_CONVERSION: User wants to convert or check exchange rates. Keywords: convert, exchange rate, rate, "how much is", "what is X in Y", "how many". This is NOT a transfer request. Do NOT ask for transfer details.
 - WALLET_BALANCE: User wants to check wallet/balance/funds. Keywords: balance, wallet, holdings, funds.
 - FX_FORECAST: User wants FX forecast/trend/outlook. Keywords: forecast, outlook, trend, prediction.
+- FX_TIMING_ANALYSIS: User asks whether to convert now or wait, whether rate will improve, timing advice. Keywords: should I convert now, wait for rate, good time to convert, will rate improve, should I wait, convert today or next week, is now a good time. This is NOT a simple conversion request.
 - TRANSACTION_HISTORY: User wants transaction history. Keywords: history, transactions, past, recent.
 - RECIPIENT_TRANSFER: User mentions sending to a person by name. Keywords: send money to [name].
 - WHAT_IF_ANALYSIS: User asks hypothetical scenario. Keywords: what if, what happens if, compare X and Y amounts.
@@ -334,9 +340,13 @@ const buildFallbackExplanation = (parsed) => {
 
 const detectFallbackIntent = (prompt) => {
   const lower = prompt.toLowerCase().trim();
-  if (/^(hi|hello|hey|greetings)/.test(lower)) return 'GREETING';
-  if (/\b(compare|western union|citibank|which.*cheaper|which.*better|which.*faster)\b/.test(lower)) return 'COMPETITOR_COMPARISON';
+  if (/^(hi|hello|hey|greetings|good morning|good evening)/.test(lower)) return 'GREETING';
+  if (/\b(joke|funny|tell me a joke)\b/.test(lower)) return 'GENERAL_CONVERSATION';
+  if (/\b(what is transact3|what does transact3|how does transact3|about transact3)\b/.test(lower)) return 'TRANSACT3_PLATFORM_QUESTION';
+  if (/\b(what is|who invented|capital of|meaning of|difference between|explain)\b/.test(lower)) return 'GENERAL_KNOWLEDGE';
+  if (/(compare|western union|citibank|which.*cheaper|which.*better|which.*faster)/.test(lower)) return 'COMPETITOR_COMPARISON';
   if (/\b(balance|wallet|holdings|funds)\b/.test(lower)) return 'WALLET_BALANCE';
+  if (/\b(how much is|how much are|what is|what's|how many|what are)\b.*\b(usd|eur|gbp|inr|sgd|aed|aud|cad|jpy|brl)\b/.test(lower)) return 'CURRENCY_CONVERSION';
   if (/\b(convert|exchange rate|rate)\b/.test(lower)) return 'CURRENCY_CONVERSION';
   if (/\b(now or wait|should i convert|good time|wait for|rate to improve|become stronger|become weaker)\b/.test(lower)) return 'FX_TIMING_ANALYSIS';
   if (/\b(forecast|outlook|trend|prediction)\b/.test(lower)) return 'FX_FORECAST';
