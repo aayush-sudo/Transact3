@@ -9,37 +9,31 @@ const portfolioController = require('../controllers/portfolioController');
 const transactionController = require('../controllers/transactionController');
 const { extractIntent, buildComparisonExplanation, buildRouteAnalysis, buildProviderQuoteResponse } = require('../services/aiAgentService');
 
-// Detect the action type from the user prompt
-function detectActionType(prompt) {
-  const lower = prompt.toLowerCase();
-  
-  // Transfer-related actions
-  if (/\b(transfer|send|pay|move|schedule|compare|route)\b/.test(lower)) {
-    return 'TRANSFER';
-  }
-  
-  // Balance/portfolio actions
-  if (/\b(balance|wallet|portfolio|holdings|funds|money)\b/.test(lower)) {
-    return 'BALANCE';
-  }
-  
-  // Currency conversion actions
-  if (/\b(convert|exchange|rate|rates|currency)\b/.test(lower)) {
-    return 'CONVERT';
-  }
-  
-  // Transaction history actions
-  if (/\b(history|transactions|past|previous|recent)\b/.test(lower)) {
-    return 'HISTORY';
-  }
-  
-  // FX forecast actions
-  if (/\b(forecast|outlook|trend|prediction|future)\b/.test(lower)) {
-    return 'FX_FORECAST';
-  }
-  
-  // Default to transfer for ambiguous prompts
-  return 'TRANSFER';
+function mapIntentToAction(intent) {
+  const intentMap = {
+    'TRANSFER_REQUEST': 'TRANSFER',
+    'CHEAPEST_TRANSFER': 'TRANSFER',
+    'FASTEST_TRANSFER': 'TRANSFER',
+    'TRANSFER_COMPARISON': 'TRANSFER',
+    'COMPETITOR_COMPARISON': 'COMPETITOR_COMPARISON',
+    'CURRENCY_CONVERSION': 'CONVERT',
+    'WALLET_BALANCE': 'BALANCE',
+    'WALLET_HOLDINGS': 'BALANCE',
+    'FX_FORECAST': 'FX_FORECAST',
+    'FX_INFORMATION': 'FX_FORECAST',
+    'TRANSACTION_HISTORY': 'HISTORY',
+    'TRANSACTION_STATUS': 'HISTORY',
+    'RECIPIENT_TRANSFER': 'TRANSFER',
+    'RECIPIENT_LOOKUP': 'BALANCE',
+    'WHAT_IF_ANALYSIS': 'TRANSFER',
+    'PAYMENT_SCHEDULING': 'TRANSFER',
+    'GREETING': 'GREETING',
+    'GENERAL_PLATFORM_QUESTION': 'GENERAL',
+    'TRANSFER_EXPLANATION': 'GENERAL',
+    'CLARIFICATION_RESPONSE': 'CLARIFICATION',
+    'UNKNOWN': 'UNKNOWN'
+  };
+  return intentMap[intent] || 'UNKNOWN';
 }
 
 exports.previewRoute = async (req, res, next) => {
@@ -127,7 +121,7 @@ exports.runEvaluation = async (req, res, next) => {
 
 exports.aiQuery = async (req, res, next) => {
   try {
-    const { prompt } = req.body;
+    const { prompt, history } = req.body;
     if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
       return res.status(400).json({ 
         success: false, 
@@ -135,9 +129,55 @@ exports.aiQuery = async (req, res, next) => {
       });
     }
 
-    const actionType = detectActionType(prompt);
+    const conversationHistory = Array.isArray(history) ? history.slice(-10) : [];
+
+    // Extract intent from prompt with conversation history
+    const intentResult = await extractIntent(prompt, { history: conversationHistory });
+    const parsed = intentResult.parsed;
+    const intent = parsed.intent || 'UNKNOWN';
     
-    // Handle BALANCE action
+    // Handle CLARIFICATION_RESPONSE - merge with previous context
+    let mergedParsed = { ...parsed };
+    if (intent === 'CLARIFICATION_RESPONSE' || intentResult.isClarification) {
+      // Find the last assistant message with parsed data
+      const lastContext = conversationHistory
+        .slice()
+        .reverse()
+        .find(m => m.role === 'assistant' && m.parsed);
+      
+      if (lastContext && lastContext.parsed) {
+        const prev = lastContext.parsed;
+        // Merge: keep previous values unless new ones are provided
+        if (parsed.amount == null && prev.amount != null) mergedParsed.amount = prev.amount;
+        if (!parsed.sourceCurrency && prev.sourceCurrency) mergedParsed.sourceCurrency = prev.sourceCurrency;
+        if (!parsed.destinationCurrency && prev.destinationCurrency) mergedParsed.destinationCurrency = prev.destinationCurrency;
+        if (parsed.priority === 'BALANCED' && prev.priority && prev.priority !== 'BALANCED') mergedParsed.priority = prev.priority;
+        if (parsed.paymentMode === 'SEND_AMOUNT' && prev.paymentMode === 'RECIPIENT_GETS') mergedParsed.paymentMode = prev.paymentMode;
+        // Update intent to the previous intent
+        if (prev.intent && prev.intent !== 'CLARIFICATION_RESPONSE' && prev.intent !== 'UNKNOWN') {
+          mergedParsed.intent = prev.intent;
+        }
+      }
+    }
+    
+    // Update parsed with merged values
+    Object.assign(parsed, mergedParsed);
+    
+    // Now route based on intent
+    const actionType = mapIntentToAction(parsed.intent);
+    
+    // Handle GREETING
+    if (actionType === 'GREETING') {
+      return res.status(200).json({
+        success: true,
+        requiresClarification: false,
+        actionType: 'GREETING',
+        assistantMessage: "Hello! I'm your Transact3 AI Transfer Assistant. I can help you with transfers, wallet balance, currency conversion, FX forecasts, transaction history, and provider comparisons. What would you like to do?",
+        data: null
+      });
+    }
+    
+    // Handle WALLET_BALANCE / WALLET_HOLDINGS
     if (actionType === 'BALANCE') {
       try {
         const userId = req.user ? (req.user._id || req.user.id) : null;
@@ -315,17 +355,109 @@ ${txSummary}`;
       }
     }
     
-    // Handle TRANSFER action (existing functionality)
-    const intentResult = await extractIntent(prompt);
-    const parsed = intentResult.parsed;
+    // Handle COMPETITOR_COMPARISON action
+    if (actionType === 'COMPETITOR_COMPARISON') {
+      try {
+        const amount = parsed.amount || 500;
+        const sourceCurrency = parsed.sourceCurrency || 'USD';
+        const destinationCurrency = parsed.destinationCurrency || 'INR';
+        
+        // Get provider quotes using existing service
+        const providerComparison = await railPricingService.fetchLiveMarketQuotes(
+          sourceCurrency,
+          destinationCurrency,
+          amount
+        );
+        
+        const providerQuotes = buildProviderQuoteResponse(providerComparison);
+        const quoteCount = providerQuotes.providerQuotes.length;
+        
+        let message = `I can compare available providers for ${amount} ${sourceCurrency} to ${destinationCurrency}. `;
+        if (quoteCount > 0) {
+          const providerNames = providerQuotes.providerQuotes.map(p => p.name).join(', ');
+          message += `The comparison feed returned ${quoteCount} provider snapshot(s): ${providerNames}. `;
+          message += 'These are provider-reported, non-binding estimates. ';
+        } else {
+          message += 'No provider comparison snapshots were available for this corridor. ';
+        }
+        message += 'Transact3 uses its own routing engine (Regional Instant, Card Push, SWIFT Batch) for transfers. Would you like to see the Transact3 route options as well?';
+        
+        return res.status(200).json({
+          success: true,
+          requiresClarification: false,
+          actionType: 'COMPETITOR_COMPARISON',
+          assistantMessage: message,
+          data: {
+            providerQuotes: providerQuotes.providerQuotes,
+            providerQuoteMeta: providerQuotes.providerQuoteMeta,
+            sourceCurrency,
+            destinationCurrency,
+            amount
+          }
+        });
+      } catch (err) {
+        return res.status(200).json({
+          success: true,
+          requiresClarification: false,
+          actionType: 'COMPETITOR_COMPARISON',
+          assistantMessage: 'I can compare providers like Western Union and Transact3 based on available fees, exchange rates, recipient amounts, and delivery estimates. Would you like a numerical comparison for a specific transfer amount and currency pair?',
+          data: null
+        });
+      }
+    }
     
-    if (intentResult.requiresClarification) {
+    // Handle GENERAL action
+    if (actionType === 'GENERAL') {
+      return res.status(200).json({
+        success: true,
+        requiresClarification: false,
+        actionType: 'GENERAL',
+        assistantMessage: parsed.explanation || 'I can help you with transfers, wallet balance, currency conversion, FX forecasts, and provider comparisons. What would you like to know?',
+        data: null
+      });
+    }
+    
+    // Handle UNKNOWN action
+    if (actionType === 'UNKNOWN') {
+      return res.status(200).json({
+        success: true,
+        requiresClarification: false,
+        actionType: 'UNKNOWN',
+        assistantMessage: "I'm not sure I understood that. I can help you with: sending money, checking wallet balance, converting currency, FX forecasts, transaction history, and comparing providers. Could you rephrase your request?",
+        data: null
+      });
+    }
+    
+    // Handle TRANSFER action (existing functionality)
+    // parsed and intent already extracted above
+    
+    // Check for missing fields
+    if (parsed.missingFields && parsed.missingFields.length > 0) {
+      const missing = parsed.missingFields;
+      let clarificationMsg = '';
+      if (missing.length === 1) {
+        if (missing[0] === 'amount') {
+          clarificationMsg = parsed.paymentMode === 'RECIPIENT_GETS'
+            ? 'How much should your recipient receive?'
+            : 'How much would you like to send?';
+        } else if (missing[0] === 'sourceCurrency') {
+          clarificationMsg = 'Which currency would you like to send from?';
+        } else if (missing[0] === 'destinationCurrency') {
+          clarificationMsg = 'Which currency would you like the recipient to receive?';
+        }
+      } else {
+        clarificationMsg = 'I can help you with this transfer. ' + 
+          (missing.includes('amount') ? 'How much would you like to send? ' : '') +
+          (missing.includes('sourceCurrency') ? 'Which currency are you sending from? ' : '') +
+          (missing.includes('destinationCurrency') ? 'Which currency should the recipient receive?' : '');
+      }
+      
       return res.status(200).json({
         success: false,
         requiresClarification: true,
-        clarificationMessage: intentResult.clarificationMessage,
+        clarificationMessage: clarificationMsg.trim() || 'Please provide the missing transfer details.',
         parsed: parsed,
-        fallbackReason: intentResult.fallbackReason || 'validation_failed'
+        fallbackReason: 'missing_fields'
       });
     }
     

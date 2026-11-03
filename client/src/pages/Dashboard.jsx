@@ -12,13 +12,10 @@ const Dashboard = () => {
     if (!aiInput.trim() || aiLoading) return;
     setAiLoading(true);
     try {
-      const response = await aiQuery(aiInput);
-      const data = response.data;
-      if (data.success) {
-        navigate('/ai-agent');
-      }
+      navigate('/ai-agent', { state: { initialMessage: aiInput.trim() } });
+      setAiInput('');
     } catch (err) {
-      console.error('AI query failed:', err);
+      console.error('Navigation failed:', err);
     } finally {
       setAiLoading(false);
     }
