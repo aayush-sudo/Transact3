@@ -134,3 +134,6 @@ exports.checkUserBalance = async (userId, currency) => {
   const holding = portfolio.holdings.find(h => h.currency === curr);
   return holding ? holding.amount : 0;
 };
+
+// Export helper for use in other controllers
+module.exports.getOrCreatePortfolio = getOrCreatePortfolio;

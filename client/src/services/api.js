@@ -16,4 +16,6 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+export const aiQuery = (prompt) => api.post('/orchestration/ai-query', { prompt });
+
 export default api;
