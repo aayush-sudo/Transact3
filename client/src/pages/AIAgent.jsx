@@ -26,7 +26,7 @@ const AIAgent = () => {
     'Convert 100 USD to INR',
     'Check my wallet balance',
     'FX forecast USD to INR',
-    'Compare Western Union with Transact3'
+    'Compare Providers'
   ];
 
   // Fetch recipients on mount
@@ -158,6 +158,13 @@ const AIAgent = () => {
           'Convert currency now',
           'Compare transfer options',
           'Check another currency pair'
+        ]);
+      } else if (data.actionType === 'FX_TIMING_ANALYSIS') {
+        setFollowUpSuggestions([
+          'Show USD/INR trend for last 30 days',
+          'What if rate reaches 96?',
+          'How much for 500 USD?',
+          'Explain risks of waiting'
         ]);
       } else if (data.actionType === 'HISTORY') {
         setFollowUpSuggestions([

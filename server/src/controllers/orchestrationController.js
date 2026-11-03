@@ -20,6 +20,7 @@ function mapIntentToAction(intent) {
     'WALLET_BALANCE': 'BALANCE',
     'WALLET_HOLDINGS': 'BALANCE',
     'FX_FORECAST': 'FX_FORECAST',
+    'FX_TIMING_ANALYSIS': 'FX_TIMING_ANALYSIS',
     'FX_INFORMATION': 'FX_FORECAST',
     'TRANSACTION_HISTORY': 'HISTORY',
     'TRANSACTION_STATUS': 'HISTORY',
@@ -281,7 +282,10 @@ exports.aiQuery = async (req, res, next) => {
       
       try {
         const forecast = await fxForecastingEngine.predictFXMovements(source, destination);
-        const message = `FX Forecast for ${source} → ${destination}: Current rate: ${forecast.currentRate || 'N/A'}, Trend: ${forecast.classification || 'N/A'}, Volatility: ${forecast.volatility || 'N/A'}%`;
+        const trend = forecast.trendDirection || 'NEUTRAL';
+        const volatility = forecast.volatilityPct != null ? forecast.volatilityPct : null;
+        const confidence = forecast.confidencePct != null ? forecast.confidencePct : null;
+        const message = `FX Forecast for ${source} → ${destination}:\nCurrent rate: ${forecast.currentRate}\nTrend: ${trend}\nVolatility: ${volatility != null ? volatility + '%' : 'N/A'}\nConfidence: ${confidence != null ? confidence + '%' : 'N/A'}\n6h projection: ${forecast.predictions?.h6}\n24h projection: ${forecast.predictions?.h24}\n48h projection: ${forecast.predictions?.h48}`;
         return res.status(200).json({
           success: true,
           requiresClarification: false,
@@ -295,6 +299,84 @@ exports.aiQuery = async (req, res, next) => {
           requiresClarification: false,
           actionType: 'FX_FORECAST',
           assistantMessage: 'Could not fetch FX forecast. Please try again.',
+          data: null
+        });
+      }
+    }
+    
+    // Handle FX_TIMING_ANALYSIS action
+    if (actionType === 'FX_TIMING_ANALYSIS' || (actionType === 'FX_FORECAST' && /now or wait|should I convert|good time|wait for/i.test(prompt))) {
+      const currencyCodes = ['USD', 'EUR', 'GBP', 'INR', 'BRL', 'AED', 'SGD', 'AUD', 'CAD', 'JPY'];
+      const foundCurrencies = currencyCodes.filter(c => prompt.toUpperCase().includes(c));
+      
+      const source = foundCurrencies[0] || 'USD';
+      const destination = foundCurrencies[1] || 'INR';
+      const amountMatch = prompt.match(/(\d+(?:,\d+)*(?:\.\d+)?)/);
+      const amount = amountMatch ? parseFloat(amountMatch[1].replace(/,/g, '')) : 100;
+      
+      try {
+        const forecast = await fxForecastingEngine.predictFXMovements(source, destination);
+        const currentRate = forecast.currentRate;
+        const trend = forecast.trendDirection || 'NEUTRAL';
+        const volatility = forecast.volatilityPct;
+        const confidence = forecast.confidencePct;
+        
+        // Calculate amounts
+        const nowAmount = (amount * currentRate).toFixed(2);
+        
+        // Determine favourable direction
+        // For USD->INR: higher rate = more INR (favourable)
+        // For INR->USD: lower rate = more USD (favourable, since rate is INR per USD, lower means fewer INR needed per USD)
+        const isFavourableUp = source === 'USD' && destination === 'INR';
+        
+        let trendFavourable = false;
+        if (isFavourableUp && trend === 'BULLISH') trendFavourable = true;
+        if (!isFavourableUp && trend === 'BEARISH') trendFavourable = true;
+        
+        // Calculate hypothetical scenarios
+        const higherRate = (currentRate * 1.005).toFixed(4);
+        const lowerRate = (currentRate * 0.995).toFixed(4);
+        const higherAmount = (amount * parseFloat(higherRate)).toFixed(2);
+        const lowerAmount = (amount * parseFloat(lowerRate)).toFixed(2);
+        
+        let message = `FX Timing Analysis for ${amount} ${source} → ${destination}:\n\n`;
+        message += `Current rate: 1 ${source} = ${currentRate} ${destination}\n`;
+        message += `If you convert now: ${amount} ${source} = ${nowAmount} ${destination}\n\n`;
+        message += `Forecast trend: ${trend} (confidence: ${confidence}%)\n`;
+        message += `Volatility: ${volatility}%\n\n`;
+        
+        if (trendFavourable) {
+          message += `The forecast suggests the rate may move in your favour. `;
+          message += `If the rate reaches ${higherRate}: ${amount} ${source} = ${higherAmount} ${destination} (gain of ${(parseFloat(higherAmount) - parseFloat(nowAmount)).toFixed(2)} ${destination}).\n`;
+        } else {
+          message += `The forecast suggests the rate may move against you. `;
+          message += `If the rate drops to ${lowerRate}: ${amount} ${source} = ${lowerAmount} ${destination} (loss of ${(parseFloat(nowAmount) - parseFloat(lowerAmount)).toFixed(2)} ${destination}).\n`;
+        }
+        
+        message += `\nHowever, forecasts are uncertain. `;
+        if (volatility != null && volatility > 1) {
+          message += `With ${volatility}% volatility, the rate could move significantly in either direction. `;
+        }
+        message += `If you need the money urgently, converting now removes timing risk. If you're flexible, you could potentially benefit from waiting, but there's no guarantee.`;
+        
+        return res.status(200).json({
+          success: true,
+          requiresClarification: false,
+          actionType: 'FX_TIMING_ANALYSIS',
+          assistantMessage: message,
+          data: {
+            source, destination, amount,
+            currentRate, trend, volatility, confidence,
+            nowAmount, higherRate, higherAmount, lowerRate, lowerAmount,
+            trendFavourable
+          }
+        });
+      } catch (err) {
+        return res.status(200).json({
+          success: true,
+          requiresClarification: false,
+          actionType: 'FX_TIMING_ANALYSIS',
+          assistantMessage: 'Could not fetch FX forecast for timing analysis. Please try again.',
           data: null
         });
       }
@@ -330,9 +412,12 @@ exports.aiQuery = async (req, res, next) => {
           });
         }
         
-        const txSummary = transactions.map((tx, i) => 
-          `${i+1}. ${tx.amount} ${tx.sourceCurrency} → ${tx.destinationCurrency} (${tx.status}) - ${new Date(tx.timestamp).toLocaleDateString()}`
-        ).join('\n');
+        const txSummary = transactions.map((tx, i) => {
+          const amount = tx.sourceAmount != null ? tx.sourceAmount : 'N/A';
+          const destAmount = tx.destinationAmount != null ? tx.destinationAmount : null;
+          const destInfo = destAmount ? ` (recipient gets ${destAmount} ${tx.destinationCurrency})` : '';
+          return `${i+1}. ${amount} ${tx.sourceCurrency} → ${tx.destinationCurrency}${destInfo} (${tx.status}) - ${new Date(tx.timestamp).toLocaleDateString()}`;
+        }).join('\n');
         
         const message = `Your recent transactions:
 ${txSummary}`;

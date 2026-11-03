@@ -73,7 +73,7 @@ Classify the user's intent and extract structured information. Never invent exch
 
 Return a single JSON object with exactly these keys:
 {
-  "intent": "TRANSFER_REQUEST" | "TRANSFER_COMPARISON" | "COMPETITOR_COMPARISON" | "CHEAPEST_TRANSFER" | "FASTEST_TRANSFER" | "CURRENCY_CONVERSION" | "WALLET_BALANCE" | "WALLET_HOLDINGS" | "FX_FORECAST" | "FX_INFORMATION" | "TRANSACTION_HISTORY" | "TRANSACTION_STATUS" | "PAYMENT_SCHEDULING" | "RECIPIENT_LOOKUP" | "RECIPIENT_TRANSFER" | "TRANSFER_EXPLANATION" | "WHAT_IF_ANALYSIS" | "GENERAL_PLATFORM_QUESTION" | "CLARIFICATION_RESPONSE" | "GREETING" | "UNKNOWN",
+  "intent": "TRANSFER_REQUEST" | "TRANSFER_COMPARISON" | "COMPETITOR_COMPARISON" | "CHEAPEST_TRANSFER" | "FASTEST_TRANSFER" | "CURRENCY_CONVERSION" | "WALLET_BALANCE" | "WALLET_HOLDINGS" | "FX_FORECAST" | "FX_TIMING_ANALYSIS" | "FX_INFORMATION" | "TRANSACTION_HISTORY" | "TRANSACTION_STATUS" | "PAYMENT_SCHEDULING" | "RECIPIENT_LOOKUP" | "RECIPIENT_TRANSFER" | "TRANSFER_EXPLANATION" | "WHAT_IF_ANALYSIS" | "GENERAL_PLATFORM_QUESTION" | "CLARIFICATION_RESPONSE" | "GREETING" | "UNKNOWN",
   "amount": number or null,
   "amountType": "SENDER_AMOUNT" | "RECIPIENT_AMOUNT",
   "sourceCurrency": three-letter ISO 4217 code or null,
@@ -338,6 +338,7 @@ const detectFallbackIntent = (prompt) => {
   if (/\b(compare|western union|citibank|which.*cheaper|which.*better|which.*faster)\b/.test(lower)) return 'COMPETITOR_COMPARISON';
   if (/\b(balance|wallet|holdings|funds)\b/.test(lower)) return 'WALLET_BALANCE';
   if (/\b(convert|exchange rate|rate)\b/.test(lower)) return 'CURRENCY_CONVERSION';
+  if (/\b(now or wait|should i convert|good time|wait for|rate to improve|become stronger|become weaker)\b/.test(lower)) return 'FX_TIMING_ANALYSIS';
   if (/\b(forecast|outlook|trend|prediction)\b/.test(lower)) return 'FX_FORECAST';
   if (/\b(history|transactions|past|recent)\b/.test(lower)) return 'TRANSACTION_HISTORY';
   if (/\b(what if|what happens if)\b/.test(lower)) return 'WHAT_IF_ANALYSIS';
@@ -449,7 +450,7 @@ const buildClarificationMessage = ({ missingFields, invalidReason, ambiguousCurr
 const VALID_INTENTS = [
   'TRANSFER_REQUEST', 'TRANSFER_COMPARISON', 'COMPETITOR_COMPARISON',
   'CHEAPEST_TRANSFER', 'FASTEST_TRANSFER', 'CURRENCY_CONVERSION',
-  'WALLET_BALANCE', 'WALLET_HOLDINGS', 'FX_FORECAST', 'FX_INFORMATION',
+  'WALLET_BALANCE', 'WALLET_HOLDINGS', 'FX_FORECAST', 'FX_TIMING_ANALYSIS', 'FX_INFORMATION',
   'TRANSACTION_HISTORY', 'TRANSACTION_STATUS', 'PAYMENT_SCHEDULING',
   'RECIPIENT_LOOKUP', 'RECIPIENT_TRANSFER', 'TRANSFER_EXPLANATION',
   'WHAT_IF_ANALYSIS', 'GENERAL_PLATFORM_QUESTION', 'CLARIFICATION_RESPONSE',
