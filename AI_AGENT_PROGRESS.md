@@ -119,3 +119,28 @@ Same personas plus: no transaction is created (transaction history count unchang
 - Groq's free tier rate-limits quickly (HTTP 429). When that happens the deterministic classifier takes over (`interpretationSource: "FALLBACK"`) and produces the same routing; the trace logs expose this explicitly rather than pretending the LLM answered.
 - `"Use GBP instead."` (a bare single-currency replacement) is resolved to the **source** side, matching the common phrasing; ambiguous multi-pair references do ask for clarification.
 - No conversation documents are stored in MongoDB — the structured context travels with the authenticated request (`conversationId` + bounded history) and is persisted client-side in `sessionStorage`. This keeps user isolation inherent (a request can only carry its own history) and avoids adding a schema.
+
+---
+
+## Stage 10 — Persistent AI-generated response disclaimer
+
+### Requirement
+A permanent, subtle disclaimer on the AI Agent page so users always know responses are AI-generated and must be verified before acting on financial details.
+
+### Implementation
+- Added a `role="note"` block in `client/src/pages/AIAgent.jsx`, directly **below the message input area** and outside the message list, so it is never rendered as a chat bubble.
+- Small `Info` icon (`lucide-react`, `aria-hidden`) + secondary text (`text-slate-500`) on a light `bg-slate-50` / `border-slate-200` panel, matching the existing slate/emerald UI conventions.
+- Layout is wrap-safe and mobile-first: `flex items-start`, icon `shrink-0`, text `min-w-0 flex-1`, `text-[11px] sm:text-xs`, `leading-relaxed`, full-width within the existing `container mx-auto px-4`.
+- Static block (not `fixed`/`sticky`), so it does not overlap the conversation, the input, or the scheduling modal, and does not change scroll behaviour.
+- It lives outside all conversation state, so it survives **New Conversation**, follow-up turns, the homepage handoff, and session-restored chats.
+- No popups, dialogs, or extra interactions added.
+
+### Verification
+- Frontend production build: **passed**; disclaimer text confirmed present in the emitted bundle.
+- Responsive utilities confirmed in the generated CSS: base `text-[11px]` and `sm:text-xs` (`@media (width>=640px)`), plus `min-w-0` / `flex-1` / `shrink-0` so the text wraps instead of overflowing on narrow viewports.
+- No JS/behaviour changes to the agent, so the Stage 9 suites still apply unchanged.
+- Automated browser tooling (Playwright/Puppeteer) is not installed in this workspace, so desktop/mobile verification was done through the compiled responsive CSS and layout structure rather than screenshots.
+
+### Files changed
+- `client/src/pages/AIAgent.jsx` (disclaimer block + `Info` icon import)
+- `AI_AGENT_PROGRESS.md`

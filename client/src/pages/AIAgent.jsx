@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { aiQuery } from '../services/api';
-import { Loader2, Sparkles, Bot, CheckCircle, Clock3, ArrowRight, X, Send, Wallet, TrendingUp, RefreshCw, MessageSquare } from 'lucide-react';
+import { Loader2, Sparkles, Bot, CheckCircle, Clock3, ArrowRight, X, Send, Wallet, TrendingUp, RefreshCw, MessageSquare, Info } from 'lucide-react';
 import PaymentSchedulingModal from '../components/PaymentSchedulingModal';
 
 const CONVERSATION_STORAGE_KEY = 'transact3.ai.conversation';
@@ -463,6 +463,18 @@ const AIAgent = () => {
               View full comparison <ArrowRight size={14} />
             </Link>
           </div>
+        </div>
+
+        {/* Persistent AI-generated response disclaimer */}
+        <div
+          role="note"
+          aria-label="AI-generated response disclaimer"
+          className="mt-4 flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px] leading-relaxed text-slate-500 sm:text-xs"
+        >
+          <Info size={14} className="mt-0.5 shrink-0 text-slate-400" aria-hidden="true" />
+          <p className="min-w-0 flex-1">
+            Responses from the Transact3 AI Agent are AI-generated and provided for informational purposes only. They may contain inaccuracies or outdated information. Please verify important details, including exchange rates, fees, forecasts, recipient information, and transfer details, before making any financial decisions or confirming a transaction. Forecasts are estimates and do not guarantee future exchange rates or outcomes.
+          </p>
         </div>
 
         {/* Scheduling modal */}
