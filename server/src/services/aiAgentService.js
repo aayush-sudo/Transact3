@@ -2,7 +2,8 @@ const axios = require('axios');
 const { SUPPORTED_CURRENCY_CODES, isCurrencySupported } = require('../config/currencies');
 
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
-const DEFAULT_GROQ_MODEL = 'llama-3.3-70b-versatile';
+const DEFAULT_GROQ_MODEL = 'openai/gpt-oss-120b';
+const DEFAULT_GROQ_FALLBACK_MODEL = 'openai/gpt-oss-20b';
 const MAX_PROMPT_LENGTH = 2000;
 const MAX_HISTORY_MESSAGES = 8;
 const MIN_AMOUNT = 0.01;
@@ -67,6 +68,9 @@ const KNOWN_PROVIDERS = [
 
 const RECIPIENT_GETS_PATTERN = /\b(?:recipient|receiver|beneficiary|they|them)\b[^.?!]{0,60}\b(?:receive|receives|get|gets)\b|\breceive(?:s)?\s+exactly\b|\bexactly\s+[\d₹$€£¥]/i;
 const AMOUNT_WORDS_PATTERN = /\b(?:one|two|three|four|five|six|seven|eight|nine|ten|hundred|thousand|million|billion)\b/i;
+// Explicit edits to an existing request ("make it 500", "change destination to EUR").
+const CORRECTION_PATTERN = /^(?:actually[,\s]*)?(?:make it\b|change\s+(?:it|the\s+)?(?:amount|destination|source|currency|pair)\b|update\s+(?:it|the\s+)?(?:amount|destination|source|currency|pair)\b|set\s+(?:it|the\s+)?(?:amount|destination|source|currency|pair)\s+to\b|use\s+[A-Za-z]{3}\s+instead\b|(?:increase|reduce|raise|lower)\s+(?:it\s+)?to\b)/i;
+const isCorrectionMessage = (prompt) => CORRECTION_PATTERN.test(String(prompt || '').trim());
 
 const SYSTEM_PROMPT = `You are the natural-language intent parser for Transact3, a cross-border money transfer platform.
 Classify the user's intent and extract structured information. Never invent exchange rates, fees, delivery times, recipient amounts, provider quotes, route availability, or utility scores. Transact3's backend calculates all financial values.
@@ -225,8 +229,13 @@ const detectAmbiguousDollar = (prompt, mentions) => {
 
 const roleForMention = (prompt, index) => {
   const before = prompt.slice(Math.max(0, index - 40), index).toLowerCase();
-  if (/\b(?:to|into|towards?|receive|receives|recipient|gets?|for)\s*$/.test(before)) return 'destination';
-  if (/\b(?:from|using|with|send|sending|spend|convert)\s*$/.test(before)) return 'source';
+  const after = prompt.slice(index, index + 48).toLowerCase();
+  // "How many rupees will I get for 100 dollars?" -> rupees is the destination.
+  if (/\b(?:will|do|can|would)\s+(?:i|we)\s+(?:get|receive)\b|\b(?:i|we)\s+(?:get|receive)\b/.test(after)) {
+    return 'destination';
+  }
+  if (/\b(?:to|into|towards?|in|receive|receives|recipient|gets?|for)\s*$/.test(before)) return 'destination';
+  if (/\b(?:from|using|with|send|sending|spend|convert|exchange)\s*$/.test(before)) return 'source';
   return null;
 };
 
@@ -306,17 +315,32 @@ const resolveCurrencies = (prompt, context = {}) => {
 
 const getHistoryContext = (history = []) => {
   if (!Array.isArray(history)) return null;
-  const previousAssistant = [...history]
-    .reverse()
-    .find((message) => message
-      && message.role === 'assistant'
-      && message.parsed
-      && (message.requiresClarification === true || (Array.isArray(message.missingFields) && message.missingFields.length > 0)));
+  const FINANCIAL = new Set([
+    'TRANSFER_REQUEST', 'TRANSFER_COMPARISON', 'COMPETITOR_COMPARISON',
+    'CHEAPEST_TRANSFER', 'FASTEST_TRANSFER', 'RECIPIENT_TRANSFER', 'WHAT_IF_ANALYSIS',
+    'PAYMENT_SCHEDULING', 'CURRENCY_CONVERSION', 'FX_FORECAST', 'FX_INFORMATION',
+    'FX_TIMING_ANALYSIS'
+  ]);
+  // Only the most recent *financial* operation may supply entities. General
+  // chatter in between must not erase it, and unrelated older turns must not
+  // win over a newer explicit pair.
+  let previousAssistant = null;
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const message = history[i];
+    if (!message || message.role !== 'assistant' || !message.parsed) continue;
+    const intent = String(message.parsed.intent || '').toUpperCase();
+    if (!FINANCIAL.has(intent)) continue;
+    if (history.length - i > 10) break;
+    previousAssistant = message;
+    break;
+  }
   if (!previousAssistant) return null;
+  const parsed = previousAssistant.parsed;
+  const hasMissing = Array.isArray(parsed.missingFields) && parsed.missingFields.length > 0;
   return {
-    parsed: previousAssistant.parsed,
-    missingFields: Array.isArray(previousAssistant.missingFields) ? previousAssistant.missingFields : [],
-    requiresClarification: true
+    parsed,
+    missingFields: hasMissing ? parsed.missingFields : [],
+    requiresClarification: hasMissing
   };
 };
 
@@ -340,22 +364,42 @@ const buildFallbackExplanation = (parsed) => {
 
 const detectFallbackIntent = (prompt) => {
   const lower = prompt.toLowerCase().trim();
-  if (/^(hi|hello|hey|greetings|good morning|good evening)/.test(lower)) return 'GREETING';
+  if (/^(hi|hello|hey|greetings|good morning|good evening)\b/.test(lower)) return 'GREETING';
   if (/\b(joke|funny|tell me a joke)\b/.test(lower)) return 'GENERAL_CONVERSATION';
   if (/\b(what is transact3|what does transact3|how does transact3|about transact3)\b/.test(lower)) return 'TRANSACT3_PLATFORM_QUESTION';
-  if (/\b(what is|who invented|capital of|meaning of|difference between|explain)\b/.test(lower)) return 'GENERAL_KNOWLEDGE';
-  if (/(compare|western union|citibank|which.*cheaper|which.*better|which.*faster)/.test(lower)) return 'COMPETITOR_COMPARISON';
-  if (/\b(balance|wallet|holdings|funds)\b/.test(lower)) return 'WALLET_BALANCE';
-  if (/\b(how much is|how much are|what is|what's|how many|what are)\b.*\b(usd|eur|gbp|inr|sgd|aed|aud|cad|jpy|brl)\b/.test(lower)) return 'CURRENCY_CONVERSION';
-  if (/\b(convert|exchange rate|rate)\b/.test(lower)) return 'CURRENCY_CONVERSION';
-  if (/\b(now or wait|should i convert|good time|wait for|rate to improve|become stronger|become weaker)\b/.test(lower)) return 'FX_TIMING_ANALYSIS';
-  if (/\b(forecast|outlook|trend|prediction)\b/.test(lower)) return 'FX_FORECAST';
-  if (/\b(history|transactions|past|recent)\b/.test(lower)) return 'TRANSACTION_HISTORY';
+  if (/\b(weather|sports? score|match result|stock price|news today|who won)\b/.test(lower)) return 'OUT_OF_SCOPE';
+
+  // Timing questions must win over plain conversion: "should I convert ... now or wait?"
+  if (/\b(now or wait|should i (?:convert|exchange|wait|send)|good time|better time|wait for|rate to improve|rates? improve|become stronger|become weaker|will (?:the )?rate|next week|next month|timing)\b/.test(lower)) {
+    return 'FX_TIMING_ANALYSIS';
+  }
+  // Follow-up references to a prior financial operation.
+  if (/^.{0,40}\b(?:its|it|this|that|the same)\b.{0,30}\b(?:forecast|outlook|trend|prediction|rate|history|historical)\b/.test(lower)
+    || /\b(?:forecast|outlook|prediction|historical trend)\b/.test(lower)
+    || /^(?:check|show|explain|tell me about)\b.{0,30}\b(?:trend|history|historical)\b/.test(lower)) {
+    return 'FX_FORECAST';
+  }
+  // Correction/clarification replies that carry no intent of their own.
+  if (isCorrectionMessage(lower)) return 'CLARIFICATION_RESPONSE';
+  if (/^(\d+(?:[\.,]\d+)?|USD|EUR|GBP|INR|SGD|AED|AUD|CAD|JPY|BRL|cheapest|fastest|balanced)$/i.test(lower)) return 'CLARIFICATION_RESPONSE';
+
+  if (/\b(what if|what happens if)\b/.test(lower) && /\brate|forecast|convert|exchange\b/.test(lower)) {
+    return 'FX_TIMING_ANALYSIS';
+  }
   if (/\b(what if|what happens if)\b/.test(lower)) return 'WHAT_IF_ANALYSIS';
+  const mentionCodes = new Set(detectCurrencyMentions(prompt).map((mention) => mention.code));
+  const hasPairMentions = mentionCodes.size >= 2;
+  const asksQuantity = /\b(?:how much|how many|what(?:'s| is))\b/.test(lower);
+  const hasConversionVerb = /\b(?:convert|conversion|exchange rate|exchange)\b/.test(lower);
+  if ((asksQuantity && hasPairMentions) || hasConversionVerb) {
+    return 'CURRENCY_CONVERSION';
+  }
+  if (/(compare|western union|citibank|which.*cheaper|which.*better|which.*faster|cheapest (?:provider|option|route))/.test(lower)) return 'COMPETITOR_COMPARISON';
+  if (/\b(balance|wallet|holdings|funds)\b/.test(lower)) return 'WALLET_BALANCE';
+  if (/\b(history|transactions|past|recent)\b/.test(lower)) return 'TRANSACTION_HISTORY';
   if (/\b(cheapest|lowest cost|least expensive)\b/.test(lower)) return 'CHEAPEST_TRANSFER';
   if (/\b(fastest|quickest|instant)\b/.test(lower)) return 'FASTEST_TRANSFER';
-  // Short answers that are clarifications
-  if (/^(\d+(?:[\.,]\d+)?|USD|EUR|GBP|INR|SGD|AED|AUD|CAD|JPY|BRL|cheapest|fastest|balanced)$/i.test(lower)) return 'CLARIFICATION_RESPONSE';
+  if (/\b(what is|who invented|capital of|meaning of|difference between|explain)\b/.test(lower)) return 'GENERAL_KNOWLEDGE';
   return 'TRANSFER_REQUEST';
 };
 
@@ -383,9 +427,17 @@ const fallbackParse = (prompt, context = null) => {
     if (parsed.amount == null && previous.amount != null) parsed.amount = Number(previous.amount);
     if (!parsed.sourceCurrency) parsed.sourceCurrency = normalizeCurrency(previous.sourceCurrency);
     if (!parsed.destinationCurrency) parsed.destinationCurrency = normalizeCurrency(previous.destinationCurrency);
-    // Preserve intent from previous context if current is clarification or unknown
-    if ((parsed.intent === 'CLARIFICATION_RESPONSE' || parsed.intent === 'UNKNOWN') && previous.intent && previous.intent !== 'CLARIFICATION_RESPONSE' && previous.intent !== 'UNKNOWN') {
+    // Preserve intent from previous context ONLY when this message carried no
+    // intent of its own. A new intent on the same entities (e.g. conversion ->
+    // forecast) must survive.
+    if ((parsed.intent === 'CLARIFICATION_RESPONSE' || parsed.intent === 'UNKNOWN')
+      && previous.intent
+      && previous.intent !== 'CLARIFICATION_RESPONSE'
+      && previous.intent !== 'UNKNOWN') {
       parsed.intent = previous.intent;
+    }
+    if (Array.isArray(previous.referencedPairs) && previous.referencedPairs.length > 1 && !parsed.referencedPairs) {
+      parsed.referencedPairs = previous.referencedPairs.map((pair) => ({ ...pair }));
     }
     // Preserve isClarification flag
     if (parsed.isClarification && previous.intent) {
@@ -463,7 +515,9 @@ const VALID_INTENTS = [
   'WALLET_BALANCE', 'WALLET_HOLDINGS', 'FX_FORECAST', 'FX_TIMING_ANALYSIS', 'FX_INFORMATION',
   'TRANSACTION_HISTORY', 'TRANSACTION_STATUS', 'PAYMENT_SCHEDULING',
   'RECIPIENT_LOOKUP', 'RECIPIENT_TRANSFER', 'TRANSFER_EXPLANATION',
-  'WHAT_IF_ANALYSIS', 'GENERAL_PLATFORM_QUESTION', 'CLARIFICATION_RESPONSE',
+  'WHAT_IF_ANALYSIS', 'GENERAL_PLATFORM_QUESTION', 'TRANSACT3_PLATFORM_QUESTION',
+  'GENERAL_KNOWLEDGE', 'GENERAL_CONVERSATION', 'OUT_OF_SCOPE',
+  'UNSUPPORTED_OPERATION', 'CLARIFICATION_RESPONSE',
   'GREETING', 'UNKNOWN'
 ];
 
@@ -651,8 +705,14 @@ const groundLlmIntent = (raw, prompt, context) => {
     grounded.mentionedProvider = detectProvider(prompt);
   }
 
-  // Preserve intent from context if current is clarification
-  if (grounded.isClarification && context?.parsed?.intent && context.parsed.intent !== 'CLARIFICATION_RESPONSE' && context.parsed.intent !== 'UNKNOWN') {
+  // Preserve intent from context ONLY for a pure clarification reply. Never
+  // replace a real new intent just because entities were inherited.
+  const groundedIntent = String(grounded.intent || '').toUpperCase();
+  if ((groundedIntent === 'CLARIFICATION_RESPONSE' || groundedIntent === 'UNKNOWN' || grounded.isClarification === true)
+    && (groundedIntent === 'CLARIFICATION_RESPONSE' || groundedIntent === 'UNKNOWN')
+    && context?.parsed?.intent
+    && context.parsed.intent !== 'CLARIFICATION_RESPONSE'
+    && context.parsed.intent !== 'UNKNOWN') {
     grounded.intent = context.parsed.intent;
   }
 
@@ -685,7 +745,25 @@ const extractIntent = async (prompt, options = {}) => {
 
   try {
     const requestFn = options.requestFn || callGroq;
-    const response = await requestFn({ prompt: safePrompt, history, apiKey, model });
+    let response;
+    try {
+      response = await requestFn({ prompt: safePrompt, history, apiKey, model });
+    } catch (error) {
+      // A retired model returns 404 from Groq. Retry once with the configured
+      // fallback model instead of silently degrading to keyword matching.
+      if (!options.requestFn && error && error.response && error.response.status === 404) {
+        const fallbackModel = options.fallbackModel
+          || process.env.GROQ_FALLBACK_MODEL
+          || DEFAULT_GROQ_FALLBACK_MODEL;
+        if (fallbackModel && fallbackModel !== model) {
+          response = await requestFn({ prompt: safePrompt, history, apiKey, model: fallbackModel });
+        } else {
+          throw error;
+        }
+      } else {
+        throw error;
+      }
+    }
     const rawIntent = parseGroqJson(response);
     const grounded = groundLlmIntent(rawIntent, safePrompt, context);
     const llmValidation = validateIntent(grounded, {
@@ -844,8 +922,11 @@ module.exports = {
   CURRENCY_NAMES,
   SYSTEM_PROMPT,
   detectAmount,
+  isCorrectionMessage,
   detectPriority,
   detectCurrencyMentions,
+  normalizeCurrency,
+  resolveCurrencies,
   fallbackParse,
   validateIntent,
   extractIntent,

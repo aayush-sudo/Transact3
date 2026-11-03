@@ -4,9 +4,38 @@ import { aiQuery } from '../services/api';
 import { Loader2, Sparkles, Bot, CheckCircle, Clock3, ArrowRight, X, Send, Wallet, TrendingUp, RefreshCw, MessageSquare } from 'lucide-react';
 import PaymentSchedulingModal from '../components/PaymentSchedulingModal';
 
+const CONVERSATION_STORAGE_KEY = 'transact3.ai.conversation';
+const GREETING_MESSAGE = {
+  role: 'assistant',
+  content: "Hi! I'm your Transact3 AI Transfer Assistant. I can help you with transfers, wallet balance, currency conversion, FX forecasts, transaction history, and more. Just ask!"
+};
+
+const createConversationId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `conv_${crypto.randomUUID()}`;
+  }
+  return `conv_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+};
+
+const loadStoredConversation = () => {
+  try {
+    const raw = window.sessionStorage.getItem(CONVERSATION_STORAGE_KEY);
+    if (!raw) return null;
+    const stored = JSON.parse(raw);
+    if (!stored || typeof stored.conversationId !== 'string') return null;
+    return stored;
+  } catch (err) {
+    return null;
+  }
+};
+
 const AIAgent = () => {
   const location = useLocation();
-  const [messages, setMessages] = useState([{ role: 'assistant', content: "Hi! I'm your Transact3 AI Transfer Assistant. I can help you with transfers, wallet balance, currency conversion, FX forecasts, transaction history, and more. Just ask!" }]);
+  const storedConversation = useRef(loadStoredConversation()).current;
+  const initialMessages = storedConversation && Array.isArray(storedConversation.messages) && storedConversation.messages.length > 0
+    ? storedConversation.messages
+    : [GREETING_MESSAGE];
+  const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -16,10 +45,30 @@ const AIAgent = () => {
   const [askingForRecipient, setAskingForRecipient] = useState(false);
   const [pendingSchedule, setPendingSchedule] = useState(false);
   const [recipients, setRecipients] = useState([]);
-  const [conversationHistory, setConversationHistory] = useState([]);
+  const [conversationId, setConversationId] = useState(
+    (storedConversation && storedConversation.conversationId) || createConversationId()
+  );
+  const [conversationHistory, setConversationHistory] = useState(
+    storedConversation && Array.isArray(storedConversation.history) ? storedConversation.history : []
+  );
   const [followUpSuggestions, setFollowUpSuggestions] = useState([]);
   const processedInitial = useRef(false);
   const messagesEndRef = useRef(null);
+
+  // Keep the structured conversation (id + turns) across refreshes. Only the
+  // last turns are stored so long conversations stay bounded.
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(CONVERSATION_STORAGE_KEY, JSON.stringify({
+        conversationId,
+        history: conversationHistory.slice(-20),
+        messages: messages.slice(-20)
+      }));
+    } catch (err) {
+      // Storage unavailable - conversation still works in memory.
+    }
+  }, [conversationId, conversationHistory, messages]);
+
 
   const suggestionChips = [
     'Send 1,000 USD to EUR fastest',
@@ -47,6 +96,10 @@ const AIAgent = () => {
       processedInitial.current = true;
       // Clear the router state
       window.history.replaceState({}, document.title);
+      // A homepage question starts a fresh conversation so no stale context is reused.
+      setConversationHistory([]);
+      setConversationId(createConversationId());
+      setMessages([GREETING_MESSAGE]);
       // Auto-submit the message
       setTimeout(() => {
         setInput(initialMessage);
@@ -104,15 +157,37 @@ const AIAgent = () => {
     setIsLoading(true);
     setFollowUpSuggestions([]);
     try {
-      const response = await aiQuery(userPrompt, conversationHistory);
+      const response = await aiQuery(userPrompt, conversationHistory, conversationId);
       setIsLoading(false);
       const data = response.data;
 
+      if (data.conversationId && data.conversationId !== conversationId) {
+        setConversationId(data.conversationId);
+      }
+
+      // Every turn - including clarification requests - is recorded so the
+      // next message can resolve references against it.
+      const recordTurn = (assistantContent, parsed) => {
+        setConversationHistory((prev) => [
+          ...prev,
+          { role: 'user', content: userPrompt },
+          {
+            role: 'assistant',
+            content: assistantContent,
+            parsed,
+            actionType: data.actionType || null,
+            contextVersion: data.contextVersion != null ? data.contextVersion : null
+          }
+        ].slice(-20));
+      };
+
       if (!data.success) {
         if (data.requiresClarification) {
+          const clarification = data.clarificationMessage || 'Need more details to help with this request.';
+          recordTurn(clarification, data.parsed);
           setMessages((prev) => [...prev, {
             role: 'assistant',
-            content: data.clarificationMessage || 'Need more details to help with this transfer.'
+            content: clarification
           }]);
           setFollowUpSuggestions(['Provide the missing information', 'Start a new query']);
         } else {
@@ -142,31 +217,37 @@ const AIAgent = () => {
           'What if I increase the amount?'
         ]);
       } else if (data.actionType === 'BALANCE') {
+        setCurrentParams(null);
         setFollowUpSuggestions([
           'Convert some of my balance',
           'Send money to someone',
           'Show transaction history'
         ]);
       } else if (data.actionType === 'CONVERT') {
+        // A conversion result must never leave transfer parameters behind that
+        // could open the scheduling modal.
+        setCurrentParams(null);
         setFollowUpSuggestions([
-          'Convert a different amount',
-          'Check exchange rate forecast',
-          'Send money using this rate'
+          'Check its forecast',
+          'Should I convert now or wait?',
+          'Compare providers for this'
         ]);
       } else if (data.actionType === 'FX_FORECAST') {
+        setCurrentParams(null);
         setFollowUpSuggestions([
-          'Convert currency now',
-          'Compare transfer options',
-          'Check another currency pair'
+          'Should I wait for a better rate?',
+          'What about next week?',
+          'Compare providers for this'
         ]);
       } else if (data.actionType === 'FX_TIMING_ANALYSIS') {
+        setCurrentParams(null);
         setFollowUpSuggestions([
-          'Show USD/INR trend for last 30 days',
-          'What if rate reaches 96?',
-          'How much for 500 USD?',
-          'Explain risks of waiting'
+          'Check its forecast',
+          'What if I convert 500 instead?',
+          'Compare providers for this'
         ]);
       } else if (data.actionType === 'HISTORY') {
+        setCurrentParams(null);
         setFollowUpSuggestions([
           'Check wallet balance',
           'Make a new transfer',
@@ -174,20 +255,14 @@ const AIAgent = () => {
         ]);
       }
 
+      recordTurn(assistantMessage, data.parsed);
+
       setMessages((prev) => [...prev, {
         role: 'assistant',
         content: assistantMessage,
         data: data,
         actionType: data.actionType
       }]);
-
-      // Update conversation history
-      setConversationHistory((prev) => [
-        ...prev,
-        { role: 'user', content: userPrompt },
-        { role: 'assistant', content: assistantMessage, parsed: data.parsed }
-      ].slice(-20));
-
     } catch (err) {
       setIsLoading(false);
       setMessages((prev) => [...prev, {
@@ -216,12 +291,18 @@ const AIAgent = () => {
   };
 
   const handleNewConversation = () => {
-    setMessages([{ role: 'assistant', content: "Hi! I'm your Transact3 AI Transfer Assistant. I can help you with transfers, wallet balance, currency conversion, FX forecasts, transaction history, and more. Just ask!" }]);
+    setMessages([GREETING_MESSAGE]);
     setConversationHistory([]);
+    setConversationId(createConversationId());
     setCurrentParams(null);
     setRecipientEmail('');
     setFollowUpSuggestions([]);
     setInput('');
+    try {
+      window.sessionStorage.removeItem(CONVERSATION_STORAGE_KEY);
+    } catch (err) {
+      // Ignore storage failures.
+    }
   };
 
   const handleFollowUp = (suggestion) => {

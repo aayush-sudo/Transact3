@@ -16,6 +16,10 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-export const aiQuery = (prompt, history) => api.post('/orchestration/ai-query', { prompt, history: history || [] });
+export const aiQuery = (prompt, history, conversationId) => api.post('/orchestration/ai-query', {
+  prompt,
+  history: history || [],
+  conversationId: conversationId || undefined
+});
 
 export default api;

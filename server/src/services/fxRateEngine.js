@@ -42,6 +42,58 @@ class FXRateEngine {
     return parseFloat((dstVsUSD / srcVsUSD).toFixed(6));
   }
 
+  /**
+   * Indicative (spread-free) conversion for display purposes.
+   * Always returns the destination-per-source rate, inverting the published
+   * quote mathematically when only the inverse is available. Never flips the
+   * requested pair.
+   */
+  async getIndicativeConversion(sourceCurrency, destinationCurrency) {
+    const src = String(sourceCurrency || '').toUpperCase();
+    const dst = String(destinationCurrency || '').toUpperCase();
+    if (!src || !dst || src === dst) {
+      return { rate: 1, inverted: false, timestamp: new Date(), rateSource: 'IDENTITY', sourceCurrency: src, destinationCurrency: dst };
+    }
+
+    try {
+      const directData = await getExchangeRates(src);
+      const directRates = (directData && directData.conversion_rates) || {};
+      const direct = Number(directRates[dst]);
+      if (Number.isFinite(direct) && direct > 0) {
+        return {
+          rate: direct,
+          inverted: false,
+          timestamp: directData.timestamp || new Date(),
+          rateSource: directData.source || null,
+          sourceCurrency: src,
+          destinationCurrency: dst
+        };
+      }
+    } catch (err) {
+      console.warn('[FXRateEngine] Indicative conversion fetch failed for', src, dst);
+    }
+
+    try {
+      const inverseData = await getExchangeRates(dst);
+      const inverseRates = (inverseData && inverseData.conversion_rates) || {};
+      const inverse = Number(inverseRates[src]);
+      if (Number.isFinite(inverse) && inverse > 0) {
+        return {
+          rate: 1 / inverse,
+          inverted: true,
+          timestamp: inverseData.timestamp || new Date(),
+          rateSource: inverseData.source || null,
+          sourceCurrency: src,
+          destinationCurrency: dst
+        };
+      }
+    } catch (err) {
+      console.warn('[FXRateEngine] Inverse indicative conversion fetch failed for', src, dst);
+    }
+
+    return null;
+  }
+
   calculateFXQuote(sourceCurrency, destinationCurrency, amount) {
     return this.calculateFXQuoteAsync(sourceCurrency, destinationCurrency, amount);
   }

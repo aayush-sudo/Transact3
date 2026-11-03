@@ -9,7 +9,9 @@
     "test": "node --test test-api.js",
     "test:comprehensive": "node test-comprehensive.js",
     "test:saga": "node test-saga-aml-graph.js",
-    "test:all": "node --test test-api.js && node test-comprehensive.js && node test-saga-aml-graph.js"
+    "test:all": "node --test test-api.js && node test-comprehensive.js && node test-saga-aml-graph.js",
+    "test:ai": "node test-ai-context.js",
+    "test:ai:live": "node test-ai-context-live.js"
   },
   "keywords": [],
   "author": "",
