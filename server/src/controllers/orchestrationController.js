@@ -6,6 +6,9 @@ const railPricingService = require('../services/railPricingService');
 const { isCurrencySupported } = require('../config/currencies');
 const { getExchangeRates } = require('../services/currencyService');
 const fxRateEngine = require('../services/fxRateEngine');
+const predictiveFXExecutionAgent = require('../services/predictiveFXExecutionAgent');
+const liquidityRebalancingAgent = require('../services/liquidityRebalancingAgent');
+const complianceSentinelAgent = require('../services/complianceSentinelAgent');
 const portfolioController = require('../controllers/portfolioController');
 const transactionController = require('../controllers/transactionController');
 const {
@@ -238,6 +241,188 @@ exports.aiQuery = async (req, res, next) => {
         actionType: 'GREETING',
         assistantMessage: "Hello! I'm your Transact3 AI Transfer Assistant. I can help you with transfers, wallet balance, currency conversion, FX forecasts, transaction history, and provider comparisons. What would you like to do?",
         data: null
+      });
+    }
+
+    
+    // ---------------------------------------------------------------------
+    // AUTONOMOUS FX EXECUTION MANDATE (Agent 1)
+    // ---------------------------------------------------------------------
+    if (actionType === 'FX_MANDATE') {
+      const userId = req.user ? (req.user._id || req.user.id) : 'anonymous';
+      const isListQuery = /\b(list|active|show|check|status|my)\b/i.test(prompt) && !/\b(set|create|schedule|new|make)\b/i.test(prompt);
+
+      if (isListQuery) {
+        const mandates = predictiveFXExecutionAgent.getUserMandates(userId);
+        if (mandates.length === 0) {
+          return send({
+            success: true,
+            requiresClarification: false,
+            actionType: 'FX_MANDATE',
+            assistantMessage: "You don't have any active autonomous FX execution mandates. You can create one by saying: 'Set an autonomous transfer of 1,000 USD to INR when rate improves by 0.5% within 24 hours'.",
+            data: { mandates: [] }
+          });
+        }
+        let msg = `You have ${mandates.length} autonomous FX mandate(s):\n\n`;
+        mandates.forEach((m, idx) => {
+          msg += `${idx + 1}. [${m.mandateId}] ${m.amount} ${m.sourceCurrency} -> ${m.destinationCurrency} | Status: ${m.status}\n`;
+          msg += `   Target Rate: ${m.targetRate} (Initial: ${m.initialRate}) | Latest: ${m.latestRate} | Expires: ${new Date(m.expiresAt).toLocaleTimeString()}\n`;
+          if (m.triggerReason) msg += `   Outcome: ${m.triggerReason}\n`;
+        });
+        return send({
+          success: true,
+          requiresClarification: false,
+          actionType: 'FX_MANDATE',
+          assistantMessage: msg,
+          data: { mandates }
+        });
+      }
+
+      const sourceCurrency = normalizeCurrency(parsed.sourceCurrency) || 'USD';
+      const destinationCurrency = normalizeCurrency(parsed.destinationCurrency) || 'INR';
+      const amount = parsed.amount || 1000;
+      const pctMatch = prompt.match(/(\d+(?:\.\d+)?)\s*%/);
+      const targetImprovementPct = pctMatch ? parseFloat(pctMatch[1]) : 0.35;
+      const hoursMatch = prompt.match(/(\d+)\s*(?:hours?|hrs?|h)\b/i);
+      const maxWaitHours = hoursMatch ? parseInt(hoursMatch[1], 10) : 24;
+
+      const mandate = await predictiveFXExecutionAgent.createMandate({
+        userId,
+        sourceCurrency,
+        destinationCurrency,
+        amount,
+        targetImprovementPct,
+        maxWaitHours,
+        priority: parsed.priority || 'BALANCED'
+      });
+
+      let msg = `Autonomous FX Execution Mandate Activated [${mandate.mandateId}]!\n\n`;
+      msg += `• Corridor: ${mandate.amount} ${mandate.sourceCurrency} -> ${mandate.destinationCurrency}\n`;
+      msg += `• Initial Spot Rate: 1 ${mandate.sourceCurrency} = ${mandate.initialRate} ${mandate.destinationCurrency}\n`;
+      msg += `• Target Trigger Rate: >= ${mandate.targetRate} (+${mandate.targetImprovementPct}%)\n`;
+      msg += `• Model 1 Trend: ${mandate.predictedTrend} (Optimal Window: ~${mandate.optimalHorizon})\n`;
+      msg += `• Expiration Cutoff: ${new Date(mandate.expiresAt).toLocaleString()} (${mandate.maxWaitHours}h max)\n\n`;
+      msg += `The Predictive FX Agent will monitor exchange rates continuously and trigger settlement automatically when your rate target is met or at cutoff window.`;
+
+      return send({
+        success: true,
+        requiresClarification: false,
+        actionType: 'FX_MANDATE',
+        assistantMessage: msg,
+        data: { mandate }
+      });
+    }
+
+    // ---------------------------------------------------------------------
+    // AUTONOMOUS RAIL & LIQUIDITY REBALANCING (Agent 2)
+    // ---------------------------------------------------------------------
+    if (actionType === 'LIQUIDITY_HEALTH') {
+      const amountUSD = parsed.amount || 10000;
+      const sourceCurrency = normalizeCurrency(parsed.sourceCurrency) || 'USD';
+      const destinationCurrency = normalizeCurrency(parsed.destinationCurrency) || 'INR';
+
+      const health = await liquidityRebalancingAgent.assessRailHealth(amountUSD);
+      const plan = await liquidityRebalancingAgent.planRerouteOrRebalance({
+        sourceCurrency,
+        destinationCurrency,
+        amountUSD,
+        congestedRailId: health.rails.find(r => r.status && r.status.includes('CONGESTION'))?.railId || 'REGIONAL_INSTANT'
+      });
+
+      let msg = `Liquidity & Rail Optimization Diagnosis (${health.systemStatus}):\n\n`;
+      health.rails.forEach((r) => {
+        const icon = r.status === 'HEALTHY' ? '🟢' : (r.status.includes('CONGESTION') ? '🔴' : '🟡');
+        msg += `${icon} ${r.name} (${r.railId}):\n`;
+        msg += `   • Avail Liquidity: ${r.availableLiquidityUSD.toLocaleString()} USD | Saturation: ${r.saturationPct}%\n`;
+        msg += `   • Status: ${r.status} - ${r.recommendation}\n\n`;
+      });
+
+      if (plan.isSyntheticMultiHop) {
+        msg += `⚡ Graph Router Recommendation:\n`;
+        msg += `Direct route faces pool congestion. Dijkstra algorithm synthesized an optimal synthetic multi-hop path:\n`;
+        msg += `👉 ${plan.graphPath.join(' -> ')} (Effective Yield: ${plan.graphEffectiveRate}, Est Fee: ${plan.graphEstimatedFeeUSD} USD).\n`;
+      } else {
+        msg += `System capacity is sufficient for standard single-hop dispatch.`;
+      }
+
+      return send({
+        success: true,
+        requiresClarification: false,
+        actionType: 'LIQUIDITY_HEALTH',
+        assistantMessage: msg,
+        data: { health, plan }
+      });
+    }
+
+    // ---------------------------------------------------------------------
+    // COMPLIANCE & REGTECH SENTINEL (Agent 3)
+    // ---------------------------------------------------------------------
+    if (actionType === 'COMPLIANCE_AGENT') {
+      const userId = req.user ? (req.user._id || req.user.id) : 'anonymous';
+      const amountUSD = parsed.amount || 9850;
+      const sourceCurrency = normalizeCurrency(parsed.sourceCurrency) || 'USD';
+      const destinationCurrency = normalizeCurrency(parsed.destinationCurrency) || 'EUR';
+      const recipientName = parsed.recipientName || 'Beneficiary';
+
+      const chalMatch = prompt.match(/\b(CHAL-[A-Z0-9-]+)\b/i);
+      const purposeMatch = prompt.match(/(?:purpose|justification|reason)[:\s]+([^.,\n]+)/i);
+
+      if (chalMatch || purposeMatch) {
+        const challengeId = chalMatch ? chalMatch[1] : (Array.from(complianceSentinelAgent.activeChallenges.keys())[0] || 'CHAL-LATEST');
+        const purpose = purposeMatch ? purposeMatch[1] : 'Commercial Invoice Settlement';
+
+        try {
+          const resolution = await complianceSentinelAgent.resolveChallenge({
+            challengeId,
+            userId,
+            commercialPurpose: purpose,
+            sourceOfFunds: 'Corporate Operations',
+            justificationNotes: prompt
+          });
+          return send({
+            success: true,
+            requiresClarification: false,
+            actionType: 'COMPLIANCE_AGENT',
+            assistantMessage: `✅ Compliance Step-Up Verified!\n\n${resolution.message}\nAudit Hash & Justification inscribed into SHA-256 ledger. Risk level downgraded to [LOW].`,
+            data: { resolution }
+          });
+        } catch (err) {
+          // Fall through to screening
+        }
+      }
+
+      const screening = await complianceSentinelAgent.screenTransaction({
+        userId,
+        amountUSD,
+        sourceCurrency,
+        destinationCurrency,
+        recipientName,
+        timeOfDayUTC: new Date().getUTCHours(),
+        velocity24h: 1
+      });
+
+      let msg = `Compliance Sentinel Audit [Score: ${screening.compositeScore}/100 - Tier: ${screening.riskLevel}]:\n\n`;
+      if (screening.triggers.length === 0) {
+        msg += `🟢 No regulatory flags detected. Straight-Through Processing (STP) approved without friction.`;
+      } else {
+        msg += `⚠️ Active Regulatory Triggers:\n`;
+        screening.triggers.forEach((t) => {
+          msg += `• [${t.severity}] ${t.code}: ${t.description}\n`;
+        });
+        if (screening.challenge) {
+          msg += `\n📋 Interactive Compliance Challenge [${screening.challenge.challengeId}]:\n`;
+          msg += `Under Bank Secrecy Act (BSA) rules, transfers in this band require declared commercial purpose.\n`;
+          msg += `Suggested Purposes: ${screening.challenge.suggestedPurposes.join(', ')}.\n\n`;
+          msg += `You can resolve this now by replying: "Commercial purpose for ${screening.challenge.challengeId}: [Your Purpose]"`;
+        }
+      }
+
+      return send({
+        success: true,
+        requiresClarification: false,
+        actionType: 'COMPLIANCE_AGENT',
+        assistantMessage: msg,
+        data: { screening }
       });
     }
 
@@ -878,5 +1063,85 @@ Model: Transact3 FX forecasting engine (existing trained pipeline, exponential s
     });
   } catch (error) {
     next(error);
+  }
+};
+// =====================================================================
+// MULTI-AGENT PROGRAMMATIC ENDPOINTS
+// =====================================================================
+exports.createFXMandate = async (req, res, next) => {
+  try {
+    const userId = req.user ? (req.user._id || req.user.id) : 'anonymous';
+    const mandate = await predictiveFXExecutionAgent.createMandate({ ...req.body, userId });
+    res.status(201).json({ success: true, data: mandate });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.getFXMandates = async (req, res, next) => {
+  try {
+    const userId = req.user ? (req.user._id || req.user.id) : null;
+    const mandates = predictiveFXExecutionAgent.getUserMandates(userId);
+    res.status(200).json({ success: true, data: mandates });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.evaluateFXMandates = async (req, res, next) => {
+  try {
+    const results = await predictiveFXExecutionAgent.evaluateAllActiveMandates();
+    res.status(200).json({ success: true, data: results });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.cancelFXMandate = async (req, res, next) => {
+  try {
+    const userId = req.user ? (req.user._id || req.user.id) : null;
+    const mandate = predictiveFXExecutionAgent.cancelMandate(req.params.id, userId);
+    res.status(200).json({ success: true, data: mandate });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.getLiquidityHealth = async (req, res, next) => {
+  try {
+    const amountUSD = Number(req.query.amountUSD) || 10000;
+    const health = await liquidityRebalancingAgent.assessRailHealth(amountUSD);
+    res.status(200).json({ success: true, data: health });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.planLiquidityReroute = async (req, res, next) => {
+  try {
+    const plan = await liquidityRebalancingAgent.planRerouteOrRebalance(req.body);
+    res.status(200).json({ success: true, data: plan });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.screenCompliance = async (req, res, next) => {
+  try {
+    const userId = req.user ? (req.user._id || req.user.id) : 'anonymous';
+    const result = await complianceSentinelAgent.screenTransaction({ ...req.body, userId });
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.resolveComplianceChallenge = async (req, res, next) => {
+  try {
+    const userId = req.user ? (req.user._id || req.user.id) : 'anonymous';
+    const result = await complianceSentinelAgent.resolveChallenge({ ...req.body, userId });
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
   }
 };

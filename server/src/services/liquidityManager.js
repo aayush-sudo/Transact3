@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const RailSetting = require('../models/RailSetting');
 const RAIL_CONFIG = require('../config/railConfig');
 const SUPPORTED_CURRENCIES = require('../config/currencies');
@@ -11,6 +12,8 @@ class LiquidityManager {
 
   async initialize() {
     try {
+      const isDbConnected = mongoose.connection && mongoose.connection.readyState === 1;
+      if (!isDbConnected) throw new Error('MongoDB not connected');
       // 1. Initialize Currency Pools in memory
       for (const [code, details] of Object.entries(SUPPORTED_CURRENCIES)) {
         if (!this.currencyPools.has(code)) {
@@ -107,39 +110,43 @@ class LiquidityManager {
 
   async setRailEnabled(railId, isEnabled) {
     if (!this.isInitialized) await this.initialize();
-    try {
-      const updated = await RailSetting.findOneAndUpdate(
-        { railId },
-        { isEnabled: Boolean(isEnabled), lastUpdated: new Date() },
-        { new: true, upsert: true }
-      );
-      this.cachedRailSettings.set(railId, updated.toObject());
-      return updated.toObject();
-    } catch (e) {
-      const current = this.cachedRailSettings.get(railId) || {};
-      current.isEnabled = Boolean(isEnabled);
-      this.cachedRailSettings.set(railId, current);
-      return current;
+    const isDbConnected = mongoose.connection && mongoose.connection.readyState === 1;
+    if (isDbConnected) {
+      try {
+        const updated = await RailSetting.findOneAndUpdate(
+          { railId },
+          { isEnabled: Boolean(isEnabled), lastUpdated: new Date() },
+          { new: true, upsert: true }
+        );
+        this.cachedRailSettings.set(railId, updated.toObject());
+        return updated.toObject();
+      } catch (e) {}
     }
+    const current = this.cachedRailSettings.get(railId) || {};
+    current.isEnabled = Boolean(isEnabled);
+    this.cachedRailSettings.set(railId, current);
+    return current;
   }
 
   async setRailLiquidity(railId, availableLiquidityUSD) {
     if (!this.isInitialized) await this.initialize();
     const amount = Math.max(0, Number(availableLiquidityUSD) || 0);
-    try {
-      const updated = await RailSetting.findOneAndUpdate(
-        { railId },
-        { availableLiquidityUSD: amount, lastUpdated: new Date() },
-        { new: true, upsert: true }
-      );
-      this.cachedRailSettings.set(railId, updated.toObject());
-      return updated.toObject();
-    } catch (e) {
-      const current = this.cachedRailSettings.get(railId) || {};
-      current.availableLiquidityUSD = amount;
-      this.cachedRailSettings.set(railId, current);
-      return current;
+    const isDbConnected = mongoose.connection && mongoose.connection.readyState === 1;
+    if (isDbConnected) {
+      try {
+        const updated = await RailSetting.findOneAndUpdate(
+          { railId },
+          { availableLiquidityUSD: amount, lastUpdated: new Date() },
+          { new: true, upsert: true }
+        );
+        this.cachedRailSettings.set(railId, updated.toObject());
+        return updated.toObject();
+      } catch (e) {}
     }
+    const current = this.cachedRailSettings.get(railId) || {};
+    current.availableLiquidityUSD = amount;
+    this.cachedRailSettings.set(railId, current);
+    return current;
   }
 
   async resetToDefaults() {

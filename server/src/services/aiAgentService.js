@@ -77,7 +77,7 @@ Classify the user's intent and extract structured information. Never invent exch
 
 Return a single JSON object with exactly these keys:
 {
-  "intent": "TRANSFER_REQUEST" | "TRANSFER_COMPARISON" | "COMPETITOR_COMPARISON" | "CHEAPEST_TRANSFER" | "FASTEST_TRANSFER" | "CURRENCY_CONVERSION" | "WALLET_BALANCE" | "WALLET_HOLDINGS" | "FX_FORECAST" | "FX_TIMING_ANALYSIS" | "FX_INFORMATION" | "TRANSACTION_HISTORY" | "TRANSACTION_STATUS" | "PAYMENT_SCHEDULING" | "RECIPIENT_LOOKUP" | "RECIPIENT_TRANSFER" | "TRANSFER_EXPLANATION" | "WHAT_IF_ANALYSIS" | "GENERAL_PLATFORM_QUESTION" | "TRANSACT3_PLATFORM_QUESTION" | "GENERAL_KNOWLEDGE" | "GENERAL_CONVERSATION" | "OUT_OF_SCOPE" | "UNSUPPORTED_OPERATION" | "CLARIFICATION_RESPONSE" | "GREETING" | "UNKNOWN",
+  "intent": "TRANSFER_REQUEST" | "TRANSFER_COMPARISON" | "COMPETITOR_COMPARISON" | "CHEAPEST_TRANSFER" | "FASTEST_TRANSFER" | "CURRENCY_CONVERSION" | "WALLET_BALANCE" | "WALLET_HOLDINGS" | "FX_FORECAST" | "FX_TIMING_ANALYSIS" | "FX_INFORMATION" | "TRANSACTION_HISTORY" | "TRANSACTION_STATUS" | "PAYMENT_SCHEDULING" | "RECIPIENT_LOOKUP" | "RECIPIENT_TRANSFER" | "TRANSFER_EXPLANATION" | "WHAT_IF_ANALYSIS" | "GENERAL_PLATFORM_QUESTION" | "TRANSACT3_PLATFORM_QUESTION" | "GENERAL_KNOWLEDGE" | "GENERAL_CONVERSATION" | "OUT_OF_SCOPE" | "UNSUPPORTED_OPERATION" | "CLARIFICATION_RESPONSE" | "AUTONOMOUS_FX_MANDATE" | "LIQUIDITY_AGENT_QUERY" | "COMPLIANCE_SENTINEL_QUERY" | "GREETING" | "UNKNOWN",
   "amount": number or null,
   "amountType": "SENDER_AMOUNT" | "RECIPIENT_AMOUNT",
   "sourceCurrency": three-letter ISO 4217 code or null,
@@ -367,6 +367,17 @@ const detectFallbackIntent = (prompt) => {
   if (/^(hi|hello|hey|greetings|good morning|good evening)\b/.test(lower)) return 'GREETING';
   if (/\b(joke|funny|tell me a joke)\b/.test(lower)) return 'GENERAL_CONVERSATION';
   if (/\b(what is transact3|what does transact3|how does transact3|about transact3)\b/.test(lower)) return 'TRANSACT3_PLATFORM_QUESTION';
+    // Autonomous Multi-Agent Intents
+  if (/\b(autonomous|mandate|auto[- ]?execute|conditional transfer|trigger when rate|execute when (?:rate|it hits)|when rate improves|active mandates?|fx mandates?)\b/i.test(lower)) {
+    return 'AUTONOMOUS_FX_MANDATE';
+  }
+  if (/\b(liquidity health|rail saturation|rail capacity|liquidity bottleneck|pool saturation|rebalance liquidity|liquidity rebalancing|rebalance rail)\b/i.test(lower)) {
+    return 'LIQUIDITY_AGENT_QUERY';
+  }
+  if (/\b(compliance check|compliance sentinel|aml screening|screen transaction|structuring check|compliance challenge|commercial purpose|source of funds)\b/i.test(lower)) {
+    return 'COMPLIANCE_SENTINEL_QUERY';
+  }
+
   if (/\b(weather|sports? score|match result|stock price|news today|who won)\b/.test(lower)) return 'OUT_OF_SCOPE';
 
   // Timing questions must win over plain conversion: "should I convert ... now or wait?"
@@ -518,6 +529,7 @@ const VALID_INTENTS = [
   'WHAT_IF_ANALYSIS', 'GENERAL_PLATFORM_QUESTION', 'TRANSACT3_PLATFORM_QUESTION',
   'GENERAL_KNOWLEDGE', 'GENERAL_CONVERSATION', 'OUT_OF_SCOPE',
   'UNSUPPORTED_OPERATION', 'CLARIFICATION_RESPONSE',
+  'AUTONOMOUS_FX_MANDATE', 'LIQUIDITY_AGENT_QUERY', 'COMPLIANCE_SENTINEL_QUERY',
   'GREETING', 'UNKNOWN'
 ];
 

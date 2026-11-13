@@ -75,7 +75,10 @@ const AIAgent = () => {
     'Convert 100 USD to INR',
     'Check my wallet balance',
     'FX forecast USD to INR',
-    'Compare Providers'
+    'Compare Providers',
+    'Set autonomous FX mandate for 1,000 USD to INR',
+    'Check rail liquidity health',
+    'Run compliance screening'
   ];
 
   // Fetch recipients on mount
@@ -394,6 +397,91 @@ const AIAgent = () => {
                           <span className="font-semibold">{p.name}</span>: Rate {p.rate ? Number(p.rate).toFixed(4) : 'N/A'}, Fee {p.fee != null ? Number(p.fee).toFixed(2) : 'N/A'}, Recipient gets {p.receivedAmount ? Number(p.receivedAmount).toFixed(2) : 'N/A'}
                         </div>
                       ))}
+                    </div>
+                  )}
+
+                  {msg.actionType === 'FX_MANDATE' && msg.data?.data?.mandate && (
+                    <div className="mt-3 rounded-xl border border-indigo-200 bg-indigo-50/80 p-3.5 space-y-2">
+                      <div className="flex items-center justify-between border-b border-indigo-200 pb-2">
+                        <span className="text-xs font-bold uppercase tracking-wider text-indigo-900">
+                          ⚡ Autonomous FX Mandate [{msg.data.data.mandate.mandateId}]
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-indigo-200 text-indigo-800">
+                          {msg.data.data.mandate.status}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs text-slate-700">
+                        <div><span className="text-slate-500">Corridor:</span> {msg.data.data.mandate.amount} {msg.data.data.mandate.sourceCurrency} → {msg.data.data.mandate.destinationCurrency}</div>
+                        <div><span className="text-slate-500">Target Rate:</span> ≥ {msg.data.data.mandate.targetRate} (+{msg.data.data.mandate.targetImprovementPct}%)</div>
+                        <div><span className="text-slate-500">Current Rate:</span> {msg.data.data.mandate.latestRate}</div>
+                        <div><span className="text-slate-500">Model 1 Trend:</span> {msg.data.data.mandate.predictedTrend}</div>
+                      </div>
+                      <p className="text-[11px] text-slate-500 italic">
+                        Predictive agent will execute settlement when target is met or before cutoff.
+                      </p>
+                    </div>
+                  )}
+                  {msg.actionType === 'LIQUIDITY_HEALTH' && msg.data?.data?.health && (
+                    <div className="mt-3 rounded-xl border border-teal-200 bg-teal-50/80 p-3.5 space-y-2">
+                      <div className="flex items-center justify-between border-b border-teal-200 pb-2">
+                        <span className="text-xs font-bold uppercase tracking-wider text-teal-900">
+                          📊 Rail Liquidity Diagnosis
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-teal-200 text-teal-800">
+                          {msg.data.data.health.systemStatus}
+                        </span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {msg.data.data.health.rails?.map((rail, i) => (
+                          <div key={i} className="text-xs flex items-center justify-between p-1.5 rounded-lg bg-white/70 border border-teal-100">
+                            <span className="font-medium text-slate-800">{rail.name}</span>
+                            <span className="text-slate-600">${Number(rail.availableLiquidityUSD).toLocaleString()} USD ({rail.saturationPct}%)</span>
+                          </div>
+                        ))}
+                      </div>
+                      {msg.data.data.plan?.isSyntheticMultiHop && (
+                        <div className="mt-2 p-2 rounded-lg bg-white border border-teal-300 text-xs text-teal-950 font-medium">
+                          ⚡ Dijkstra Graph Rerouting: {msg.data.data.plan.graphPath?.join(' → ')}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {msg.actionType === 'COMPLIANCE_AGENT' && msg.data?.data?.screening && (
+                    <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/80 p-3.5 space-y-2">
+                      <div className="flex items-center justify-between border-b border-amber-200 pb-2">
+                        <span className="text-xs font-bold uppercase tracking-wider text-amber-900">
+                          🛡️ Compliance & Anomaly Audit
+                        </span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                          msg.data.data.screening.riskLevel === 'LOW' ? 'bg-emerald-200 text-emerald-800' : 'bg-amber-200 text-amber-900'
+                        }`}>
+                          Risk Score: {msg.data.data.screening.compositeScore}/100 [{msg.data.data.screening.riskLevel}]
+                        </span>
+                      </div>
+                      {msg.data.data.screening.triggers?.length > 0 ? (
+                        <div className="space-y-1">
+                          {msg.data.data.screening.triggers.map((t, i) => (
+                            <p key={i} className="text-xs text-amber-900">⚠️ <b>{t.code}:</b> {t.description}</p>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-emerald-700">🟢 No regulatory flags detected. Cleared for Straight-Through Processing.</p>
+                      )}
+                      {msg.data.data.screening.challenge && (
+                        <div className="mt-2 p-2 rounded-lg bg-white border border-amber-300 text-xs text-slate-800 space-y-1">
+                          <p className="font-semibold text-amber-900">Interactive Compliance Challenge:</p>
+                          <p className="text-[11px] text-slate-600">Please provide commercial justification to clear transfer.</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setInput(`Commercial purpose for ${msg.data.data.screening.challenge.challengeId}: Vendor invoice settlement`);
+                            }}
+                            className="text-[11px] px-2.5 py-1 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 font-medium transition-colors"
+                          >
+                            Submit Vendor Invoice Justification
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
