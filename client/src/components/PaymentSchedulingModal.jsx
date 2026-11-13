@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CheckCircle, Circle, Loader2, X } from 'lucide-react';
 import api from '../services/api';
 
@@ -18,8 +18,6 @@ const PaymentSchedulingModal = ({ isOpen, onClose, initialParams }) => {
   const [error, setError] = useState('');
   const [quoteData, setQuoteData] = useState(null);
   const [result, setResult] = useState(null);
-
-  if (!isOpen) return null;
 
   const setStepStatus = (index, status) => {
     setStepStatuses((current) => current.map((value, item) => item === index ? status : value));
@@ -41,8 +39,14 @@ const PaymentSchedulingModal = ({ isOpen, onClose, initialParams }) => {
         receiverEmail: initialParams.receiverEmail
       });
       const quote = data.data.quote;
-      const route = quote.evaluatedRails?.find((rail) => rail.id === initialParams.selectedRailId);
-      if (!route?.is_eligible) throw new Error('The selected route is no longer available. Compare routes again.');
+      // Intelligently select eligible rail: requested if eligible, else recommended, else first eligible
+      const route = quote.evaluatedRails?.find((rail) => rail.id === initialParams.selectedRailId && rail.is_eligible)
+        || quote.evaluatedRails?.find((rail) => rail.id === quote.recommendedRail && rail.is_eligible)
+        || quote.evaluatedRails?.find((rail) => rail.is_eligible);
+
+      if (!route) {
+        throw new Error('No eligible settlement route is available for this amount and corridor.');
+      }
       if (data.data.amlCompliance?.decision === 'MANUAL_REVIEW') {
         throw new Error('This recipient requires additional review before a payment can be scheduled.');
       }
@@ -60,11 +64,21 @@ const PaymentSchedulingModal = ({ isOpen, onClose, initialParams }) => {
     } catch (err) {
       quoteRequestStarted.current = false;
       setStepStatus(0, 'FAILED');
-      setError(err.response?.data?.message || err.message || 'Could not prepare a payment quote.');
+      if (err.response?.status === 401) {
+        setError('You must be signed in to schedule a transfer. Please log in with a test account (e.g. alice@transact3.com / Password123!).');
+      } else {
+        setError(err.response?.data?.message || err.message || 'Could not prepare a payment quote.');
+      }
     } finally {
       setQuoting(false);
     }
   };
+
+  useEffect(() => {
+    if (isOpen && !quoteData && !quoting && !quoteRequestStarted.current) {
+      prepareQuote();
+    }
+  }, [isOpen]);
 
   const schedulePayment = async () => {
     if (!quoteData || confirmationStarted.current || scheduling) return;
@@ -75,7 +89,7 @@ const PaymentSchedulingModal = ({ isOpen, onClose, initialParams }) => {
     try {
       const { data } = await api.post('/transaction/confirm', {
         quoteId: quoteData.quote.quoteId,
-        selectedRail: initialParams.selectedRailId,
+        selectedRail: quoteData.route.id || initialParams.selectedRailId,
         idempotencyKey: `PAY-${quoteData.quote.quoteId}`
       });
       if (!data.success) throw new Error(data.message || 'Could not schedule this payment.');
@@ -92,11 +106,14 @@ const PaymentSchedulingModal = ({ isOpen, onClose, initialParams }) => {
     }
   };
 
+  if (!isOpen) return null;
+
   const feeAmount = quoteData
     ? Number((quoteData.route.est_fee_usd * quoteData.route.source_amount / Math.max(quoteData.route.source_amount_usd, 0.01)).toFixed(2))
     : 0;
   const totalDebit = quoteData ? Number((quoteData.route.source_amount + feeAmount).toFixed(2)) : 0;
   const hasEnoughFunds = quoteData && quoteData.senderBalance >= totalDebit;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm">
       <section
