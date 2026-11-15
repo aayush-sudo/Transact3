@@ -52,6 +52,43 @@ class FastApiClient {
     return res.data.data;
   }
 
+  async predictHourlyFX(payload) {
+    let res;
+    try {
+      res = await this.client.post('/fx/hourly-forecast', payload, { timeout: 25000 });
+    } catch (error) {
+      if (error.code === 'ECONNREFUSED') {
+        throw new Error('Hourly FX forecast service is not reachable. Start it with `npm run python-service` or run `npm run dev` from the project root.');
+      }
+      if (error.response?.status === 503) {
+        const detail = error.response.data?.detail;
+        throw new Error(`Hourly FX forecast service returned 503: ${detail || 'the provider could not supply enough hourly data.'}`);
+      }
+      throw error;
+    }
+    if (res.status !== 200 || !res.data?.success || !res.data?.data) {
+      throw new Error('Hourly FX forecast service returned an invalid response.');
+    }
+    return res.data.data;
+  }
+
+  async getHourlyFXPairs() {
+    let res;
+    try {
+      res = await this.client.get('/fx/pairs', { timeout: 25000 });
+    } catch (error) {
+      if (error.response?.status === 503) {
+        const detail = error.response.data?.detail;
+        throw new Error(`Twelve Data pair catalog is unavailable: ${detail || 'provider returned 503.'}`);
+      }
+      throw error;
+    }
+    if (res.status !== 200 || !res.data?.success || !Array.isArray(res.data?.data)) {
+      throw new Error('Hourly FX pair catalog returned an invalid response.');
+    }
+    return res.data.data;
+  }
+
   async calculateTCA(payload) {
     try {
       const res = await this.client.post('/tca/calculate', payload);

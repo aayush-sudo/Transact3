@@ -1,4 +1,4 @@
-const { getExchangeRates, getHistoricalRates } = require('./currencyService');
+const { getExchangeRates } = require('./currencyService');
 const fastApiClient = require('./fastapiClient');
 
 class FXForecastingEngine {
@@ -19,96 +19,86 @@ class FXForecastingEngine {
       return cached.forecast;
     }
 
-    const [rateData, historicalData] = await Promise.all([
-      getExchangeRates(src),
-      getHistoricalRates(src, dst, 365)
-    ]);
-    const currentRate = Number(rateData.conversion_rates?.[dst]);
-    if (!Number.isFinite(currentRate) || currentRate <= 0) {
-      throw new Error(`No reference rate is available for ${src}/${dst}.`);
-    }
-
-    const recentObservations = Object.entries(historicalData.conversion_rates)
-      .map(([date, rateDataForDate]) => ({ date, rate: Number(rateDataForDate[dst]) }))
-      .filter(({ rate }) => Number.isFinite(rate) && rate > 0)
-      .sort((left, right) => left.date.localeCompare(right.date));
-    if (rateData.rateDate && !recentObservations.some(({ date }) => date === rateData.rateDate)) {
-      recentObservations.push({ date: rateData.rateDate, rate: currentRate });
-      recentObservations.sort((left, right) => left.date.localeCompare(right.date));
-    }
-
     let modelResult;
     try {
-      modelResult = await fastApiClient.predictCurrency({
-        slug: `${src}/${dst}`,
-        current_rate: currentRate,
-        recent_observations: recentObservations
-      });
+      modelResult = await fastApiClient.predictHourlyFX({ base: src, target: dst });
     } catch (error) {
-      console.warn('[FXForecastingEngine] Trained FX model unavailable:', error.message);
-      const forecast = this.unavailableForecast(src, dst, currentRate, rateData, error.message);
-      this.cache.set(cacheKey, { forecast, cachedAt: Date.now() });
-      return forecast;
+      console.warn('[FXForecastingEngine] Hourly FX forecaster unavailable:', error.message);
+      const rateData = await getExchangeRates(src);
+      const currentRate = Number(rateData.conversion_rates?.[dst]);
+      if (!Number.isFinite(currentRate) || currentRate <= 0) {
+        throw new Error(`No reference rate is available for ${src}/${dst}.`);
+      }
+      return this.unavailableForecast(src, dst, currentRate, rateData, error.message);
     }
 
-    if (modelResult.slug !== `${src}/${dst}`) {
-      throw new Error(`The trained FX model returned ${modelResult.slug || 'an unspecified pair'} instead of ${src}/${dst}.`);
+    if (modelResult.base !== src || modelResult.target !== dst) {
+      throw new Error(`The hourly FX forecaster returned ${modelResult.base}/${modelResult.target} instead of ${src}/${dst}.`);
     }
-    const predictedRate = Number(modelResult.forecasted_rate_next_observation ?? modelResult.forecasted_rate_24h);
-    if (!Number.isFinite(predictedRate) || predictedRate <= 0) {
-      throw new Error(`The trained FX model returned an invalid ${src}/${dst} prediction.`);
+    const currentRate = Number(modelResult.current_rate);
+    if (!Number.isFinite(currentRate) || currentRate <= 0) {
+      throw new Error(`The hourly FX forecaster returned an invalid ${src}/${dst} current rate.`);
     }
-    const predictedReturnPct = Number(modelResult.forecasted_return_pct);
-    if (!Number.isFinite(predictedReturnPct)) {
-      throw new Error(`The trained FX model returned an invalid ${src}/${dst} return estimate.`);
+    const rawPredictions = modelResult.predicted_rates || {};
+    const hourlyPredictions = {};
+    for (const horizon of ['+6h', '+12h', '+24h', '+48h']) {
+      const prediction = rawPredictions[horizon] || {};
+      const rate = Number(prediction.rate);
+      if (!Number.isFinite(rate) || rate <= 0) {
+        throw new Error(`The hourly FX forecaster returned an invalid ${horizon} ${src}/${dst} estimate.`);
+      }
+      hourlyPredictions[horizon] = {
+        rate,
+        low: Number.isFinite(Number(prediction.low)) ? Number(prediction.low) : null,
+        high: Number.isFinite(Number(prediction.high)) ? Number(prediction.high) : null
+      };
     }
-    const rawValidation = modelResult.historical_validation || {};
-    const historicalValidation = {
-      status: rawValidation.status,
-      source: rawValidation.source,
-      evaluationStart: rawValidation.evaluation_start,
-      evaluationEnd: rawValidation.evaluation_end,
-      observations: Number(rawValidation.observations) || 0,
-      directionalAccuracyPct: rawValidation.directional_accuracy_pct ?? null,
-      directionalAccuracyInterval95Pct: rawValidation.directional_accuracy_interval_95_pct ?? null,
-      maePct: rawValidation.mae_pct ?? null,
-      baselineMaePct: rawValidation.baseline_mae_pct ?? null,
-      rmsePct: rawValidation.rmse_pct ?? null,
-      r2: rawValidation.r2 ?? null,
-      reliabilityGatePassed: Boolean(rawValidation.reliability_gate_passed)
-    };
-    const rawInterval = modelResult.prediction_interval || {};
+    const predictedRate = hourlyPredictions['+24h'].rate;
+    const predictedReturnPct = Number(((predictedRate / currentRate - 1) * 100).toFixed(5));
+    const dataSource = modelResult.source === 'twelvedata_cross'
+      ? 'Twelve Data hourly close (USD cross)'
+      : modelResult.source === 'twelvedata'
+        ? 'Twelve Data hourly close'
+        : 'Synthetic demo hourly data';
+    const interval24h = hourlyPredictions['+24h'];
 
     const forecast = {
       sourceCurrency: src,
       destinationCurrency: dst,
       currencyPair: `${src}/${dst}`,
       currentRate,
-      rateSource: rateData.source,
-      rateDate: rateData.rateDate,
+      rateSource: dataSource,
+      rateDate: modelResult.rate_as_of || modelResult.as_of || null,
       forecastAvailable: true,
-      forecastProvider: modelResult.model_metadata?.algorithm || 'HistGradientBoostingRegressor',
-      modelTrainingDataThrough: modelResult.model_metadata?.training_data_through || null,
-      forecastHorizon: modelResult.forecast_horizon || 'next daily reference-rate observation',
+      forecastProvider: 'Damped Holt linear trend',
+      forecastSource: modelResult.source,
+      forecastAsOf: modelResult.as_of || null,
+      forecastHorizon: 'hourly estimates through 48 hours',
       forecastRate: predictedRate,
       forecastReturnPct: predictedReturnPct,
       forecastUnavailableReason: null,
-      predictions: { h24: predictedRate },
-      volatilityPct: modelResult.technical_indicators?.volatility_14d_pct ?? null,
-      confidencePct: modelResult.confidence_score,
-      confidenceType: modelResult.confidence_type,
+      predictions: hourlyPredictions,
+      hourlyObservations: Array.isArray(modelResult.observations)
+        ? modelResult.observations
+          .filter((observation) => observation && Number.isFinite(Number(observation.rate)))
+          .map((observation) => ({ date: observation.date, rate: Number(observation.rate) }))
+        : [],
+      volatilityPct: null,
+      confidencePct: null,
+      confidenceType: null,
       predictionInterval: {
-        lowerBound: rawInterval.lower_bound ?? null,
-        upperBound: rawInterval.upper_bound ?? null,
-        confidenceLevel: rawInterval.confidence_level ?? null
+        lowerBound: interval24h.low,
+        upperBound: interval24h.high,
+        confidenceLevel: null,
+        note: modelResult.bounds_note || null
       },
-      historicalValidation,
-      timingAdvisory: modelResult.timing_advisory,
+      historicalValidation: null,
+      timingAdvisory: null,
       trendDirection: predictedReturnPct > 0 ? 'BULLISH' : predictedReturnPct < 0 ? 'BEARISH' : 'NEUTRAL',
       movingAverages: null,
       optimalProjectedRate: predictedRate,
-      optimalHorizon: 'next daily observation',
-      maxImprovementPct: Math.max(0, Number.isFinite(predictedReturnPct) ? predictedReturnPct : 0),
+      optimalHorizon: '+24h',
+      maxImprovementPct: Math.max(0, predictedReturnPct),
       timestamp: new Date()
     };
     this.cache.set(cacheKey, { forecast, cachedAt: Date.now() });
@@ -125,7 +115,9 @@ class FXForecastingEngine {
       rateDate: rateData.rateDate,
       forecastAvailable: false,
       forecastProvider: null,
-      forecastUnavailableReason: `The trained FX model could not produce a forecast: ${reason}`,
+      forecastSource: null,
+      forecastAsOf: null,
+      forecastUnavailableReason: `The hourly FX forecaster could not produce a forecast: ${reason}`,
       forecastRate: null,
       forecastReturnPct: null,
       predictions: null,

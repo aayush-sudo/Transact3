@@ -57,6 +57,26 @@ const formatCurrencyAmount = (value, code) => {
   return symbol ? `${symbol}${formatNumber(value, code)} ${code}` : `${formatNumber(value, code)} ${code}`;
 };
 
+const formatHourlyForecast = (forecast, source, destination) => {
+  if (!forecast?.forecastAvailable || !forecast.predictions) {
+    return `\nHourly forecast unavailable: ${forecast?.forecastUnavailableReason || 'Please try again.'}`;
+  }
+  const horizons = ['+6h', '+12h', '+24h', '+48h'];
+  const estimates = horizons.map((horizon) => {
+    const prediction = forecast.predictions[horizon];
+    if (!prediction) return null;
+    const bounds = prediction.low != null && prediction.high != null
+      ? ` (approx. range ${formatRateValue(prediction.low)}–${formatRateValue(prediction.high)})`
+      : '';
+    return `${horizon}: ${formatRateValue(prediction.rate)}${bounds}`;
+  }).filter(Boolean).join('; ');
+  return `\nHourly estimates per 1 ${source} (${forecast.forecastProvider}, ${forecast.rateSource}): ${estimates} ${destination}.`
+    + (forecast.forecastSource === 'mock'
+      ? '\nThis is synthetic demo data, not a live market forecast.'
+      : '')
+    + `\nThese are experimental estimates, not calibrated confidence intervals or executable quotes.`;
+};
+
 const toIsoTimestamp = (value) => {
   if (!value) return new Date().toISOString();
   const date = value instanceof Date ? value : new Date(value);
@@ -512,8 +532,9 @@ exports.aiQuery = async (req, res, next) => {
       }
 
       try {
-        const rateInfo = await fxRateEngine.getIndicativeConversion(source, destination);
-        if (!rateInfo) {
+        const currentRate = await fxForecastingEngine.predictFXMovements(source, destination);
+        const rate = Number(currentRate.currentRate);
+        if (!Number.isFinite(rate) || rate <= 0) {
           return send({
             success: true,
             requiresClarification: false,
@@ -523,10 +544,13 @@ exports.aiQuery = async (req, res, next) => {
           });
         }
 
-        const timestamp = toIsoTimestamp(rateInfo.timestamp);
-        const inverseNote = rateInfo.inverted
-          ? ` (derived by inverting the published 1 ${destination} = ${formatRateValue(1 / rateInfo.rate)} ${source} quote)`
-          : '';
+        const timestamp = toIsoTimestamp(currentRate.rateDate || currentRate.forecastAsOf);
+        const rateDescription = currentRate.forecastAvailable
+          ? currentRate.forecastSource === 'mock'
+            ? 'Demo hourly rate (not live)'
+            : 'Current hourly rate'
+          : 'Daily reference rate (hourly forecast unavailable)';
+        const rateSource = currentRate.rateSource || 'hourly rate source';
         const amount = parsed.amount;
 
         if (amount == null) {
@@ -535,22 +559,23 @@ exports.aiQuery = async (req, res, next) => {
             requiresClarification: false,
             actionType: 'CONVERT',
             parsed,
-            assistantMessage: `1 ${source} = ${formatRateValue(rateInfo.rate)} ${destination}${inverseNote}\n\nHow much would you like to convert? Give me an amount and I'll calculate it, for example: "Convert 100 ${source} to ${destination}".\n\nIndicative rate as of ${timestamp}, before any applicable transfer fees or provider spreads.`,
+            assistantMessage: `1 ${source} = ${formatRateValue(rate)} ${destination}\n\nHow much would you like to convert? Give me an amount and I'll calculate it, for example: "Convert 100 ${source} to ${destination}".\n\n${rateDescription} as of ${timestamp} (${rateSource}), before any applicable transfer fees or provider spreads.`,
             data: {
               base: source,
               target: destination,
               amount: null,
               converted: null,
-              rate: rateInfo.rate,
-              inverted: rateInfo.inverted,
+              rate,
+              inverted: false,
               timestamp,
-              rateSource: rateInfo.rateSource
+              rateSource,
+              forecastAvailable: currentRate.forecastAvailable
             }
           });
         }
 
-        const converted = Number((amount * rateInfo.rate).toFixed(2));
-        const message = `${formatSourceAmount(amount, source)} = ${formatCurrencyAmount(converted, destination)}\n\nExchange rate: 1 ${source} = ${formatRateValue(rateInfo.rate)} ${destination}${inverseNote}\n\nIndicative rate as of ${timestamp}. This is an indicative conversion, before any applicable transfer fees or provider spreads.`;
+        const converted = Number((amount * rate).toFixed(2));
+        const message = `${formatSourceAmount(amount, source)} = ${formatCurrencyAmount(converted, destination)}\n\nExchange rate: 1 ${source} = ${formatRateValue(rate)} ${destination}\n\n${rateDescription} as of ${timestamp} (${rateSource}). This is an indicative conversion, before any applicable transfer fees or provider spreads.`;
 
         return send({
           success: true,
@@ -563,10 +588,11 @@ exports.aiQuery = async (req, res, next) => {
             target: destination,
             amount,
             converted,
-            rate: rateInfo.rate,
-            inverted: rateInfo.inverted,
+            rate,
+            inverted: false,
             timestamp,
-            rateSource: rateInfo.rateSource
+            rateSource,
+            forecastAvailable: currentRate.forecastAvailable
           }
         });
       } catch (err) {
@@ -622,23 +648,15 @@ exports.aiQuery = async (req, res, next) => {
         }
 
         const amountLine = parsed.amount != null
-          ? `\nAt the reference rate, ${formatCurrencyAmount(parsed.amount, source)} is about ${formatCurrencyAmount(parsed.amount * forecast.currentRate, destination)}.`
+          ? `\nAt the current hourly rate, ${formatCurrencyAmount(parsed.amount, source)} is about ${formatCurrencyAmount(parsed.amount * forecast.currentRate, destination)}.`
           : '';
-        const validationResult = forecast.historicalValidation;
-        const forecastLine = forecast.forecastAvailable
-          ? `\nModel estimate for the next daily observation: 1 ${source} = ${formatRateValue(forecast.forecastRate)} ${destination} (${forecast.forecastReturnPct >= 0 ? '+' : ''}${forecast.forecastReturnPct}%).`
-            + `\nHistorical direction accuracy: ${forecast.confidencePct == null ? 'not available' : `${forecast.confidencePct}%`} across ${validationResult?.observations || 0} rolling tests (a historical proxy, not a calibrated probability).`
-            + (forecast.predictionInterval?.lower_bound != null
-              ? `\nEmpirical 90% error band: ${formatRateValue(forecast.predictionInterval.lower_bound)}–${formatRateValue(forecast.predictionInterval.upper_bound)} ${destination} per ${source}.`
-              : '')
-            + `\nHistorical reliability gate: ${validationResult?.reliability_gate_passed ? 'passed' : 'not passed'}; this signal is experimental.`
-          : `\nModel estimate unavailable: ${forecast.forecastUnavailableReason}`;
+        const forecastLine = formatHourlyForecast(forecast, source, destination);
         return send({
           success: true,
           requiresClarification: false,
           actionType: 'FX_FORECAST',
           parsed,
-          assistantMessage: `FX outlook for ${source} → ${destination}\nCurrent reference rate: 1 ${source} = ${formatRateValue(forecast.currentRate)} ${destination}\nRate date: ${forecast.rateDate || 'unavailable'} (${forecast.rateSource || 'reference source'}).${forecastLine}${amountLine}\n\nHistorical reference rates can differ from Google's more frequently updated indicative rates. Model projections are not executable quotes or guarantees.`,
+          assistantMessage: `FX outlook for ${source} → ${destination}\nCurrent ${forecast.forecastAvailable ? 'hourly rate' : 'reference rate'}: 1 ${source} = ${formatRateValue(forecast.currentRate)} ${destination}\nRate timestamp: ${forecast.rateDate || 'unavailable'} (${forecast.rateSource || 'hourly rate source'}).${forecastLine}${amountLine}\n\nHistorical reference rates can differ from more frequently updated indicative rates. Forecasts are not executable quotes or guarantees.`,
           data: forecast
         });
       } catch (err) {
@@ -689,17 +707,13 @@ exports.aiQuery = async (req, res, next) => {
 
         const currentRate = forecast.currentRate;
         const nowAmount = Number((amount * currentRate).toFixed(2));
-        const modelForecastLine = forecast.forecastAvailable
-          ? `\nModel estimate for the next daily observation: 1 ${source} = ${formatRateValue(forecast.forecastRate)} ${destination} (${forecast.forecastReturnPct >= 0 ? '+' : ''}${forecast.forecastReturnPct}%).`
-            + `\nHistorical direction accuracy: ${forecast.confidencePct == null ? 'not available' : `${forecast.confidencePct}%`} across ${forecast.historicalValidation?.observations || 0} rolling tests.`
-            + `\nReliability gate: ${forecast.historicalValidation?.reliabilityGatePassed ? 'passed' : 'not passed'}.`
-          : `\nModel estimate unavailable: ${forecast.forecastUnavailableReason}`;
+        const modelForecastLine = formatHourlyForecast(forecast, source, destination);
         return send({
           success: true,
           requiresClarification: false,
           actionType: 'FX_TIMING_ANALYSIS',
           parsed,
-          assistantMessage: `Current reference rate for ${source} → ${destination}: 1 ${source} = ${formatRateValue(currentRate)} ${destination} (dated ${forecast.rateDate || 'unavailable'}).\nIf you convert now, ${amountIsAssumed ? `1 ${source}` : formatCurrencyAmount(amount, source)} is about ${formatCurrencyAmount(nowAmount, destination)} before provider fees and spreads.${modelForecastLine}\n\nThis experimental model is not used to recommend waiting or to execute a transfer.`,
+          assistantMessage: `Current ${forecast.forecastAvailable ? 'hourly rate' : 'reference rate'} for ${source} → ${destination}: 1 ${source} = ${formatRateValue(currentRate)} ${destination} (as of ${forecast.rateDate || 'unavailable'}, ${forecast.rateSource || 'hourly rate source'}).\nIf you convert now, ${amountIsAssumed ? `1 ${source}` : formatCurrencyAmount(amount, source)} is about ${formatCurrencyAmount(nowAmount, destination)} before provider fees and spreads.${modelForecastLine}\n\nForecasts do not recommend waiting or execute a transfer.`,
           data: {
             source,
             destination,
@@ -713,6 +727,7 @@ exports.aiQuery = async (req, res, next) => {
             forecastReturnPct: forecast.forecastReturnPct,
             confidencePct: forecast.confidencePct,
             historicalValidation: forecast.historicalValidation,
+            predictions: forecast.predictions,
             nowAmount,
           }
         });

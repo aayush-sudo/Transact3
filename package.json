@@ -6,7 +6,8 @@
     "start": "node server/src/index.js",
     "server": "npm run dev --prefix server",
     "client": "npm run dev --prefix client",
-    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "dev": "concurrently \"npm run server\" \"npm run client\" \"npm run python-service\"",
+    "python-service": "node scripts/startPythonService.js",
     "seed": "npm run seed --prefix server",
     "test": "npm run test --prefix server"
   },

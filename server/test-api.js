@@ -123,9 +123,10 @@ test('authenticated payment schedules once, reserves capacity, and settles at it
     body: { name: 'New Account', email: 'new.account@example.com', password: 'StrongPass1!' }
   });
   assert.equal(newAccount.response.status, 201, newAccount.body.message);
+  assert.equal(newAccount.body.walletBalance, 0);
   const newAccountPortfolio = await request('/portfolio', { token: newAccount.body.token });
-  assert.equal(newAccountPortfolio.body.data.holdings.find(holding => holding.currency === 'INR').amount, 10000);
-  assert.equal(newAccountPortfolio.body.data.holdings.find(holding => holding.currency === 'USD').amount, 0);
+  assert.ok(newAccountPortfolio.body.data.holdings.length > 0);
+  assert.ok(newAccountPortfolio.body.data.holdings.every(holding => holding.amount === 0));
   const newAccountLogin = await request('/user/login', {
     method: 'POST',
     body: { email: 'new.account@example.com', password: 'StrongPass1!' }

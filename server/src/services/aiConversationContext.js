@@ -21,10 +21,13 @@ const {
   detectAmount,
   detectRecipientEmail,
   normalizeCurrency,
+  normalizeFxForecastCurrency,
+  isFxForecastIntent,
+  isFxForecastCurrencySupported,
+  detectFallbackIntent,
   isCorrectionMessage,
   extractIntent
 } = require('./aiAgentService');
-const { isCurrencySupported } = require('../config/currencies');
 
 const MAX_CONTEXT_DISTANCE = 10; // messages; older financial turns are considered stale
 const MAX_CONTEXT_VERSION = 999;
@@ -108,14 +111,15 @@ const isResetMessage = (prompt) => RESET_PATTERN.test(String(prompt || ''));
  * Handles "SGD to INR", "SGD/INR", "USD in INR", "USD versus INR".
  * Order follows the sentence, never a hardcoded currency list.
  */
-const detectExplicitPairs = (prompt) => {
+const detectExplicitPairs = (prompt, { includeFxForecastCurrencies = false } = {}) => {
   const text = String(prompt || '');
   const pairs = [];
   const seen = new Set();
+  const normalize = includeFxForecastCurrencies ? normalizeFxForecastCurrency : normalizeCurrency;
 
   const pushPair = (rawSource, rawDestination) => {
-    const sourceCurrency = normalizeCurrency(rawSource);
-    const destinationCurrency = normalizeCurrency(rawDestination);
+    const sourceCurrency = normalize(rawSource);
+    const destinationCurrency = normalize(rawDestination);
     if (!sourceCurrency || !destinationCurrency || sourceCurrency === destinationCurrency) return;
     const key = `${sourceCurrency}/${destinationCurrency}`;
     if (seen.has(key)) return;
@@ -141,8 +145,20 @@ const detectExplicitPairs = (prompt) => {
 const buildActiveContext = ({ history = [], prompt = '' } = {}) => {
   const messages = Array.isArray(history) ? history : [];
   const reset = isResetMessage(prompt);
-  const explicitPairs = detectExplicitPairs(prompt);
-  const mentions = detectCurrencyMentions(String(prompt || ''));
+  const currentIntent = detectFallbackIntent(prompt);
+  const latestFinancialMessage = reset
+    ? null
+    : [...messages].reverse().find((message) =>
+        message?.role === 'assistant'
+        && message.parsed
+        && isFinancialIntent(message.parsed.intent)
+        && messages.length - messages.indexOf(message) <= MAX_CONTEXT_DISTANCE
+      );
+  const contextualForecastClarification = ['CLARIFICATION_RESPONSE', 'UNKNOWN'].includes(currentIntent)
+    && isFxForecastIntent(latestFinancialMessage?.parsed?.intent);
+  const includeFxForecastCurrencies = isFxForecastIntent(currentIntent) || contextualForecastClarification;
+  const explicitPairs = detectExplicitPairs(prompt, { includeFxForecastCurrencies });
+  const mentions = detectCurrencyMentions(String(prompt || ''), { includeFxForecastCurrencies });
   const mentionedCodes = [...new Set(mentions.map((mention) => mention.code))];
 
   let active = null;
@@ -156,13 +172,16 @@ const buildActiveContext = ({ history = [], prompt = '' } = {}) => {
       const intent = String(message.parsed.intent || '').toUpperCase();
       if (!isFinancialIntent(intent)) continue;
 
-      const sourceCurrency = normalizeCurrency(message.parsed.sourceCurrency);
-      const destinationCurrency = normalizeCurrency(message.parsed.destinationCurrency);
+      const normalizeMessageCurrency = isFxForecastIntent(intent)
+        ? normalizeFxForecastCurrency
+        : normalizeCurrency;
+      const sourceCurrency = normalizeMessageCurrency(message.parsed.sourceCurrency);
+      const destinationCurrency = normalizeMessageCurrency(message.parsed.destinationCurrency);
       const referencedPairs = Array.isArray(message.parsed.referencedPairs)
         ? message.parsed.referencedPairs
             .map((pair) => ({
-              sourceCurrency: normalizeCurrency(pair && pair.sourceCurrency),
-              destinationCurrency: normalizeCurrency(pair && pair.destinationCurrency)
+              sourceCurrency: normalizeMessageCurrency(pair && pair.sourceCurrency),
+              destinationCurrency: normalizeMessageCurrency(pair && pair.destinationCurrency)
             }))
             .filter((pair) => pair.sourceCurrency && pair.destinationCurrency)
         : [];
@@ -287,8 +306,11 @@ const mergeIntentWithContext = ({ prompt, intentResult, context }) => {
   }
 
   // ---- Currencies -------------------------------------------------------
-  let sourceCurrency = normalizeCurrency(parsed.sourceCurrency);
-  let destinationCurrency = normalizeCurrency(parsed.destinationCurrency);
+  const normalizeIntentCurrency = isFxForecastIntent(parsed.intent)
+    ? normalizeFxForecastCurrency
+    : normalizeCurrency;
+  let sourceCurrency = normalizeIntentCurrency(parsed.sourceCurrency);
+  let destinationCurrency = normalizeIntentCurrency(parsed.destinationCurrency);
 
   if (explicitPairs.length === 1) {
     // An explicit, unambiguous pair always wins over anything older.
@@ -435,7 +457,7 @@ const validateForecastPair = (forecast, expectedSource, expectedDestination) => 
   if (!rawSource || !rawDestination) {
     return { ok: false, reason: 'MISSING_PAIR' };
   }
-  if (!isCurrencySupported(rawSource) || !isCurrencySupported(rawDestination)) {
+  if (!isFxForecastCurrencySupported(rawSource) || !isFxForecastCurrencySupported(rawDestination)) {
     return {
       ok: false,
       reason: 'UNSUPPORTED_PAIR',
@@ -443,13 +465,13 @@ const validateForecastPair = (forecast, expectedSource, expectedDestination) => 
       destinationCurrency: rawDestination
     };
   }
-  const sourceCurrency = normalizeCurrency(rawSource);
-  const destinationCurrency = normalizeCurrency(rawDestination);
+  const sourceCurrency = normalizeFxForecastCurrency(rawSource);
+  const destinationCurrency = normalizeFxForecastCurrency(rawDestination);
   if (!forecast || typeof forecast !== 'object') {
     return { ok: false, reason: 'EMPTY_FORECAST', sourceCurrency, destinationCurrency };
   }
-  const actualSource = normalizeCurrency(forecast.sourceCurrency);
-  const actualDestination = normalizeCurrency(forecast.destinationCurrency);
+  const actualSource = normalizeFxForecastCurrency(forecast.sourceCurrency);
+  const actualDestination = normalizeFxForecastCurrency(forecast.destinationCurrency);
   if (!actualSource || !actualDestination) {
     return { ok: false, reason: 'FORECAST_PAIR_UNSPECIFIED', sourceCurrency, destinationCurrency };
   }
@@ -472,7 +494,7 @@ const validateForecastPair = (forecast, expectedSource, expectedDestination) => 
 const describeForecastMismatch = (validation) => {
   if (!validation) return 'I could not validate that forecast request.';
   if (validation.reason === 'UNSUPPORTED_PAIR') {
-    return `I can't forecast ${validation.sourceCurrency}/${validation.destinationCurrency} because that pair is not supported. Supported currencies are ${[...require('../config/currencies').SUPPORTED_CURRENCY_CODES].join(', ')}. I won't substitute another pair.`;
+    return `I can't forecast ${validation.sourceCurrency}/${validation.destinationCurrency} because that pair is not supported. Forecast currency codes are ${[...require('../config/currencies').FX_FORECAST_CURRENCY_CODES].join(', ')}. I won't substitute another pair.`;
   }
   if (validation.reason === 'FORECAST_PAIR_MISMATCH') {
     return `I could not produce a forecast for ${validation.sourceCurrency}/${validation.destinationCurrency}. The forecasting model returned ${validation.actualSource}/${validation.actualDestination}, so I'm not going to show it as your requested forecast. Please try again.`;

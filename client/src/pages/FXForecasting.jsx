@@ -1,11 +1,23 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import FXForecastChart from '../components/FXForecastChart';
 import api from '../services/api';
 import { ArrowRightLeft, Calculator, Loader2 } from 'lucide-react';
 
-const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'INR', 'BRL', 'MXN', 'SGD', 'AED', 'CHF', 'CAD', 'AUD', 'HKD', 'SEK', 'ZAR'];
+const DEFAULT_CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'INR', 'BRL', 'MXN', 'SGD', 'AED', 'CHF', 'CAD', 'AUD', 'HKD', 'SEK', 'ZAR'];
+
+const isForecastPairAvailable = (pairs, base, target) => {
+  if (!pairs) return true;
+  const listed = (source, destination) => pairs.has(`${source}/${destination}`)
+    || pairs.has(`${destination}/${source}`);
+  return listed(base, target) || (listed('USD', base) && listed('USD', target));
+};
 
 const FXForecasting = () => {
+  const [currencies, setCurrencies] = useState(DEFAULT_CURRENCIES);
+  const [currencyNames, setCurrencyNames] = useState({});
+  const [paymentCurrencies, setPaymentCurrencies] = useState(['USD', 'EUR', 'GBP', 'INR', 'BRL', 'AED', 'SGD', 'AUD', 'CAD', 'JPY']);
+  const [supportedPairs, setSupportedPairs] = useState(null);
+  const [currencyListError, setCurrencyListError] = useState('');
   const [base, setBase] = useState('USD');
   const [target, setTarget] = useState('INR');
   const [converterAmount, setConverterAmount] = useState('100');
@@ -13,10 +25,47 @@ const FXForecasting = () => {
   const [conversionError, setConversionError] = useState('');
   const [converting, setConverting] = useState(false);
 
+  useEffect(() => {
+    let active = true;
+    Promise.all([api.get('/fx/currencies'), api.get('/fx/pairs')])
+      .then(([currencyResponse, pairResponse]) => {
+        const available = Array.isArray(currencyResponse.data.data) ? currencyResponse.data.data : [];
+        const pairList = Array.isArray(pairResponse.data.data) ? pairResponse.data.data : [];
+        if (!available.length || !pairList.length) throw new Error('The forecast currency or pair catalog was empty.');
+        if (!active) return;
+        const pairs = new Set(pairList.map((pair) => String(pair).toUpperCase()));
+        const pairCurrencies = new Set(pairList.flatMap((pair) => String(pair).toUpperCase().split('/')));
+        const supportedCurrencies = available.filter(({ code }) => pairCurrencies.has(code));
+        const codes = supportedCurrencies.map(({ code }) => code);
+        setCurrencies(codes);
+        setCurrencyNames(Object.fromEntries(available.map(({ code, name }) => [code, name])));
+        setPaymentCurrencies(available.filter(({ paymentSupported }) => paymentSupported).map(({ code }) => code));
+        setSupportedPairs(pairs);
+      })
+      .catch((error) => {
+        console.error('Failed to load the Twelve Data forecast catalog', error);
+        if (active) setCurrencyListError('Could not load the Twelve Data pair catalog; showing common currency choices.');
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!supportedPairs) return;
+    const targets = currencies.filter((code) => code !== base
+      && isForecastPairAvailable(supportedPairs, base, code));
+    if (!targets.includes(target)) setTarget(targets[0] || '');
+  }, [currencies, supportedPairs, base, target]);
+
   const selectBaseCurrency = (nextBase) => {
     setBase(nextBase);
     if (nextBase === target) {
-      setTarget(CURRENCIES.find((code) => code !== nextBase));
+      setTarget(currencies.find((code) => code !== nextBase
+        && isForecastPairAvailable(supportedPairs, nextBase, code)));
+    } else if (!isForecastPairAvailable(supportedPairs, nextBase, target)) {
+      setTarget(currencies.find((code) => code !== nextBase
+        && isForecastPairAvailable(supportedPairs, nextBase, code)));
     }
     setConversion(null);
     setConversionError('');
@@ -30,6 +79,11 @@ const FXForecasting = () => {
 
   const convertAmount = async (event) => {
     event.preventDefault();
+    if (!paymentCurrencies.includes(base) || !paymentCurrencies.includes(target)) {
+      setConversion(null);
+      setConversionError('Quick conversion is available only for payment-supported currencies. The hourly forecast is still available for this pair.');
+      return;
+    }
     setConverting(true);
     setConversionError('');
     try {
@@ -46,6 +100,7 @@ const FXForecasting = () => {
       setConverting(false);
     }
   };
+  const canConvert = paymentCurrencies.includes(base) && paymentCurrencies.includes(target);
 
   return (
     <div className="space-y-6">
@@ -63,7 +118,7 @@ const FXForecasting = () => {
             onChange={(e) => selectBaseCurrency(e.target.value)}
             className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-mono font-bold text-slate-800"
           >
-            {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+            {currencies.map(c => <option key={c} value={c}>{c}{currencyNames[c] ? ` — ${currencyNames[c]}` : ''}</option>)}
           </select>
           <span className="text-gray-400 text-xs font-mono">→</span>
           <select
@@ -71,10 +126,19 @@ const FXForecasting = () => {
             onChange={(e) => selectTargetCurrency(e.target.value)}
             className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-mono font-bold text-emerald-800"
           >
-            {CURRENCIES.filter(c => c !== base).map(c => <option key={c} value={c}>{c}</option>)}
+            {currencies.filter(c => c !== base
+              && isForecastPairAvailable(supportedPairs, base, c)).map(c => (
+                <option key={c} value={c}>{c}{currencyNames[c] ? ` — ${currencyNames[c]}` : ''}</option>
+              ))}
           </select>
         </div>
       </div>
+
+      {currencyListError && (
+        <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {currencyListError}
+        </p>
+      )}
 
       <section className="card space-y-4">
         <div>
@@ -82,7 +146,7 @@ const FXForecasting = () => {
           <h2 className="mt-1 flex items-center gap-2 text-xl font-bold text-slate-900">
             <Calculator size={20} className="text-emerald-700" /> Currency converter
           </h2>
-          <p className="mt-1 text-sm text-slate-600">Enter an amount to estimate its value using the latest published daily reference rate. Your selected pair also controls the historical chart below.</p>
+          <p className="mt-1 text-sm text-slate-600">Enter an amount to estimate its value using the latest published daily reference rate. Your selected pair also controls the historical chart and hourly forecast below.</p>
         </div>
         <form onSubmit={convertAmount} className="grid gap-3 md:grid-cols-[1.2fr_1fr_auto_1fr_auto] md:items-end">
           <label className="text-sm font-semibold text-slate-800">
@@ -105,7 +169,7 @@ const FXForecasting = () => {
               value={base}
               onChange={(event) => selectBaseCurrency(event.target.value)}
             >
-                {CURRENCIES.map((code) => <option key={code} value={code}>{code}</option>)}
+                {currencies.map((code) => <option key={code} value={code}>{code}{currencyNames[code] ? ` — ${currencyNames[code]}` : ''}</option>)}
             </select>
           </label>
           <ArrowRightLeft className="mx-auto mb-3 hidden text-slate-400 md:block" size={18} />
@@ -116,16 +180,22 @@ const FXForecasting = () => {
               value={target}
               onChange={(event) => selectTargetCurrency(event.target.value)}
             >
-              {CURRENCIES.filter((code) => code !== base).map((code) => (
-                <option key={code} value={code}>{code}</option>
+              {currencies.filter((code) => code !== base
+                && isForecastPairAvailable(supportedPairs, base, code)).map((code) => (
+                <option key={code} value={code}>{code}{currencyNames[code] ? ` — ${currencyNames[code]}` : ''}</option>
               ))}
             </select>
           </label>
-          <button type="submit" disabled={converting} className="btn-primary inline-flex items-center justify-center gap-2 disabled:opacity-60">
+          <button type="submit" disabled={converting || !canConvert} className="btn-primary inline-flex items-center justify-center gap-2 disabled:opacity-60">
             {converting ? <Loader2 size={16} className="animate-spin" /> : null}
             Convert
           </button>
         </form>
+        {!canConvert && (
+          <p role="status" className="text-sm text-amber-800">
+            Quick conversion and payment estimates are limited to payment-supported currencies. Forecasts are available for this pair.
+          </p>
+        )}
         {conversionError && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800">{conversionError}</p>}
         {conversion && (
           <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">

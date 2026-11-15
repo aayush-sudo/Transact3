@@ -29,8 +29,20 @@ const FXForecastChart = ({ base, target }) => {
       api.post('/orchestration/fx-forecast', { sourceCurrency: base, destinationCurrency: target })
     ]);
 
+    const hourlyForecast = forecastResult.status === 'fulfilled'
+      ? forecastResult.value.data.data
+      : null;
     if (historyResult.status === 'fulfilled') {
       setHistoryData(historyResult.value.data.data);
+    } else if (hourlyForecast?.hourlyObservations?.length) {
+      console.warn('Daily reference history unavailable; using the forecast provider hourly observations.');
+      setHistoryData({
+        currentRate: hourlyForecast.currentRate,
+        rateDate: hourlyForecast.rateDate,
+        source: hourlyForecast.rateSource,
+        frequency: 'hourly',
+        observations: hourlyForecast.hourlyObservations
+      });
     } else {
       console.error('Failed to fetch historical FX rates', historyResult.reason);
       setError(historyResult.reason.response?.data?.message || `Could not load reference-rate history for ${base}/${target}.`);
@@ -61,52 +73,29 @@ const FXForecastChart = ({ base, target }) => {
     );
   }
 
-  if (error) {
-    return <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-800">{error}</div>;
-  }
-
-  if (!historyData?.observations?.length) {
-    return <div role="status" className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-700">No historical reference rates are available for {base}/{target}.</div>;
-  }
-
   const hasForecast = forecastData?.forecastAvailable
-    && forecastData.forecastRate != null
-    && Number.isFinite(Number(forecastData.forecastRate));
-  const lastObservation = historyData.observations.at(-1);
-  const forecastDate = lastObservation
-    ? new Date(new Date(`${lastObservation.date}T00:00:00Z`).getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-    : null;
-  const labels = historyData.observations.map(({ date }) => date);
-  if (hasForecast && forecastDate) labels.push(forecastDate);
+    && forecastData.currentRate != null
+    && Number.isFinite(Number(forecastData.currentRate));
+  const observations = historyData?.observations || [];
+  const labels = observations.map(({ date }) => historyData?.frequency === 'hourly'
+    ? new Date(date).toLocaleString()
+    : date);
 
   const chartData = {
     labels,
     datasets: [
       {
-        label: `${base}/${target} daily reference rate`,
-        data: [...historyData.observations.map(({ rate }) => rate), ...(hasForecast ? [null] : [])],
+        label: historyData?.frequency === 'hourly'
+          ? `${base}/${target} ${historyData.source || 'hourly close'}`
+          : `${base}/${target} daily reference rate`,
+        data: observations.map(({ rate }) => rate),
         borderColor: '#10b981',
         backgroundColor: 'rgba(16, 185, 129, 0.1)',
         tension: 0.2,
         fill: true,
         pointBackgroundColor: '#10b981',
         pointRadius: 2
-      },
-      ...(hasForecast ? [{
-        label: 'ML next-observation estimate',
-        data: [
-          ...historyData.observations.slice(0, -1).map(() => null),
-          lastObservation.rate,
-          forecastData.forecastRate
-        ],
-        borderColor: '#6366f1',
-        backgroundColor: '#6366f1',
-        borderDash: [6, 4],
-        tension: 0,
-        fill: false,
-        pointRadius: 4,
-        pointBackgroundColor: '#6366f1'
-      }] : [])
+      }
     ]
   };
 
@@ -129,81 +118,92 @@ const FXForecastChart = ({ base, target }) => {
     }
   };
 
-  const validation = forecastData?.historicalValidation;
-  const interval = forecastData?.predictionInterval;
+  const horizons = [
+    { key: '+6h', label: 'Next 6 hours' },
+    { key: '+12h', label: 'Next 12 hours' },
+    { key: '+24h', label: 'Next 24 hours' },
+    { key: '+48h', label: 'Next 48 hours' }
+  ];
+  const displayRate = (hasForecast ? forecastData.currentRate : historyData?.currentRate) ?? 'N/A';
 
   return (
     <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <span className="text-xs font-bold uppercase tracking-widest text-emerald-700">FX model outlook</span>
-          <h3 className="mt-0.5 text-lg font-bold text-slate-900">{base}/{target} · daily reference history</h3>
+          <h3 className="mt-0.5 text-lg font-bold text-slate-900">
+            {base}/{target} · {historyData?.frequency === 'hourly' ? 'hourly provider history' : 'daily reference history'} and hourly outlook
+          </h3>
         </div>
         <div className="text-right font-mono">
-          <span className="text-xl font-extrabold text-slate-900">1 {base} = {historyData.currentRate} {target}</span>
-          <p className="text-xs text-slate-500">Reference rate dated {historyData.rateDate || 'date unavailable'}</p>
+          <span className="text-xl font-extrabold text-slate-900">1 {base} = {displayRate} {target}</span>
+          <p className="text-xs text-slate-500">
+            {hasForecast ? `${forecastData.rateSource} · ${forecastData.rateDate || 'timestamp unavailable'}` : `Daily reference · ${historyData.rateDate || 'date unavailable'}`}
+          </p>
         </div>
       </div>
 
-      <div className="h-[260px] w-full">
-        <Line data={chartData} options={chartOptions} />
-      </div>
+      {observations.length ? (
+        <div className="h-[260px] w-full">
+          <Line data={chartData} options={chartOptions} />
+        </div>
+      ) : (
+        <div role={error ? 'alert' : 'status'} className={`rounded-xl p-3 text-sm ${error ? 'border border-rose-200 bg-rose-50 text-rose-800' : 'border border-slate-200 bg-slate-50 text-slate-700'}`}>
+          {error || `No historical reference rates are available for ${base}/${target}.`}
+        </div>
+      )}
 
       {hasForecast ? (
-        <div className="grid gap-3 border-t border-slate-200 pt-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3">
-            <span className="block text-xs text-indigo-800">Model estimate · next daily observation</span>
-            <span className="font-mono text-lg font-bold text-indigo-950">
-              1 {base} = {Number(forecastData.forecastRate).toLocaleString(undefined, { maximumFractionDigits: 6 })} {target}
-            </span>
-            <span className="block text-xs text-indigo-800">
-              {forecastData.forecastReturnPct >= 0 ? '+' : ''}{forecastData.forecastReturnPct}% vs. latest
-            </span>
-            {interval?.lowerBound != null && interval?.upperBound != null && (
-              <span className="mt-1 block text-xs text-indigo-800">
-                {interval.confidenceLevel}: {interval.lowerBound}–{interval.upperBound}
+        <div className="space-y-3 border-t border-slate-200 pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <span className="text-xs font-bold uppercase tracking-widest text-indigo-700">Hourly FX forecast</span>
+              <p className="text-xs text-slate-600">{forecastData.forecastProvider} · rates shown per 1 {base}</p>
+            </div>
+            {forecastData.forecastSource === 'mock' && (
+              <span className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900">
+                Demo data — not a live market forecast
               </span>
             )}
           </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <span className="block text-xs text-slate-600">Historical direction accuracy (confidence proxy)</span>
-            <span className="font-mono text-lg font-bold text-slate-900">
-              {forecastData.confidencePct == null ? 'Not available' : `${forecastData.confidencePct}%`}
-            </span>
-            <span className="block text-xs text-slate-600">
-              {validation?.observations || 0} rolling tests; not a calibrated probability
-            </span>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {horizons.map(({ key, label }) => {
+              const prediction = forecastData.predictions?.[key];
+              return (
+                <div key={key} className="rounded-xl border border-indigo-200 bg-indigo-50 p-3">
+                  <span className="block text-xs text-indigo-800">{label}</span>
+                  <span className="font-mono text-lg font-bold text-indigo-950">
+                    {prediction?.rate == null
+                      ? 'Unavailable'
+                      : Number(prediction.rate).toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                    {' '}{target}
+                  </span>
+                  {prediction?.low != null && prediction?.high != null && (
+                    <span className="mt-1 block text-xs text-indigo-800">
+                      Approx. range: {Number(prediction.low).toLocaleString(undefined, { maximumFractionDigits: 6 })}–{Number(prediction.high).toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <span className="block text-xs text-slate-600">Return MAE · model vs. no-change baseline</span>
-            <span className="font-mono text-sm font-bold text-slate-900">
-              {validation?.maePct ?? 'N/A'}% / {validation?.baselineMaePct ?? 'N/A'}%
-            </span>
-            <span className="block text-xs text-slate-600">Out-of-sample, actual daily observations</span>
-          </div>
-          <div className={`rounded-xl border p-3 ${validation?.reliability_gate_passed ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
-            <span className="block text-xs text-slate-700">Reliability check</span>
-            <span className="font-semibold text-slate-900">
-              {validation?.reliabilityGatePassed ? 'Passed' : 'Not reliable for timing'}
-            </span>
-            <span className="block text-xs text-slate-700">
-              {validation?.directionalAccuracyInterval95Pct
-                ? `95% accuracy interval: ${validation.directionalAccuracyInterval95Pct[0]}–${validation.directionalAccuracyInterval95Pct[1]}%`
-                : 'Insufficient historical tests'}
-            </span>
-          </div>
+          <p className="text-xs leading-relaxed text-slate-600">
+            {forecastData.predictionInterval?.note || 'Ranges are approximate and are not calibrated confidence intervals.'}
+            {' '}Forecasts are experimental and are not executable quotes or payment advice.
+          </p>
         </div>
       ) : (
         <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-          {forecastData?.forecastUnavailableReason || 'The trained FX model did not return a forecast.'}
+          {forecastData?.forecastUnavailableReason || 'The hourly FX forecaster did not return a forecast.'}
         </div>
       )}
 
       <p className="border-t border-slate-200 pt-3 text-xs leading-relaxed text-slate-600">
-        Source: Frankfurter dated daily reference rates. The saved {forecastData?.forecastProvider || 'HistGradientBoosting'} model estimates the next daily observation.
-        {forecastData?.modelTrainingDataThrough ? ` Model training data through ${forecastData.modelTrainingDataThrough}.` : ''}
-        Confidence proxy is historical directional accuracy, not a calibrated probability. The 95% Wilson interval describes uncertainty in that hit rate; the separate 90% band summarizes historical absolute rate errors.
-        Model estimates are experimental, not executable quotes or payment advice. Google may show a different, more frequently updated indicative rate.
+        Historical chart: {historyData?.frequency === 'hourly'
+          ? `${historyData.source || 'Hourly provider'} observations`
+          : 'Frankfurter dated daily reference rates'}. Forecast source: {forecastData?.rateSource || 'hourly forecast service'}.
+        {forecastData?.forecastSource === 'mock' ? ' The service is using synthetic fallback data because Twelve Data is not configured.' : ''}
+        {' '}Hourly estimates can differ from daily reference rates and other indicative sources; they are not executable quotes.
       </p>
     </div>
   );

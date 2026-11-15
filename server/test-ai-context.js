@@ -20,7 +20,9 @@ const {
   validateForecastPair
 } = require('./src/services/aiConversationContext');
 const fxForecastingEngine = require('./src/services/fxForecastingEngine');
+const fastApiClient = require('./src/services/fastapiClient');
 const fxRateEngine = require('./src/services/fxRateEngine');
+const orchestrationController = require('./src/controllers/orchestrationController');
 const { redactEmailAddresses } = require('./src/services/aiAgentService');
 
 const FINANCIAL_ACTIONS = new Set([
@@ -237,7 +239,7 @@ async function run() {
     assert(mismatch.ok === false && mismatch.reason === 'FORECAST_PAIR_MISMATCH',
       'N1 stale USD/INR forecast rejected for SGD/INR request', JSON.stringify(mismatch));
 
-    const unsupported = validateForecastPair(sgdForecast, 'CHF', 'INR');
+    const unsupported = validateForecastPair(sgdForecast, 'XXX', 'INR');
     assert(unsupported.ok === false && unsupported.reason === 'UNSUPPORTED_PAIR',
       'N2 unsupported pair is refused instead of substituted', JSON.stringify(unsupported));
 
@@ -245,23 +247,181 @@ async function run() {
     assert(ok.ok === true, 'N3 matching forecast accepted', JSON.stringify(ok));
   }
 
-  // -- O: model prediction is real-data-backed or explicitly unavailable ---
+  // -- N5: FX-only currencies work for forecasts, not transfers -----------
+  {
+    const forecastTurn = await resolveAgentTurn({ prompt: 'Forecast CHF to SEK' });
+    assert(
+      forecastTurn.actionType === 'FX_FORECAST'
+        && forecastTurn.parsed.sourceCurrency === 'CHF'
+        && forecastTurn.parsed.destinationCurrency === 'SEK'
+        && !forecastTurn.intentResult.requiresClarification,
+      'N5a FX-only currency pairs are accepted in forecast requests',
+      JSON.stringify(forecastTurn.parsed)
+    );
+
+    const anotherCross = await resolveAgentTurn({ prompt: 'Forecast HKD to MXN' });
+    assert(
+      anotherCross.parsed.sourceCurrency === 'HKD'
+        && anotherCross.parsed.destinationCurrency === 'MXN'
+        && !anotherCross.intentResult.requiresClarification,
+      'N5b other selectable FX-only cross pairs are accepted',
+      JSON.stringify(anotherCross.parsed)
+    );
+    const namedCross = await resolveAgentTurn({ prompt: 'Forecast Swedish krona to Mexican peso' });
+    assert(
+      namedCross.parsed.sourceCurrency === 'SEK'
+        && namedCross.parsed.destinationCurrency === 'MXN',
+      'N5b named currencies are recognized in forecast requests',
+      JSON.stringify(namedCross.parsed)
+    );
+    const extendedNames = await resolveAgentTurn({ prompt: 'Forecast Iraqi Dinar to Ghanaian Cedi' });
+    assert(
+      extendedNames.parsed.sourceCurrency === 'IQD'
+        && extendedNames.parsed.destinationCurrency === 'GHS',
+      'N5b additional provider currency names are recognized',
+      JSON.stringify(extendedNames.parsed)
+    );
+    const specificPound = await resolveAgentTurn({ prompt: 'Forecast Falkland Islands Pound to Canadian Dollar' });
+    assert(
+      specificPound.parsed.sourceCurrency === 'FKP'
+        && specificPound.parsed.destinationCurrency === 'CAD',
+      'N5b specific currency names take precedence over ambiguous aliases',
+      JSON.stringify(specificPound.parsed)
+    );
+
+    const transferTurn = await resolveAgentTurn({ prompt: 'Send 100 CHF to SEK' });
+    assert(
+      transferTurn.actionType === 'TRANSFER'
+        && transferTurn.parsed.sourceCurrency === null
+        && transferTurn.parsed.destinationCurrency === null
+        && transferTurn.intentResult.requiresClarification,
+      'N5c forecast-only currencies remain disallowed for transfer requests',
+      JSON.stringify(transferTurn.parsed)
+    );
+
+    const history = [{
+      role: 'assistant',
+      content: 'FX outlook',
+      parsed: forecastTurn.parsed
+    }];
+    const followUp = await resolveAgentTurn({ prompt: 'Check its forecast', history });
+    assert(
+      followUp.parsed.sourceCurrency === 'CHF' && followUp.parsed.destinationCurrency === 'SEK',
+      'N5d conversational follow-ups retain FX-only forecast pairs',
+      JSON.stringify(followUp.parsed)
+    );
+    const correction = await resolveAgentTurn({ prompt: 'Change destination to HKD', history });
+    assert(
+      correction.parsed.intent === 'FX_FORECAST'
+        && correction.parsed.sourceCurrency === 'CHF'
+        && correction.parsed.destinationCurrency === 'HKD',
+      'N5e forecast-pair corrections preserve the extended currency context',
+      JSON.stringify(correction.parsed)
+    );
+  }
+
+  // -- N4: hourly Python forecast is mapped for application consumers ------
+  {
+    const originalPredictHourlyFX = fastApiClient.predictHourlyFX;
+    try {
+      fastApiClient.predictHourlyFX = async ({ base, target }) => ({
+        base,
+        target,
+        current_rate: 1.08,
+        source: 'twelvedata',
+        as_of: '2026-11-15T12:00:00+00:00',
+        rate_as_of: '2026-11-15T11:00:00+00:00',
+        observations: [{ date: '2026-11-15T10:00:00+00:00', rate: 1.079 }],
+        predicted_rates: {
+          '+6h': { rate: 1.081, low: 1.079, high: 1.083 },
+          '+12h': { rate: 1.082, low: 1.079, high: 1.085 },
+          '+24h': { rate: 1.083, low: 1.078, high: 1.088 },
+          '+48h': { rate: 1.084, low: 1.076, high: 1.092 }
+        }
+      });
+      fxForecastingEngine.cache.delete('EUR/USD');
+      const forecast = await fxForecastingEngine.predictFXMovements('EUR', 'USD');
+      assert(
+        forecast.forecastAvailable
+          && forecast.forecastSource === 'twelvedata'
+          && forecast.predictions['+6h'].rate === 1.081
+          && forecast.predictions['+48h'].rate === 1.084
+          && forecast.hourlyObservations[0]?.rate === 1.079,
+        'N4 hourly API result maps horizons and historical observations',
+        JSON.stringify({ predictions: forecast.predictions, observations: forecast.hourlyObservations })
+      );
+    } finally {
+      fastApiClient.predictHourlyFX = originalPredictHourlyFX;
+      fxForecastingEngine.cache.delete('EUR/USD');
+    }
+  }
+
+  // -- O: hourly prediction is real-data-backed or explicitly unavailable ---
   {
     const forecast = await fxForecastingEngine.predictFXMovements('USD', 'INR');
     assert(forecast.currencyPair === 'USD/INR' && forecast.currentRate > 0,
-      'O1 USD/INR reference rate is available', `${forecast.currencyPair} @ ${forecast.currentRate}`);
+      'O1 USD/INR current rate is available', `${forecast.currencyPair} @ ${forecast.currentRate}`);
     if (forecast.forecastAvailable) {
-      assert(Number.isFinite(forecast.forecastRate) && forecast.historicalValidation?.observations >= 60,
-        'O2a model forecast includes real out-of-sample validation');
-      assert(forecast.confidenceType === 'historical_directional_accuracy_not_calibrated_probability',
-        'O2b forecast confidence is identified as historical accuracy, not a probability');
+      assert(
+        ['+6h', '+12h', '+24h', '+48h'].every(horizon => Number.isFinite(forecast.predictions[horizon]?.rate)),
+        'O2a hourly forecasts include all requested horizons'
+      );
+      assert(
+        ['twelvedata', 'mock'].includes(forecast.forecastSource),
+        'O2b forecast source is explicitly identified'
+      );
     } else {
       assert(Boolean(forecast.forecastUnavailableReason) && forecast.forecastRate === null,
-        'O2 model unavailability is explicit rather than replaced with fabricated predictions');
+        'O2 model-service unavailability is explicit rather than replaced with a forecast');
     }
     const timing = await fxForecastingEngine.evaluateTiming('USD', 'INR');
     assert(timing.recommendation === 'EXECUTE_NOW' && timing.deferHours === 0,
       'O3 transfer timing is not deferred based on a model projection');
+  }
+
+  // -- O4: chat's live-rate answer uses the same hourly-rate engine --------
+  {
+    const originalPredictFXMovements = fxForecastingEngine.predictFXMovements;
+    const response = {
+      statusCode: null,
+      body: null,
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(body) {
+        this.body = body;
+        return this;
+      }
+    };
+    try {
+      fxForecastingEngine.predictFXMovements = async () => ({
+        currentRate: 1.2345,
+        rateDate: '2026-11-15T12:00:00.000Z',
+        forecastAsOf: '2026-11-15T12:00:00.000Z',
+        rateSource: 'Twelve Data hourly close',
+        forecastAvailable: true,
+        forecastSource: 'twelvedata'
+      });
+      await orchestrationController.aiQuery({
+        body: { prompt: 'What is the live exchange rate from USD to INR?' }
+      }, response);
+      assert(
+        response.statusCode === 200
+          && response.body.actionType === 'CONVERT'
+          && response.body.data?.rate === 1.2345,
+        'O4 chat live-rate answer reads current rate from the hourly FX engine',
+        JSON.stringify(response.body?.data)
+      );
+      assert(
+        response.body.assistantMessage.includes('1 USD = 1.2345 INR')
+          && response.body.assistantMessage.includes('Current hourly rate'),
+        'O4 chat displays the same hourly rate and labels its source',
+        response.body.assistantMessage
+      );
+    } finally {
+      fxForecastingEngine.predictFXMovements = originalPredictFXMovements;
+    }
   }
 
   // -- P: context versioning ----------------------------------------------

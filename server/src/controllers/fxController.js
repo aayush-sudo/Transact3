@@ -3,8 +3,32 @@ const fxForecastingEngine = require('../services/fxForecastingEngine');
 const fxBacktestingEngine = require('../services/fxBacktestingEngine');
 const orchestrationEngine = require('../services/orchestrationEngine');
 const { createCurrencyConversionQuote } = require('../services/currencyConversionService');
-const { isCurrencySupported } = require('../config/currencies');
+const fastApiClient = require('../services/fastapiClient');
+const {
+  FX_FORECAST_CURRENCIES,
+  isCurrencySupported
+} = require('../config/currencies');
 const { getExchangeRates, getHistoricalRates } = require('../services/currencyService');
+
+exports.getForecastCurrencies = (req, res) => {
+  res.status(200).json({
+    success: true,
+    data: Object.entries(FX_FORECAST_CURRENCIES).map(([code, name]) => ({
+      code,
+      name,
+      paymentSupported: isCurrencySupported(code)
+    }))
+  });
+};
+
+exports.getForecastPairs = async (req, res, next) => {
+  try {
+    const pairs = await fastApiClient.getHourlyFXPairs();
+    res.status(200).json({ success: true, data: pairs });
+  } catch (error) {
+    next(error);
+  }
+};
 
 exports.getRates = async (req, res, next) => {
   try {

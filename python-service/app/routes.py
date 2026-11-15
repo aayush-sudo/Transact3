@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 
@@ -19,6 +19,7 @@ from app.services.aml_service import aml_sanction_engine
 from app.ml.currency_model import currency_forecaster
 from app.ml.rail_model import rail_recommender
 from app.ml.risk_model import transaction_risk_model
+from app.ml.fx_forecaster import get_supported_forex_pairs, predict_rates
 
 router = APIRouter()
 
@@ -141,6 +142,28 @@ async def predict_currency(req: MLPredictCurrencyRequest):
         amount=req.amount or 10000.0
     )
     return {"success": True, "data": result}
+
+class HourlyFXForecastRequest(BaseModel):
+    base: str = Field(..., example="USD")
+    target: str = Field(..., example="INR")
+
+@router.post("/fx/hourly-forecast", tags=["FX Analysis"])
+def predict_hourly_fx(req: HourlyFXForecastRequest):
+    """Return Twelve Data hourly FX forecasts or explicitly labeled demo data."""
+    try:
+        return {"success": True, "data": predict_rates(req.base, req.target)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+@router.get("/fx/pairs", tags=["FX Analysis"])
+def list_hourly_fx_pairs():
+    """Return pairs listed by Twelve Data (or pairs available to mock forecasts)."""
+    try:
+        return {"success": True, "data": get_supported_forex_pairs()}
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 class MLPredictRailRequest(BaseModel):
     amount_usd: float = Field(..., example=5000.0)

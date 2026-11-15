@@ -15,6 +15,13 @@ const SUPPORTED_CURRENCIES = {
 };
 
 const SUPPORTED_CURRENCY_CODES = Object.keys(SUPPORTED_CURRENCIES);
+const FX_FORECAST_CURRENCIES = require('./fxForecastCurrencies');
+const FX_FORECAST_CURRENCY_CODES = Object.keys(FX_FORECAST_CURRENCIES);
+
+const isFxForecastCurrencySupported = (currencyCode) => {
+  if (!currencyCode || typeof currencyCode !== 'string') return false;
+  return FX_FORECAST_CURRENCY_CODES.includes(currencyCode.toUpperCase());
+};
 
 const isCurrencySupported = (currencyCode) => {
   if (!currencyCode || typeof currencyCode !== 'string') return false;
@@ -28,5 +35,8 @@ const getCurrency = (currencyCode) => {
 
 module.exports = SUPPORTED_CURRENCIES;
 module.exports.SUPPORTED_CURRENCY_CODES = SUPPORTED_CURRENCY_CODES;
+module.exports.FX_FORECAST_CURRENCY_CODES = FX_FORECAST_CURRENCY_CODES;
+module.exports.FX_FORECAST_CURRENCIES = FX_FORECAST_CURRENCIES;
 module.exports.isCurrencySupported = isCurrencySupported;
+module.exports.isFxForecastCurrencySupported = isFxForecastCurrencySupported;
 module.exports.getCurrency = getCurrency;

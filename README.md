@@ -173,9 +173,11 @@ npm install
 cd ../client
 npm install
 
-# Install python-service dependencies, including ML inference (optional)
+# Create an isolated Python environment and install service dependencies
 cd ../python-service
-pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
 ```
 
 ### 2. Configure Environment Variables
@@ -204,25 +206,24 @@ VITE_API_URL=http://localhost:5001/api
 
 ### 3. Start Services
 
-**Terminal 1 — Node.js Express Server**:
+**Terminal 1 — Start the application services**:
 ```bash
-cd server
 npm run dev
-# Server listens at http://localhost:5001
+# Starts the Express API, React client, and Python FastAPI service
 ```
 
-**Terminal 2 — Python FastAPI Intelligence Service** *(Optional — Express will use native JS fallback if skipped)*:
+The Python service is required for hourly FX forecasts. Install `python-service/requirements.txt` before starting the application. To start only that service separately:
 ```bash
-cd python-service
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+npm run python-service
 # API docs available at http://localhost:8000/docs
 ```
 
-**Terminal 3 — React Client**:
+The start script automatically uses `python-service/.venv` when present. If you use another Python environment, set `PYTHON` to its interpreter path before starting the services. Python auto-reload watches only `python-service/`, so frontend or Node changes do not interrupt forecast requests.
+
+To run the Node API and React client separately, use:
 ```bash
-cd client
-npm run dev
-# Client runs at http://localhost:5173
+npm run server
+npm run client
 ```
 
 ---
@@ -255,6 +256,18 @@ curl -X POST http://localhost:8000/ml/advisory \
   -H 'Content-Type: application/json' \
   -d '{"source_currency":"USD","destination_currency":"EUR","amount":10000,"preference":"BALANCED","recipient_country":"DE","current_rate":0.92}'
 ```
+
+The FX Outlook tab and conversational FX forecast use the hourly forecaster in [`python-service/app/ml/fx_forecaster.py`](python-service/app/ml/fx_forecaster.py), exposed internally through `POST /fx/hourly-forecast` on the Python service. The forecast selector includes the 152 currencies in the Twelve Data forex catalog snapshot; its target choices are limited to pairs listed by Twelve Data or derivable from both currencies' USD crosses. These forecast-only currencies do not enable money transfers. Chat exchange-rate answers and the FX Outlook hourly panel use the same hourly current rate and source. The quick calculator remains an explicitly labeled daily Frankfurter reference-rate estimate and is available only for payment-supported currencies. Set `TWELVEDATA_API_KEY` in the server environment (or `server/.env`) to use Twelve Data hourly closes. If no key is configured, the forecaster returns synthetic demo rates and labels their source as `mock`; these are not live market rates. It returns estimates for `+6h`, `+12h`, `+24h`, and `+48h`. From the Python service root, the utility can also be called directly:
+
+```python
+from app.ml.fx_forecaster import predict_rates
+
+forecast = predict_rates("USD", "INR")
+print(forecast["predicted_rates"]["+24h"]["rate"])
+```
+
+The approximate forecast bands are not calibrated confidence intervals and must not be used as payment quotes or timing advice.
+If Twelve Data does not list a direct currency pair, the hourly forecaster can derive it from aligned USD/base and USD/target hourly observations. Transient provider 5xx/network errors are retried once, and unsupported direct/inverse symbols fall back to USD crosses. Provider quotas, outages, account-plan restrictions, and pairs without direct or USD-cross observations can still make a forecast unavailable; the service does not substitute invented live rates.
 
 The separate `MLPredictionLayer` in [`python-service/app/services/ml_prediction_interface.py`](python-service/app/services/ml_prediction_interface.py) remains a pass-through hook for deterministic rail scoring; the standalone model inference endpoints do not replace that scoring path.
 

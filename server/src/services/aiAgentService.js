@@ -1,5 +1,11 @@
 const axios = require('axios');
-const { SUPPORTED_CURRENCY_CODES, isCurrencySupported } = require('../config/currencies');
+const {
+  SUPPORTED_CURRENCY_CODES,
+  FX_FORECAST_CURRENCIES,
+  FX_FORECAST_CURRENCY_CODES,
+  isCurrencySupported,
+  isFxForecastCurrencySupported
+} = require('../config/currencies');
 
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 const DEFAULT_GROQ_MODEL = 'openai/gpt-oss-120b';
@@ -11,18 +17,7 @@ const MAX_AMOUNT = 10000000;
 const PRIORITIES = ['CHEAPEST', 'FASTEST', 'BALANCED'];
 const PAYMENT_MODES = ['SEND_AMOUNT', 'RECIPIENT_GETS'];
 
-const CURRENCY_NAMES = {
-  USD: 'US Dollar',
-  EUR: 'Euro',
-  GBP: 'British Pound',
-  INR: 'Indian Rupee',
-  BRL: 'Brazilian Real',
-  AED: 'UAE Dirham',
-  SGD: 'Singapore Dollar',
-  AUD: 'Australian Dollar',
-  CAD: 'Canadian Dollar',
-  JPY: 'Japanese Yen'
-};
+const CURRENCY_NAMES = FX_FORECAST_CURRENCIES;
 
 const CURRENCY_NAME_PATTERNS = [
   { code: 'SGD', patterns: [/\b(?:singapore|singaporean)\s+dollars?\b/i] },
@@ -34,8 +29,28 @@ const CURRENCY_NAME_PATTERNS = [
   { code: 'GBP', patterns: [/\b(?:british\s+)?pounds?(?:\s+sterling)?\b/i, /\bsterling\b/i] },
   { code: 'JPY', patterns: [/\byen\b/i, /\bjapanese\s+yen\b/i] },
   { code: 'AED', patterns: [/\b(?:uae\s+|emirati\s+)?dirhams?\b/i] },
-  { code: 'BRL', patterns: [/\b(?:brazilian\s+)?(?:real|reais)\b/i] }
+  { code: 'BRL', patterns: [/\b(?:brazilian\s+)?(?:real|reais)\b/i] },
+  { code: 'MXN', patterns: [/\bmexican\s+pesos?\b/i] },
+  { code: 'HKD', patterns: [/\b(?:hong\s+kong\s+)?dollars?\s+of\s+hong\s+kong\b/i, /\bhong\s+kong\s+dollars?\b/i] },
+  { code: 'SEK', patterns: [/\b(?:swedish\s+)?kronor?\b/i, /\bswedish\s+krona\b/i] },
+  { code: 'ZAR', patterns: [/\b(?:south\s+african\s+)?rands?\b/i] }
 ];
+
+const providerCurrencyNamePatterns = Object.entries(FX_FORECAST_CURRENCIES)
+  .map(([code, name]) => {
+    const namePattern = name
+    .split(/\s+/)
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('\\s+');
+    return {
+      code,
+      nameLength: name.length,
+      patterns: [new RegExp(`\\b${namePattern}\\b`, 'i')]
+    };
+  })
+  .sort((left, right) => right.nameLength - left.nameLength)
+  .map(({ code, patterns }) => ({ code, patterns }));
+CURRENCY_NAME_PATTERNS.unshift(...providerCurrencyNamePatterns);
 
 const CURRENCY_SYMBOLS = [
   { code: 'SGD', symbol: 'S$' },
@@ -117,8 +132,9 @@ Intent classification rules:
 Entity extraction rules:
 - Extract amount as a number. Handle formats: 100, 1,000, 1.5, 2.5k, "one hundred", etc.
 - "2.5k" means 2500. "five hundred" means 500.
-- Currency codes: USD, INR, EUR, GBP, SGD, AED, AUD, CAD, JPY, BRL.
-- Currency names: dollars→USD, rupees→INR, euros→EUR, pounds→GBP, etc.
+- Transfer currencies: ${SUPPORTED_CURRENCY_CODES.join(', ')}.
+- FX forecast currencies: ${FX_FORECAST_CURRENCY_CODES.join(', ')}. These additional currencies are for forecasts only, not payment transfers.
+- Currency names: ${Object.entries(FX_FORECAST_CURRENCIES).map(([code, name]) => `${name}→${code}`).join(', ')}.
 - "100usd" or "100USD" → amount 100, source currency USD (no space needed).
 - "$100" → amount 100. If source currency is unclear, leave null.
 - "dollars" alone is ambiguous - do not assume USD unless context makes it clear.
@@ -136,7 +152,7 @@ Conversation context rules:
 - When isClarification is true, the intent should be CLARIFICATION_RESPONSE.
 
 Rules:
-- Supported currencies only: ${SUPPORTED_CURRENCY_CODES.join(', ')}.
+- Supported transfer currencies only: ${SUPPORTED_CURRENCY_CODES.join(', ')}. FX forecast and timing requests can also use ${FX_FORECAST_CURRENCY_CODES.join(', ')}.
 - If a currency is ambiguous, leave it null and add to missingFields.
 - If amount is absent, zero, negative, or too large, leave null and add "amount" to missingFields.
 - Default priority to "BALANCED" when not specified.
@@ -166,6 +182,15 @@ const normalizeCurrency = (value) => {
   return isCurrencySupported(code) ? code : null;
 };
 
+const normalizeFxForecastCurrency = (value) => {
+  if (typeof value !== 'string') return null;
+  const code = value.trim().toUpperCase();
+  return isFxForecastCurrencySupported(code) ? code : null;
+};
+
+const isFxForecastIntent = (intent) =>
+  ['FX_FORECAST', 'FX_TIMING_ANALYSIS', 'FX_INFORMATION'].includes(String(intent || '').toUpperCase());
+
 const detectProvider = (prompt) => {
   const lower = prompt.toLowerCase();
   return KNOWN_PROVIDERS.find((provider) => lower.includes(provider.toLowerCase())) || null;
@@ -190,17 +215,21 @@ const detectAmount = (prompt) => {
   return Number.isFinite(value) ? value : null;
 };
 
-const detectCurrencyMentions = (prompt) => {
+const detectCurrencyMentions = (prompt, { includeFxForecastCurrencies = false } = {}) => {
   const mentions = [];
   const seen = new Set();
+  const currencyCodes = includeFxForecastCurrencies ? FX_FORECAST_CURRENCY_CODES : SUPPORTED_CURRENCY_CODES;
+  const codeRegex = new RegExp(`(?<![a-zA-Z])(${currencyCodes.join('|')})(?![a-zA-Z])`, 'gi');
 
   const addMention = (code, index) => {
-    if (!isCurrencySupported(code) || seen.has(`${code}:${index}`)) return;
+    const supported = includeFxForecastCurrencies
+      ? isFxForecastCurrencySupported(code)
+      : isCurrencySupported(code);
+    if (!supported || seen.has(`${code}:${index}`)) return;
     seen.add(`${code}:${index}`);
     mentions.push({ code, index });
   };
 
-  const codeRegex = /(?<![a-zA-Z])(USD|EUR|GBP|INR|BRL|AED|SGD|AUD|CAD|JPY)(?![a-zA-Z])/gi;
   let match;
   while ((match = codeRegex.exec(prompt)) !== null) {
     addMention(match[1].toUpperCase(), match.index);
@@ -250,18 +279,25 @@ const roleForMention = (prompt, index) => {
   return null;
 };
 
-const detectInvalidCurrencyCode = (prompt) => {
+const detectInvalidCurrencyCode = (prompt, { includeFxForecastCurrencies = false } = {}) => {
   const contextRegex = /\b(?:to|into|from|currency)\s+([A-Z]{3})\b/g;
   let match;
   while ((match = contextRegex.exec(prompt)) !== null) {
     const code = match[1];
-    if (!isCurrencySupported(code)) return code;
+    const supported = includeFxForecastCurrencies
+      ? isFxForecastCurrencySupported(code)
+      : isCurrencySupported(code);
+    if (!supported) return code;
   }
   return null;
 };
 
-const resolveCurrencies = (prompt, context = {}) => {
-  const mentions = detectCurrencyMentions(prompt);
+const resolveCurrencies = (prompt, context = {}, intent = null) => {
+  const isContextualClarification = ['CLARIFICATION_RESPONSE', 'UNKNOWN'].includes(String(intent || '').toUpperCase());
+  const includeFxForecastCurrencies = isFxForecastIntent(intent)
+    || (isContextualClarification && isFxForecastIntent(context.parsed?.intent));
+  const normalize = includeFxForecastCurrencies ? normalizeFxForecastCurrency : normalizeCurrency;
+  const mentions = detectCurrencyMentions(prompt, { includeFxForecastCurrencies });
   const ambiguousDollar = detectAmbiguousDollar(prompt, mentions);
   const uniqueCodes = [...new Set(mentions.map((mention) => mention.code))];
 
@@ -298,19 +334,19 @@ const resolveCurrencies = (prompt, context = {}) => {
     if (role === 'destination') {
       destinationCurrency = code;
       if (previousParsed.sourceCurrency && previousMissing.includes('destinationCurrency')) {
-        sourceCurrency = normalizeCurrency(previousParsed.sourceCurrency);
+        sourceCurrency = normalize(previousParsed.sourceCurrency);
       }
     } else if (role === 'source') {
       sourceCurrency = code;
       if (previousParsed.destinationCurrency && previousMissing.includes('sourceCurrency')) {
-        destinationCurrency = normalizeCurrency(previousParsed.destinationCurrency);
+        destinationCurrency = normalize(previousParsed.destinationCurrency);
       }
-    } else if (previousMissing.includes('destinationCurrency') && !normalizeCurrency(previousParsed.destinationCurrency)) {
+    } else if (previousMissing.includes('destinationCurrency') && !normalize(previousParsed.destinationCurrency)) {
       destinationCurrency = code;
-      sourceCurrency = normalizeCurrency(previousParsed.sourceCurrency);
-    } else if (previousMissing.includes('sourceCurrency') && !normalizeCurrency(previousParsed.sourceCurrency)) {
+      sourceCurrency = normalize(previousParsed.sourceCurrency);
+    } else if (previousMissing.includes('sourceCurrency') && !normalize(previousParsed.sourceCurrency)) {
       sourceCurrency = code;
-      destinationCurrency = normalizeCurrency(previousParsed.destinationCurrency);
+      destinationCurrency = normalize(previousParsed.destinationCurrency);
     } else {
       sourceCurrency = code;
     }
@@ -320,7 +356,7 @@ const resolveCurrencies = (prompt, context = {}) => {
     sourceCurrency,
     destinationCurrency,
     ambiguousCurrency: ambiguousDollar && !sourceCurrency && !destinationCurrency,
-    invalidCurrencyCode: detectInvalidCurrencyCode(prompt)
+    invalidCurrencyCode: detectInvalidCurrencyCode(prompt, { includeFxForecastCurrencies })
   };
 };
 
@@ -348,8 +384,18 @@ const getHistoryContext = (history = []) => {
   if (!previousAssistant) return null;
   const parsed = previousAssistant.parsed;
   const hasMissing = Array.isArray(parsed.missingFields) && parsed.missingFields.length > 0;
+  const contextIntent = isFxForecastIntent(parsed.intent)
+    ? parsed.intent
+    : (['CLARIFICATION_RESPONSE', 'UNKNOWN'].includes(parsed.intent) ? previous.intent : parsed.intent);
+  const normalizeContextCurrency = isFxForecastIntent(contextIntent)
+    ? normalizeFxForecastCurrency
+    : normalizeCurrency;
   return {
-    parsed,
+    parsed: {
+      ...parsed,
+      sourceCurrency: normalizeContextCurrency(parsed.sourceCurrency),
+      destinationCurrency: normalizeContextCurrency(parsed.destinationCurrency)
+    },
     missingFields: hasMissing ? parsed.missingFields : [],
     requiresClarification: hasMissing
   };
@@ -375,6 +421,10 @@ const buildFallbackExplanation = (parsed) => {
 
 const detectFallbackIntent = (prompt) => {
   const lower = prompt.toLowerCase().trim();
+  const isCurrencyOnlyClarification = new RegExp(
+    `^(?:${FX_FORECAST_CURRENCY_CODES.join('|')}|cheapest|fastest|balanced)$`,
+    'i'
+  );
   if (/^(hi|hello|hey|greetings|good morning|good evening)\b/.test(lower)) return 'GREETING';
   if (/\b(joke|funny|tell me a joke)\b/.test(lower)) return 'GENERAL_CONVERSATION';
   if (/\b(what is transact3|what does transact3|how does transact3|about transact3)\b/.test(lower)) return 'TRANSACT3_PLATFORM_QUESTION';
@@ -403,7 +453,7 @@ const detectFallbackIntent = (prompt) => {
   }
   // Correction/clarification replies that carry no intent of their own.
   if (isCorrectionMessage(lower)) return 'CLARIFICATION_RESPONSE';
-  if (/^(\d+(?:[\.,]\d+)?|USD|EUR|GBP|INR|SGD|AED|AUD|CAD|JPY|BRL|cheapest|fastest|balanced)$/i.test(lower)) return 'CLARIFICATION_RESPONSE';
+  if (/^\d+(?:[\.,]\d+)?$/.test(lower) || isCurrencyOnlyClarification.test(lower)) return 'CLARIFICATION_RESPONSE';
 
   if (/\b(what if|what happens if)\b/.test(lower) && /\brate|forecast|convert|exchange\b/.test(lower)) {
     return 'FX_TIMING_ANALYSIS';
@@ -427,10 +477,12 @@ const detectFallbackIntent = (prompt) => {
 
 const fallbackParse = (prompt, context = null) => {
   const amount = detectAmount(prompt);
-  const { sourceCurrency, destinationCurrency, ambiguousCurrency, invalidCurrencyCode } = resolveCurrencies(prompt, context || {});
+  const intent = detectFallbackIntent(prompt);
+  const { sourceCurrency, destinationCurrency, ambiguousCurrency, invalidCurrencyCode } =
+    resolveCurrencies(prompt, context || {}, intent);
   const paymentMode = RECIPIENT_GETS_PATTERN.test(prompt) ? 'RECIPIENT_GETS' : 'SEND_AMOUNT';
   const parsed = {
-    intent: detectFallbackIntent(prompt),
+    intent,
     amount,
     amountType: RECIPIENT_GETS_PATTERN.test(prompt) ? 'RECIPIENT_AMOUNT' : 'SENDER_AMOUNT',
     sourceCurrency,
@@ -442,14 +494,23 @@ const fallbackParse = (prompt, context = null) => {
     mentionedProvider: detectProvider(prompt),
     recipientName: null,
     recipientEmail: detectRecipientEmail(prompt),
-    isClarification: /^(\d+(?:[\.,]\d+)?|USD|EUR|GBP|INR|SGD|AED|AUD|CAD|JPY|BRL|cheapest|fastest|balanced)$/i.test(prompt.trim())
+    isClarification: new RegExp(
+      `^(?:\\d+(?:[.,]\\d+)?|${FX_FORECAST_CURRENCY_CODES.join('|')}|cheapest|fastest|balanced)$`,
+      'i'
+    ).test(prompt.trim())
   };
 
   if (context && isPlainObject(context.parsed)) {
     const previous = context.parsed;
     if (parsed.amount == null && previous.amount != null) parsed.amount = Number(previous.amount);
-    if (!parsed.sourceCurrency) parsed.sourceCurrency = normalizeCurrency(previous.sourceCurrency);
-    if (!parsed.destinationCurrency) parsed.destinationCurrency = normalizeCurrency(previous.destinationCurrency);
+    const normalizeContextIntent = isFxForecastIntent(parsed.intent)
+      ? parsed.intent
+      : (['CLARIFICATION_RESPONSE', 'UNKNOWN'].includes(parsed.intent) ? previous.intent : parsed.intent);
+    const normalizeContextCurrency = isFxForecastIntent(normalizeContextIntent)
+      ? normalizeFxForecastCurrency
+      : normalizeCurrency;
+    if (!parsed.sourceCurrency) parsed.sourceCurrency = normalizeContextCurrency(previous.sourceCurrency);
+    if (!parsed.destinationCurrency) parsed.destinationCurrency = normalizeContextCurrency(previous.destinationCurrency);
     // Preserve intent from previous context ONLY when this message carried no
     // intent of its own. A new intent on the same entities (e.g. conversion ->
     // forecast) must survive.
@@ -550,9 +611,12 @@ const validateIntent = (rawIntent, options = {}) => {
   const intent = VALID_INTENTS.includes(String(raw.intent || '').toUpperCase())
     ? String(raw.intent).toUpperCase()
     : 'UNKNOWN';
+  const normalizeIntentCurrency = isFxForecastIntent(intent)
+    ? normalizeFxForecastCurrency
+    : normalizeCurrency;
   const amountResult = normalizeAmount(raw.amount);
-  const sourceCurrency = normalizeCurrency(raw.sourceCurrency);
-  const destinationCurrency = normalizeCurrency(raw.destinationCurrency);
+  const sourceCurrency = normalizeIntentCurrency(raw.sourceCurrency);
+  const destinationCurrency = normalizeIntentCurrency(raw.destinationCurrency);
   const priority = PRIORITIES.includes(String(raw.priority || '').toUpperCase())
     ? String(raw.priority).toUpperCase()
     : 'BALANCED';
@@ -700,12 +764,19 @@ const classifyGroqFailure = (error) => {
 
 const groundLlmIntent = (raw, prompt, context) => {
   const grounded = { ...raw };
-  const mentions = detectCurrencyMentions(prompt);
+  const groundedIntent = String(grounded.intent || '').toUpperCase();
+  const isContextualClarification = ['CLARIFICATION_RESPONSE', 'UNKNOWN'].includes(groundedIntent);
+  const includeFxForecastCurrencies = isFxForecastIntent(groundedIntent)
+    || (isContextualClarification && isFxForecastIntent(context?.parsed?.intent));
+  const normalizeIntentCurrency = includeFxForecastCurrencies
+    ? normalizeFxForecastCurrency
+    : normalizeCurrency;
+  const mentions = detectCurrencyMentions(prompt, { includeFxForecastCurrencies });
   const mentionedCodes = new Set(mentions.map((mention) => mention.code));
   const historyCodes = new Set();
   if (context?.parsed) {
     [context.parsed.sourceCurrency, context.parsed.destinationCurrency].forEach((code) => {
-      const normalized = normalizeCurrency(code);
+      const normalized = normalizeIntentCurrency(code);
       if (normalized) historyCodes.add(normalized);
     });
   }
@@ -714,7 +785,7 @@ const groundLlmIntent = (raw, prompt, context) => {
   if (grounded.amount != null && !hasNumericAmount) grounded.amount = null;
 
   for (const field of ['sourceCurrency', 'destinationCurrency']) {
-    const code = normalizeCurrency(grounded[field]);
+    const code = normalizeIntentCurrency(grounded[field]);
     if (code && !mentionedCodes.has(code) && !historyCodes.has(code)) {
       grounded[field] = null;
     } else {
@@ -732,7 +803,6 @@ const groundLlmIntent = (raw, prompt, context) => {
 
   // Preserve intent from context ONLY for a pure clarification reply. Never
   // replace a real new intent just because entities were inherited.
-  const groundedIntent = String(grounded.intent || '').toUpperCase();
   if ((groundedIntent === 'CLARIFICATION_RESPONSE' || groundedIntent === 'UNKNOWN' || grounded.isClarification === true)
     && (groundedIntent === 'CLARIFICATION_RESPONSE' || groundedIntent === 'UNKNOWN')
     && context?.parsed?.intent
@@ -954,6 +1024,11 @@ module.exports = {
   detectPriority,
   detectCurrencyMentions,
   normalizeCurrency,
+  normalizeFxForecastCurrency,
+  isFxForecastIntent,
+  isFxForecastCurrencySupported,
+  FX_FORECAST_CURRENCY_CODES,
+  detectFallbackIntent,
   resolveCurrencies,
   fallbackParse,
   validateIntent,
