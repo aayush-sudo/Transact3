@@ -7,6 +7,7 @@ const Register = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [accountCountry, setAccountCountry] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { register } = useContext(AuthContext);
@@ -17,7 +18,7 @@ const Register = () => {
     setError('');
     setLoading(true);
     try {
-      await register(name, email, password);
+      await register(name, email, password, accountCountry);
       navigate('/');
     } catch (err) {
       setError(err.response?.data?.message || 'Registration failed. Please try again.');
@@ -99,6 +100,21 @@ const Register = () => {
                   required
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-slate-800 mb-1.5">Sending account country (optional)</label>
+              <input
+                type="text"
+                className="input-field uppercase"
+                placeholder="IN"
+                value={accountCountry}
+                onChange={(e) => setAccountCountry(e.target.value.toUpperCase())}
+                maxLength={2}
+                pattern="[A-Za-z]{2}"
+                title="Enter the two-letter ISO country code for your sending account"
+              />
+              <p className="mt-1 text-xs text-slate-500">This is a user-declared country, not verified account or identity information.</p>
             </div>
 
             <div>

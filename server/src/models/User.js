@@ -31,6 +31,32 @@ const UserSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  accountCountry: {
+    type: String,
+    uppercase: true,
+    trim: true,
+    match: [/^[A-Z]{2}$/, 'Account country must be an ISO 3166-1 alpha-2 code'],
+    default: null,
+  },
+  accountCountryVerified: {
+    type: Boolean,
+    default: false,
+  },
+  accountCountryVerificationSource: {
+    type: String,
+    enum: ['NONE', 'DEMO', 'TRUSTED_PROVIDER'],
+    default: 'NONE',
+  },
+  kycStatus: {
+    type: String,
+    enum: ['NOT_STARTED', 'PENDING', 'VERIFIED', 'REJECTED'],
+    default: 'NOT_STARTED',
+  },
+  kycVerificationSource: {
+    type: String,
+    enum: ['NONE', 'DEMO', 'TRUSTED_PROVIDER'],
+    default: 'NONE',
+  },
   createdAt: {
     type: Date,
     default: Date.now,

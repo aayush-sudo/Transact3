@@ -30,7 +30,6 @@ const MultiRailRouter = () => {
         if (!active || !data.success) return;
         const availableRecipients = data.data || [];
         setRecipients(availableRecipients);
-        setRecipientEmail(availableRecipients[0]?.email || '');
       })
       .catch((err) => {
         if (active) setError(err.response?.data?.message || 'Could not load your saved recipients.');
@@ -46,6 +45,10 @@ const MultiRailRouter = () => {
       setError('Enter a valid amount to compare routes.');
       return;
     }
+    if (!recipientEmail) {
+      setError('Select a recipient so we can verify both account countries and demo KYC status.');
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -59,10 +62,18 @@ const MultiRailRouter = () => {
         destinationCurrency,
         amount: Number(amount),
         paymentMode,
-        priority
+        priority,
+        receiverEmail: recipientEmail
       });
       setRouteAnalysis(data.data);
       setSelectedRailId(data.data.recommendedRail?.id || null);
+      if (sourceCurrency === destinationCurrency) {
+        setProviderQuotes({
+          data: [],
+          message: 'Provider FX comparison is not applicable to a same-currency domestic transfer.'
+        });
+        return;
+      }
       setProviderQuotesLoading(true);
       try {
         const { data: comparison } = await api.post('/orchestration/provider-quotes', {
@@ -109,7 +120,7 @@ const MultiRailRouter = () => {
         <p className="text-xs font-bold uppercase tracking-widest text-emerald-700">Transfer comparison</p>
         <h2 className="text-2xl font-bold text-slate-900">Compare available routes</h2>
         <p className="text-sm text-slate-600">
-          Compare the three modeled routes and schedule an internal settlement using your wallet balance.
+          Compare the modeled routes and schedule an internal settlement using your wallet balance. For domestic instant eligibility, select a recipient in the same country and use that country's local currency.
         </p>
       </header>
 
@@ -144,9 +155,6 @@ const MultiRailRouter = () => {
                 onChange={(event) => {
                   const nextSource = event.target.value;
                   setSourceCurrency(nextSource);
-                  if (destinationCurrency === nextSource) {
-                    setDestinationCurrency(CURRENCIES.find((currency) => currency !== nextSource));
-                  }
                 }}
                 className="input-field"
                 aria-label="Source currency"
@@ -160,11 +168,39 @@ const MultiRailRouter = () => {
                 className="input-field"
                 aria-label="Destination currency"
               >
-                {CURRENCIES.filter((currency) => currency !== sourceCurrency).map((currency) => (
+                {CURRENCIES.map((currency) => (
                   <option key={currency} value={currency}>{currency}</option>
                 ))}
               </select>
             </div>
+          </div>
+
+          <div>
+            <label htmlFor="route-recipient" className="mb-1.5 block text-sm font-semibold text-slate-800">
+              Recipient account
+            </label>
+            <select
+              id="route-recipient"
+              value={recipientEmail}
+              onChange={(event) => {
+                setRecipientEmail(event.target.value);
+                setRouteAnalysis(null);
+                setSelectedRailId(null);
+              }}
+              className="input-field"
+              disabled={recipients.length === 0}
+              required
+            >
+              <option value="">Select a recipient</option>
+              {recipients.map((recipient) => (
+                <option key={recipient._id || recipient.email} value={recipient.email}>
+                  {recipient.name} ({recipient.email}) · {recipient.accountCountry || 'country not set'} · KYC {recipient.kycStatus || 'NOT_STARTED'}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">
+              Instant domestic routing is considered only when both account countries match and both accounts have completed demo verification.
+            </p>
           </div>
 
           <div>
@@ -222,6 +258,22 @@ const MultiRailRouter = () => {
 
       {routeAnalysis && (
         <div className="space-y-4 border-t border-slate-200 pt-5">
+          {routeAnalysis.corridorAssessment && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+              <p className="font-bold">
+                {routeAnalysis.corridorAssessment.classification} corridor
+                {routeAnalysis.corridorAssessment.sendingCountry && routeAnalysis.corridorAssessment.receivingCountry
+                  ? ` · ${routeAnalysis.corridorAssessment.sendingCountry} → ${routeAnalysis.corridorAssessment.receivingCountry}`
+                  : ''}
+                {routeAnalysis.corridorAssessment.countryEvidence === 'DEMO_VERIFIED' ? ' · demo-verified' : ''}
+              </p>
+              <p className="mt-1 text-xs">{routeAnalysis.corridorAssessment.reason || 'Domestic instant eligibility requirements are satisfied.'}</p>
+              <p className="mt-1 text-xs">
+                Account countries: {routeAnalysis.corridorAssessment.sendingCountry || 'not set'} / {routeAnalysis.corridorAssessment.receivingCountry || 'not set'}
+                {' · '}KYC: {routeAnalysis.corridorAssessment.senderKycStatus || 'NOT_STARTED'} / {routeAnalysis.corridorAssessment.recipientKycStatus || 'NOT_STARTED'}
+              </p>
+            </div>
+          )}
           {routeAnalysis.fxAnalysis && (
             <div className="rounded-xl border border-sky-200 bg-sky-50 p-4">
               <div className="mb-3 flex items-center gap-2 text-sm font-bold text-sky-950">
@@ -384,27 +436,11 @@ const MultiRailRouter = () => {
               <p className="text-xs text-slate-500">
                 This is an internal route simulation only. No instant-payment, card, or bank network is connected; actual delivery depends on an enabled provider and corridor. Wallet funding uses Razorpay test mode.
               </p>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                <label className="flex-1 text-sm font-semibold text-slate-800">
-                  Recipient
-                  <select
-                    value={recipientEmail}
-                    onChange={(event) => setRecipientEmail(event.target.value)}
-                    className="input-field mt-1"
-                    disabled={recipients.length === 0}
-                  >
-                    {recipients.length === 0 && <option value="">No saved recipients available</option>}
-                    {recipients.map((recipient) => (
-                      <option key={recipient._id || recipient.email} value={recipient.email}>
-                        {recipient.name} ({recipient.email})
-                      </option>
-                    ))}
-                  </select>
-                </label>
+              <div className="flex justify-end">
                 <button
                   type="button"
                   onClick={() => setShowConfirmation(true)}
-                  disabled={recipients.length === 0}
+                  disabled={!recipientEmail}
                   className="btn-primary inline-flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <CheckCircle size={16} />

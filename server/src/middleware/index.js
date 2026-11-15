@@ -75,6 +75,11 @@ const protect = async (req, res, next) => {
   }
 };
 
+const optionalProtect = (req, res, next) => {
+  if (!req.headers.authorization) return next();
+  return protect(req, res, next);
+};
+
 const authorize = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {
@@ -214,6 +219,7 @@ module.exports = {
   requestId,
   rateLimiter,
   protect,
+  optionalProtect,
   authorize,
   validateCurrencies,
   validateAmount,

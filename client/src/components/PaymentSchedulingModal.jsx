@@ -172,6 +172,15 @@ const PaymentSchedulingModal = ({ isOpen, onClose, initialParams }) => {
         {quoteData && !result && (
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <h3 className="font-bold text-slate-900">Quote summary</h3>
+            {quoteData.quote.corridorAssessment && (
+              <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
+                Corridor: {quoteData.quote.corridorAssessment.classification}
+                {quoteData.quote.corridorAssessment.sendingCountry && quoteData.quote.corridorAssessment.receivingCountry
+                  ? ` (${quoteData.quote.corridorAssessment.sendingCountry} → ${quoteData.quote.corridorAssessment.receivingCountry})`
+                  : ''}
+                {' · '}{quoteData.quote.corridorAssessment.reason || 'Domestic instant eligibility passed.'}
+              </p>
+            )}
             <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
               <div>
                 <dt className="text-xs text-slate-500">You send</dt>

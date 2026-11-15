@@ -39,24 +39,86 @@ function currencyCode(value) {
   return String(value || '').toUpperCase();
 }
 
-function getInstantEligibility(sourceCurrency, destinationCurrency, amountUSD) {
+const LOCAL_CLEARING_COUNTRIES = {
+  USD: ['US'],
+  EUR: ['AT', 'BE', 'CY', 'DE', 'EE', 'ES', 'FI', 'FR', 'GR', 'HR', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PT', 'SI', 'SK'],
+  GBP: ['GB'],
+  INR: ['IN'],
+  BRL: ['BR'],
+  AED: ['AE'],
+  SGD: ['SG'],
+  AUD: ['AU'],
+  CAD: ['CA']
+};
+const KYC_VERIFIED = 'VERIFIED';
+
+function getInstantEligibility(sourceCurrency, destinationCurrency, amountUSD, corridorContext = {}) {
   const source = currencyCode(sourceCurrency);
   const destination = currencyCode(destinationCurrency);
-  const clearing = LOCAL_CLEARING[destination];
-  if (!clearing) {
-    return {
-      eligible: false,
-      reason: `No configured cross-border instant clearing route for ${destination}.`
-    };
-  }
+  const senderCountry = String(corridorContext.senderCountry || '').trim().toUpperCase() || null;
+  const recipientCountry = String(corridorContext.recipientCountry || '').trim().toUpperCase() || null;
+  const senderCountrySource = corridorContext.senderCountryVerificationSource || 'NONE';
+  const recipientCountrySource = corridorContext.recipientCountryVerificationSource || 'NONE';
+  const senderKycSource = corridorContext.senderKycVerificationSource || 'NONE';
+  const recipientKycSource = corridorContext.recipientKycVerificationSource || 'NONE';
+  const demoVerificationEnabled = corridorContext.demoVerificationEnabled === true;
+  const countriesPresent = Boolean(senderCountry && recipientCountry);
+  const sameCountry = countriesPresent && senderCountry === recipientCountry;
+  const senderCountryVerified = corridorContext.senderCountryVerified === true
+    && (senderCountrySource === 'TRUSTED_PROVIDER' || (senderCountrySource === 'DEMO' && demoVerificationEnabled));
+  const recipientCountryVerified = corridorContext.recipientCountryVerified === true
+    && (recipientCountrySource === 'TRUSTED_PROVIDER' || (recipientCountrySource === 'DEMO' && demoVerificationEnabled));
+  const senderKycVerified = corridorContext.senderKycStatus === KYC_VERIFIED
+    && (senderKycSource === 'TRUSTED_PROVIDER' || (senderKycSource === 'DEMO' && demoVerificationEnabled));
+  const recipientKycVerified = corridorContext.recipientKycStatus === KYC_VERIFIED
+    && (recipientKycSource === 'TRUSTED_PROVIDER' || (recipientKycSource === 'DEMO' && demoVerificationEnabled));
+  const countryEvidence = !countriesPresent
+    ? 'MISSING'
+    : senderCountryVerified && recipientCountryVerified
+      ? senderCountrySource === 'DEMO' || recipientCountrySource === 'DEMO' ? 'DEMO_VERIFIED' : 'TRUSTED_VERIFIED'
+      : 'USER_DECLARED';
+  const corridorAssessment = {
+    classification: !countriesPresent ? 'UNKNOWN' : sameCountry ? 'DOMESTIC' : 'CROSS_BORDER',
+    sendingCountry: senderCountry,
+    receivingCountry: recipientCountry,
+    countryEvidence,
+    senderKycVerificationSource: senderKycSource,
+    recipientKycVerificationSource: recipientKycSource,
+    senderKycStatus: corridorContext.senderKycStatus || 'NOT_STARTED',
+    recipientKycStatus: corridorContext.recipientKycStatus || 'NOT_STARTED'
+  };
+  const ineligible = (reason, additional = {}) => ({
+    eligible: false,
+    reason,
+    corridorAssessment: { ...corridorAssessment, instantRailEligible: false, reason },
+    ...additional
+  });
 
+  if (!countriesPresent) {
+    return ineligible('Sender and recipient account countries are required to classify a domestic payment.');
+  }
+  if (!sameCountry) {
+    return ineligible(`The declared account countries differ (${senderCountry} → ${recipientCountry}); domestic instant settlement is not available.`);
+  }
+  if (!senderCountryVerified || !recipientCountryVerified) {
+    return ineligible('Verified account-country evidence is required for domestic instant settlement. Demo verification is only honored when demo mode is enabled.');
+  }
+  if (!senderKycVerified || !recipientKycVerified) {
+    return ineligible('Both sender and recipient must complete trusted KYC verification before domestic instant settlement.');
+  }
+  if (source !== destination) {
+    return ineligible('Domestic instant settlement requires the source and destination currencies to match.');
+  }
+  const clearing = LOCAL_CLEARING[destination];
+  if (!clearing || !LOCAL_CLEARING_COUNTRIES[destination]?.includes(senderCountry)) {
+    return ineligible(`No configured domestic instant clearing rail for ${destination} accounts in ${senderCountry}.`);
+  }
   const limitUSD = RETAIL_INSTANT_LIMIT_USD;
   if (amountUSD > limitUSD) {
-    return {
-      eligible: false,
-      limitUSD,
-      reason: `Amount exceeds the instant rail clearing threshold of $${limitUSD.toLocaleString('en-US')} USD; standard banking settlement is required.`
-    };
+    return ineligible(
+      `Amount exceeds the demo instant-rail limit of $${limitUSD.toLocaleString('en-US')} USD; standard settlement is required.`,
+      { limitUSD }
+    );
   }
 
   return {
@@ -65,7 +127,8 @@ function getInstantEligibility(sourceCurrency, destinationCurrency, amountUSD) {
     clearingRail: clearing.name,
     timeZone: clearing.timeZone,
     reason: null,
-    sourceCurrency: source
+    sourceCurrency: source,
+    corridorAssessment: { ...corridorAssessment, instantRailEligible: true, reason: null }
   };
 }
 
@@ -227,8 +290,8 @@ function getBankingHours(sourceCurrency, destinationCurrency, amountUSD) {
   return { minimum, maximum };
 }
 
-function getSettlementPlan(sourceCurrency, destinationCurrency, amountUSD, railId, currentTime = new Date()) {
-  const instant = getInstantEligibility(sourceCurrency, destinationCurrency, amountUSD);
+function getSettlementPlan(sourceCurrency, destinationCurrency, amountUSD, railId, currentTime = new Date(), corridorContext = {}) {
+  const instant = getInstantEligibility(sourceCurrency, destinationCurrency, amountUSD, corridorContext);
   const timeZone = TIME_ZONES[currencyCode(destinationCurrency)] || 'UTC';
 
   if (railId === 'INSTANT_PAYMENT_LINK' || railId === 'REGIONAL_INSTANT') {
@@ -239,6 +302,7 @@ function getSettlementPlan(sourceCurrency, destinationCurrency, amountUSD, railI
       instantFeasibility: instant.eligible ? 'Eligible' : 'Ineligible',
       instantIneligibilityReason: instant.reason,
       instantThresholdUSD: instant.limitUSD || RETAIL_INSTANT_LIMIT_USD,
+      corridorAssessment: instant.corridorAssessment,
       minimumSettlementHours: 0,
       maximumSettlementHours: 1 / 60,
       settlementWindow: instant.eligible ? '< 60 seconds (modeled local real-time clearing)' : null,
@@ -265,6 +329,7 @@ function getSettlementPlan(sourceCurrency, destinationCurrency, amountUSD, railI
       instantFeasibility: 'Ineligible',
       instantIneligibilityReason: reason,
       instantThresholdUSD: instant.limitUSD || RETAIL_INSTANT_LIMIT_USD,
+      corridorAssessment: instant.corridorAssessment,
       minimumSettlementHours: minMinutes / 60,
       maximumSettlementHours: maxMinutes / 60,
       settlementWindow: `${minMinutes}–${maxMinutes} minutes (modeled corridor/card payout)`,
@@ -288,6 +353,7 @@ function getSettlementPlan(sourceCurrency, destinationCurrency, amountUSD, railI
     instantFeasibility: 'Ineligible',
     instantIneligibilityReason: instant.reason || 'Standard banking settlement selected for this route.',
     instantThresholdUSD: instant.limitUSD || RETAIL_INSTANT_LIMIT_USD,
+    corridorAssessment: instant.corridorAssessment,
     minimumSettlementHours: minimum,
     maximumSettlementHours: maximum,
     settlementWindow: formatBusinessWindow(minimum, maximum),

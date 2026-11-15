@@ -66,6 +66,7 @@ class QuoteEngine {
       is_instant: Boolean(orchestrationResult.is_instant),
       instantFeasibility: orchestrationResult.instantFeasibility || 'Ineligible',
       instantIneligibilityReason: orchestrationResult.instantIneligibilityReason || null,
+      corridorAssessment: orchestrationResult.corridorAssessment || null,
       instantThresholdUSD: orchestrationResult.instantThresholdUSD || 1000,
       minimumSettlementHours: orchestrationResult.minimumSettlementHours ?? recommended.est_latency_hours,
       maximumSettlementHours: orchestrationResult.maximumSettlementHours ?? recommended.est_latency_hours,

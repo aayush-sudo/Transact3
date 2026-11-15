@@ -31,14 +31,50 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     const res = await api.post('/user/login', { email, password });
     localStorage.setItem('token', res.data.token);
-    setUser({ _id: res.data._id, name: res.data.name, email: res.data.email, role: res.data.role, walletBalance: res.data.walletBalance });
+    setUser({
+      _id: res.data._id,
+      name: res.data.name,
+      email: res.data.email,
+      role: res.data.role,
+      walletBalance: res.data.walletBalance,
+      accountCountry: res.data.accountCountry,
+      accountCountryVerified: res.data.accountCountryVerified,
+      accountCountryVerificationSource: res.data.accountCountryVerificationSource,
+      kycStatus: res.data.kycStatus,
+      kycVerificationSource: res.data.kycVerificationSource,
+      demoVerificationEnabled: res.data.demoVerificationEnabled
+    });
     return res.data;
   };
 
-  const register = async (name, email, password) => {
-    const res = await api.post('/user/register', { name, email, password });
+  const register = async (name, email, password, accountCountry) => {
+    const res = await api.post('/user/register', { name, email, password, accountCountry });
     localStorage.setItem('token', res.data.token);
-    setUser({ _id: res.data._id, name: res.data.name, email: res.data.email, role: res.data.role, walletBalance: res.data.walletBalance });
+    setUser({
+      _id: res.data._id,
+      name: res.data.name,
+      email: res.data.email,
+      role: res.data.role,
+      walletBalance: res.data.walletBalance,
+      accountCountry: res.data.accountCountry,
+      accountCountryVerified: res.data.accountCountryVerified,
+      accountCountryVerificationSource: res.data.accountCountryVerificationSource,
+      kycStatus: res.data.kycStatus,
+      kycVerificationSource: res.data.kycVerificationSource,
+      demoVerificationEnabled: res.data.demoVerificationEnabled
+    });
+    return res.data;
+  };
+
+  const updateAccountCountry = async (accountCountry) => {
+    const res = await api.patch('/user/account-country', { accountCountry });
+    setUser((currentUser) => ({ ...currentUser, ...res.data.data }));
+    return res.data.data;
+  };
+
+  const completeDemoVerification = async () => {
+    const res = await api.post('/user/demo-verification');
+    setUser((currentUser) => ({ ...currentUser, ...res.data.data }));
     return res.data;
   };
 
@@ -48,7 +84,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, setUser, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, setUser, loading, login, register, updateAccountCountry, completeDemoVerification, logout }}>
       {children}
     </AuthContext.Provider>
   );

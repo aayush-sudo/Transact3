@@ -31,6 +31,7 @@ class MultiRailOrchestrationEngine {
       amount = 1000,
       paymentMode = 'SEND_AMOUNT', // 'SEND_AMOUNT' or 'RECIPIENT_GETS'
       priority = 'BALANCED',       // 'BALANCED', 'CHEAPEST', 'FASTEST'
+      corridorContext = {},
     } = params;
 
     const srcCurr = (sourceCurrency || 'USD').toUpperCase();
@@ -49,12 +50,18 @@ class MultiRailOrchestrationEngine {
 
     // 2. FX Analysis & Current Exchange Rate
     const fxAnalysis = await fxAnalysisEngine.analyzePair(srcCurr, destCurr);
-    const timingRecommendation = await fxForecastingEngine.evaluateTiming(
-      srcCurr,
-      destCurr,
-      priority === 'FASTEST' ? 'SPEED' : priority,
-      24
-    );
+    const timingRecommendation = srcCurr === destCurr
+      ? {
+        recommendation: 'EXECUTE_NOW',
+        deferHours: 0,
+        reason: 'Same-currency domestic payment has no FX exposure.'
+      }
+      : await fxForecastingEngine.evaluateTiming(
+        srcCurr,
+        destCurr,
+        priority === 'FASTEST' ? 'SPEED' : priority,
+        24
+      );
     const fxRate = fxAnalysis.currentRate;
 
     // Rates to USD for liquidity & fee normalization
@@ -106,12 +113,13 @@ class MultiRailOrchestrationEngine {
       const routeDestinationAmount = paymentMode === 'RECIPIENT_GETS'
         ? numAmount
         : routePricing.destinationAmount;
-      const railInstantEligibility = getInstantEligibility(srcCurr, destCurr, routeSourceAmountUSD);
+      const railInstantEligibility = getInstantEligibility(srcCurr, destCurr, routeSourceAmountUSD, corridorContext);
       const standardBankingRequired = !railInstantEligibility.eligible;
       const eligibility = await liquidityManager.checkRailEligibility(rail.id, routeSourceAmountUSD, corridorConfig);
       const feeDetails = rail.getFeeBreakdown(routeSourceAmountUSD);
-      const settlementPlan = getSettlementPlan(srcCurr, destCurr, routeSourceAmountUSD, rail.id);
-      const forcedStandardRejection = standardBankingRequired && rail.id !== 'SWIFT_CORRESPONDENT'
+      const settlementPlan = getSettlementPlan(srcCurr, destCurr, routeSourceAmountUSD, rail.id, new Date(), corridorContext);
+      const requiresDomesticInstant = rail.id === 'INSTANT_PAYMENT_LINK' || rail.id === 'REGIONAL_INSTANT';
+      const forcedStandardRejection = standardBankingRequired && requiresDomesticInstant
         ? railInstantEligibility.reason || 'Standard banking settlement is required for this corridor and amount.'
         : null;
       const localClearingUnavailable = rail.id === 'INSTANT_PAYMENT_LINK' && !railInstantEligibility.eligible
@@ -308,7 +316,7 @@ class MultiRailOrchestrationEngine {
     sourceAmount = recommended.source_amount;
     sourceAmountUSD = recommended.source_amount_usd;
     destinationAmount = recommended.destination_amount;
-    const settlementPlan = getSettlementPlan(srcCurr, destCurr, sourceAmountUSD, recommended.id);
+    const settlementPlan = getSettlementPlan(srcCurr, destCurr, sourceAmountUSD, recommended.id, new Date(), corridorContext);
     const spreadBps = recommended.spread_bps;
     const fxCostUSD = recommended.fx_cost_usd;
 
@@ -334,6 +342,7 @@ class MultiRailOrchestrationEngine {
       instantFeasibility: settlementPlan.instantFeasibility,
       instantIneligibilityReason: settlementPlan.instantIneligibilityReason,
       instantThresholdUSD: settlementPlan.instantThresholdUSD,
+      corridorAssessment: settlementPlan.corridorAssessment,
       minimumSettlementHours: settlementPlan.minimumSettlementHours,
       maximumSettlementHours: settlementPlan.maximumSettlementHours,
       settlementWindow: settlementPlan.settlementWindow,

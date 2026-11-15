@@ -136,6 +136,7 @@ const TransactionSchema = new mongoose.Schema({
   appliedClearingRail: String,
   isInstant: { type: Boolean, default: false },
   instantIneligibilityReason: String,
+  corridorAssessment: { type: Object },
   scheduledFor: Date,
   timingRecommendation: { type: Object },
   fundsReserved: { type: Boolean, default: false },

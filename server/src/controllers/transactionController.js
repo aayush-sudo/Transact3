@@ -16,6 +16,7 @@ const iso20022 = require('../utils/iso20022');
 const { getSettlementPlan } = require('../services/settlementPolicy');
 const { isCurrencySupported } = require('../config/currencies');
 const { roundToPrecision } = require('../utils/mathUtils');
+const { isDemoVerificationEnabled } = require('../config/demoVerification');
 
 const { RAIL_MAP: RAIL_ADAPTERS_MAP } = require('../rails');
 
@@ -95,7 +96,20 @@ exports.createTransactionQuote = async (req, res, next) => {
       destinationCurrency,
       amount: numAmount,
       paymentMode,
-      priority
+      priority,
+      corridorContext: {
+        senderCountry: req.user.accountCountry,
+        recipientCountry: recipientUser.accountCountry,
+        senderCountryVerified: req.user.accountCountryVerified,
+        recipientCountryVerified: recipientUser.accountCountryVerified,
+        senderCountryVerificationSource: req.user.accountCountryVerificationSource,
+        recipientCountryVerificationSource: recipientUser.accountCountryVerificationSource,
+        senderKycStatus: req.user.kycStatus,
+        recipientKycStatus: recipientUser.kycStatus,
+        senderKycVerificationSource: req.user.kycVerificationSource,
+        recipientKycVerificationSource: recipientUser.kycVerificationSource,
+        demoVerificationEnabled: isDemoVerificationEnabled()
+      }
     });
 
     // 7. Create binding quote
@@ -160,6 +174,23 @@ exports.confirmAndExecuteTransaction = async (req, res, next) => {
         message: 'Payment quote does not have a verified recipient'
       });
     }
+    const recipientUser = await User.findById(quote.recipientId);
+    if (!recipientUser) {
+      return res.status(400).json({ success: false, message: 'The quoted recipient account is no longer available' });
+    }
+    const corridorContext = {
+      senderCountry: req.user.accountCountry,
+      recipientCountry: recipientUser.accountCountry,
+      senderCountryVerified: req.user.accountCountryVerified,
+      recipientCountryVerified: recipientUser.accountCountryVerified,
+      senderCountryVerificationSource: req.user.accountCountryVerificationSource,
+      recipientCountryVerificationSource: recipientUser.accountCountryVerificationSource,
+      senderKycStatus: req.user.kycStatus,
+      recipientKycStatus: recipientUser.kycStatus,
+      senderKycVerificationSource: req.user.kycVerificationSource,
+      recipientKycVerificationSource: recipientUser.kycVerificationSource,
+      demoVerificationEnabled: isDemoVerificationEnabled()
+    };
 
     // 2. Resolve selected rail & Check Manual Override Eligibility
     const railToUse = requestedRail || selectedRailId || quote.selectedRail || 'REGIONAL_INSTANT';
@@ -199,8 +230,20 @@ exports.confirmAndExecuteTransaction = async (req, res, next) => {
       quote.sourceCurrency,
       quote.destinationCurrency,
       sourceAmountUSD,
-      railToUse
+      railToUse,
+      new Date(),
+      corridorContext
     );
+    if (
+      ['INSTANT_PAYMENT_LINK', 'REGIONAL_INSTANT'].includes(railToUse)
+      && !settlementPlan.is_instant
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: settlementPlan.instantIneligibilityReason || 'Domestic instant settlement eligibility changed; compare routes again.',
+        data: { corridorAssessment: settlementPlan.corridorAssessment }
+      });
+    }
     const activeLatencyHours = settlementPlan.maximumSettlementHours || Number(quotedRail.est_latency_hours) || railAdapter.estimateLatency();
     const timingRecommendation = quote.timingRecommendation || { deferHours: 0 };
     const deferHours = Math.max(0, Number(timingRecommendation.deferHours) || 0);
@@ -285,6 +328,7 @@ exports.confirmAndExecuteTransaction = async (req, res, next) => {
       appliedClearingRail: settlementPlan.appliedClearingRail,
       isInstant: settlementPlan.is_instant,
       instantIneligibilityReason: settlementPlan.instantIneligibilityReason,
+      corridorAssessment: settlementPlan.corridorAssessment,
       scheduledFor,
       timingRecommendation,
       simulationDurationMs: railAdapter.config.simulationDurationMs || 1200,

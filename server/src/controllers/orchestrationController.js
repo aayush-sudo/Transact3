@@ -83,6 +83,8 @@ const toIsoTimestamp = (value) => {
   return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
 };
 
+const User = require('../models/User');
+const { isDemoVerificationEnabled } = require('../config/demoVerification');
 
 exports.previewRoute = async (req, res, next) => {
   try {
@@ -92,14 +94,39 @@ exports.previewRoute = async (req, res, next) => {
       amount = 10000,
       paymentMode = 'SEND_AMOUNT',
       priority = 'BALANCED',
-      maxPermittedDelayHours = 24
+      maxPermittedDelayHours = 24,
+      receiverEmail
     } = req.body;
+    let corridorContext = {};
+    if (req.user && receiverEmail) {
+      if (typeof receiverEmail !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(receiverEmail.trim())) {
+        return res.status(400).json({ success: false, message: 'Enter a valid recipient email' });
+      }
+      const recipient = await User.findOne({ email: receiverEmail.trim().toLowerCase() });
+      if (!recipient) {
+        return res.status(400).json({ success: false, message: 'Recipient account was not found' });
+      }
+      corridorContext = {
+        senderCountry: req.user.accountCountry,
+        recipientCountry: recipient.accountCountry,
+        senderCountryVerified: req.user.accountCountryVerified,
+        recipientCountryVerified: recipient.accountCountryVerified,
+        senderCountryVerificationSource: req.user.accountCountryVerificationSource,
+        recipientCountryVerificationSource: recipient.accountCountryVerificationSource,
+        senderKycStatus: req.user.kycStatus,
+        recipientKycStatus: recipient.kycStatus,
+        senderKycVerificationSource: req.user.kycVerificationSource,
+        recipientKycVerificationSource: recipient.kycVerificationSource,
+        demoVerificationEnabled: isDemoVerificationEnabled()
+      };
+    }
     const result = await orchestrationEngine.routePayment({
       sourceCurrency,
       destinationCurrency,
       amount: Number(amount),
       paymentMode,
       priority,
+      corridorContext,
       maxPermittedDelayHours: Number(maxPermittedDelayHours)
     });
     res.status(200).json({ success: true, data: result });

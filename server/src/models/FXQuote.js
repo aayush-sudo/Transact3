@@ -28,6 +28,7 @@ const FXQuoteSchema = new mongoose.Schema({
   is_instant: { type: Boolean, default: false },
   instantFeasibility: { type: String, enum: ['Eligible', 'Ineligible'] },
   instantIneligibilityReason: { type: String },
+  corridorAssessment: { type: Object },
   instantThresholdUSD: { type: Number },
   minimumSettlementHours: { type: Number },
   maximumSettlementHours: { type: Number },

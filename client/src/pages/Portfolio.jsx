@@ -13,6 +13,7 @@ const loadCheckout = () => new Promise((resolve, reject) => {
 });
 
 const Portfolio = () => {
+  const { user, setUser, updateAccountCountry, completeDemoVerification } = useContext(AuthContext);
   const [portfolio, setPortfolio] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [amount, setAmount] = useState('1000');
@@ -21,7 +22,9 @@ const Portfolio = () => {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [pendingVerification, setPendingVerification] = useState(null);
-  const { user } = useContext(AuthContext);
+  const [accountCountry, setAccountCountry] = useState(() => user?.accountCountry || '');
+  const [savingCountry, setSavingCountry] = useState(false);
+  const [verifyingDemo, setVerifyingDemo] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -61,6 +64,22 @@ const Portfolio = () => {
     }
   };
 
+  const saveAccountCountry = async (event) => {
+    event.preventDefault();
+    setSavingCountry(true);
+    setError('');
+    setNotice('');
+    try {
+      const updatedProfile = await updateAccountCountry(accountCountry);
+      setAccountCountry(updatedProfile.accountCountry);
+      setNotice('Sending account country saved as user-declared. It is not verified for domestic instant settlement.');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not update your account country.');
+    } finally {
+      setSavingCountry(false);
+    }
+  };
+
   const addFunds = async (event) => {
     event.preventDefault();
     setFunding(true);
@@ -92,6 +111,21 @@ const Portfolio = () => {
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Could not start wallet funding.');
       setFunding(false);
+    }
+  };
+
+  const runDemoVerification = async () => {
+    setVerifyingDemo(true);
+    setError('');
+    setNotice('');
+    try {
+      const result = await completeDemoVerification();
+      setUser((currentUser) => ({ ...currentUser, ...result.data }));
+      setNotice(result.message);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not complete demo verification.');
+    } finally {
+      setVerifyingDemo(false);
     }
   };
 
@@ -175,6 +209,54 @@ const Portfolio = () => {
           <p className="mt-3 text-xs text-slate-500">Test-mode payments only. Funds are added after the server verifies the captured payment.</p>
         </section>
       </div>
+
+      <section className="card">
+        <h2 className="text-lg font-bold text-slate-900">Payment profile</h2>
+        <p className="mt-1 text-sm text-slate-600">
+          Account country helps classify a transfer corridor. It does not establish domestic-rail eligibility or replace KYC.
+        </p>
+        <form onSubmit={saveAccountCountry} className="mt-4 flex flex-wrap items-end gap-3">
+          <div className="w-full max-w-xs">
+            <label htmlFor="account-country" className="mb-1.5 block text-sm font-semibold text-slate-800">
+              Sending account country (ISO code)
+            </label>
+            <input
+              id="account-country"
+              className="input-field uppercase"
+              type="text"
+              maxLength={2}
+              pattern="[A-Za-z]{2}"
+              placeholder="IN"
+              value={accountCountry}
+              onChange={(event) => setAccountCountry(event.target.value.toUpperCase())}
+              required
+            />
+          </div>
+          <button type="submit" className="btn-secondary" disabled={savingCountry}>
+            {savingCountry ? 'Saving…' : 'Save country'}
+          </button>
+        </form>
+        <p className="mt-3 text-xs text-slate-500">
+          Current country: {user?.accountCountry || 'not set'} · Country evidence: {user?.accountCountryVerified ? `${user.accountCountryVerificationSource?.toLowerCase() || 'verified'}` : 'user-declared / unverified'} · KYC: {user?.kycStatus || 'NOT_STARTED'}{user?.kycVerificationSource === 'DEMO' ? ' (demo)' : ''}.
+        </p>
+        {user?.demoVerificationEnabled && (
+          <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4">
+            <p className="text-sm font-bold text-amber-950">Demo-only identity verification</p>
+            <p className="mt-1 text-xs text-amber-900">
+              Simulates verified country and KYC status for product demonstrations. It does not check identity, verify a bank account, or constitute real KYC. Each sender and recipient must complete this on their own account.
+            </p>
+            <button
+              type="button"
+              onClick={runDemoVerification}
+              disabled={verifyingDemo || !user?.accountCountry}
+              className="btn-secondary mt-3"
+            >
+              {verifyingDemo ? 'Applying demo status…' : user?.kycVerificationSource === 'DEMO' ? 'Reapply demo verification' : 'Complete demo verification'}
+            </button>
+            {!user?.accountCountry && <p className="mt-2 text-xs text-amber-900">Save your account country first.</p>}
+          </div>
+        )}
+      </section>
 
       <section className="card">
         <div className="flex items-center justify-between border-b border-slate-200 pb-3">

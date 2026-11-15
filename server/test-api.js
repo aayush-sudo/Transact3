@@ -53,6 +53,7 @@ async function startApi() {
     env: {
       ...process.env,
       NODE_ENV: 'test',
+      DEMO_KYC_ENABLED: 'true',
       MONGO_URI: mongoServer.getUri(),
       PORT: String(port),
       JWT_SECRET: 'transact3-api-test-secret',
@@ -120,10 +121,30 @@ test('authenticated payment schedules once, reserves capacity, and settles at it
   assert.equal(weakPassword.response.status, 400);
   const newAccount = await request('/user/register', {
     method: 'POST',
-    body: { name: 'New Account', email: 'new.account@example.com', password: 'StrongPass1!' }
+    body: { name: 'New Account', email: 'new.account@example.com', password: 'StrongPass1!', accountCountry: 'in' }
   });
   assert.equal(newAccount.response.status, 201, newAccount.body.message);
   assert.equal(newAccount.body.walletBalance, 0);
+  assert.equal(newAccount.body.accountCountry, 'IN');
+  assert.equal(newAccount.body.accountCountryVerified, false);
+  assert.equal(newAccount.body.kycStatus, 'NOT_STARTED');
+  const accountDemoVerification = await request('/user/demo-verification', {
+    method: 'POST',
+    token: newAccount.body.token
+  });
+  assert.equal(accountDemoVerification.response.status, 200);
+  assert.equal(accountDemoVerification.body.data.kycStatus, 'VERIFIED');
+  const declaredCountry = await request('/user/account-country', {
+    method: 'PATCH',
+    token: newAccount.body.token,
+    body: { accountCountry: 'US', accountCountryVerified: true, kycStatus: 'VERIFIED' }
+  });
+  assert.equal(declaredCountry.response.status, 200);
+  assert.equal(declaredCountry.body.data.accountCountry, 'US');
+  assert.equal(declaredCountry.body.data.accountCountryVerified, false);
+  assert.equal(declaredCountry.body.data.kycStatus, 'NOT_STARTED');
+  assert.equal(declaredCountry.body.data.accountCountryVerificationSource, 'NONE');
+  assert.equal(declaredCountry.body.data.kycVerificationSource, 'NONE');
   const newAccountPortfolio = await request('/portfolio', { token: newAccount.body.token });
   assert.ok(newAccountPortfolio.body.data.holdings.length > 0);
   assert.ok(newAccountPortfolio.body.data.holdings.every(holding => holding.amount === 0));
@@ -148,12 +169,11 @@ test('authenticated payment schedules once, reserves capacity, and settles at it
   });
   assert.equal(converted.response.status, 200);
   assert.equal(converted.body.amount, 123.45);
-  assert.equal(converted.body.is_mock, true);
+  assert.equal(converted.body.is_mock, false);
   assert.equal(converted.body.convertedAmount, Number((123.45 * converted.body.rate).toFixed(2)));
-  assert.equal(converted.body.is_instant, true);
-  assert.equal(converted.body.instantFeasibility, 'Eligible');
-  assert.equal(converted.body.appliedClearingRail, 'UPI / IMPS (modeled)');
-  assert.equal(converted.body.estimatedSettlementDuration, '< 60 seconds (modeled local real-time clearing)');
+  assert.equal(converted.body.is_instant, false);
+  assert.equal(converted.body.instantFeasibility, 'Ineligible');
+  assert.match(converted.body.instantIneligibilityReason, /account countries are required/i);
   assert.ok(converted.body.quotedRate < converted.body.rate);
   assert.equal(converted.body.finalNetPayout, Number((123.45 * converted.body.quotedRate).toFixed(2)));
 
@@ -164,7 +184,7 @@ test('authenticated payment schedules once, reserves capacity, and settles at it
   assert.equal(largeConversion.response.status, 200);
   assert.equal(largeConversion.body.is_instant, false);
   assert.equal(largeConversion.body.instantFeasibility, 'Ineligible');
-  assert.match(largeConversion.body.instantIneligibilityReason, /exceeds the instant rail clearing threshold/i);
+  assert.match(largeConversion.body.instantIneligibilityReason, /account countries are required/i);
   assert.match(largeConversion.body.appliedClearingRail, /SWIFT gpi/);
   assert.match(largeConversion.body.estimatedSettlementDuration, /business day/i);
   assert.ok(largeConversion.body.spreadBps < converted.body.spreadBps, 'Notional tiers should reduce the relative FX spread');
@@ -182,7 +202,7 @@ test('authenticated payment schedules once, reserves capacity, and settles at it
   });
   assert.equal(unsupportedInstantCorridor.response.status, 200);
   assert.equal(unsupportedInstantCorridor.body.is_instant, false);
-  assert.match(unsupportedInstantCorridor.body.instantIneligibilityReason, /No configured cross-border instant clearing route for JPY/);
+  assert.match(unsupportedInstantCorridor.body.instantIneligibilityReason, /account countries are required/i);
   assert.match(unsupportedInstantCorridor.body.estimatedSettlementDuration, /business day/i);
 
   const brazilConversion = await request('/currency/convert', {
@@ -190,8 +210,8 @@ test('authenticated payment schedules once, reserves capacity, and settles at it
     body: { base: 'USD', target: 'BRL', amount: 100 }
   });
   assert.equal(brazilConversion.response.status, 200);
-  assert.equal(brazilConversion.body.is_instant, true);
-  assert.equal(brazilConversion.body.appliedClearingRail, 'Pix (modeled)');
+  assert.equal(brazilConversion.body.is_instant, false);
+  assert.match(brazilConversion.body.appliedClearingRail, /SWIFT gpi/);
 
   const largeRoutePreview = await request('/orchestration/route', {
     method: 'POST',
@@ -200,8 +220,8 @@ test('authenticated payment schedules once, reserves capacity, and settles at it
   assert.equal(largeRoutePreview.response.status, 200);
   assert.deepEqual(
     largeRoutePreview.body.data.evaluatedRails.filter(rail => rail.is_eligible).map(rail => rail.id),
-    ['SWIFT_CORRESPONDENT'],
-    'Amounts above the instant threshold must use standard banking settlement'
+    ['CARD_PAYOUT', 'SWIFT_CORRESPONDENT'],
+    'Without verified account-country and KYC data, domestic instant rails must be excluded'
   );
 
   const invalidConversion = await request('/currency/convert', {
@@ -213,6 +233,87 @@ test('authenticated payment schedules once, reserves capacity, and settles at it
   const aliceToken = await login('alice@transact3.com');
   const bobToken = await login('bob@transact3.com');
   const adminToken = await login('treasury@transact3.io');
+  for (const token of [aliceToken, bobToken]) {
+    const declaredCountry = await request('/user/account-country', {
+      method: 'PATCH',
+      token,
+      body: { accountCountry: 'IN' }
+    });
+    assert.equal(declaredCountry.response.status, 200);
+    const demoVerification = await request('/user/demo-verification', { method: 'POST', token });
+    assert.equal(demoVerification.response.status, 200, demoVerification.body.message);
+    assert.equal(demoVerification.body.data.accountCountryVerificationSource, 'DEMO');
+    assert.equal(demoVerification.body.data.kycVerificationSource, 'DEMO');
+  }
+  const domesticPreview = await request('/orchestration/route', {
+    method: 'POST',
+    token: aliceToken,
+    body: {
+      sourceCurrency: 'INR',
+      destinationCurrency: 'INR',
+      amount: 1000,
+      receiverEmail: 'bob@transact3.com'
+    }
+  });
+  assert.equal(domesticPreview.response.status, 200, domesticPreview.body.message);
+  assert.equal(domesticPreview.body.data.corridorAssessment.classification, 'DOMESTIC');
+  assert.equal(domesticPreview.body.data.corridorAssessment.countryEvidence, 'DEMO_VERIFIED');
+  assert.ok(
+    domesticPreview.body.data.evaluatedRails.some(rail =>
+      ['INSTANT_PAYMENT_LINK', 'REGIONAL_INSTANT'].includes(rail.id) && rail.is_eligible && rail.is_instant
+    ),
+    'Domestic instant rail should be eligible for a same-country, same-currency demo-verified transfer'
+  );
+  const bobDifferentCountry = await request('/user/account-country', {
+    method: 'PATCH',
+    token: bobToken,
+    body: { accountCountry: 'US' }
+  });
+  assert.equal(bobDifferentCountry.response.status, 200);
+  const crossBorderPreview = await request('/orchestration/route', {
+    method: 'POST',
+    token: aliceToken,
+    body: {
+      sourceCurrency: 'INR',
+      destinationCurrency: 'INR',
+      amount: 1000,
+      receiverEmail: 'bob@transact3.com'
+    }
+  });
+  assert.equal(crossBorderPreview.response.status, 200, crossBorderPreview.body.message);
+  assert.equal(crossBorderPreview.body.data.corridorAssessment.classification, 'CROSS_BORDER');
+  assert.ok(
+    crossBorderPreview.body.data.evaluatedRails.every(rail =>
+      !['INSTANT_PAYMENT_LINK', 'REGIONAL_INSTANT'].includes(rail.id) || !rail.is_eligible
+    ),
+    'Matching INR currencies must not enable an instant route when account countries differ'
+  );
+  const bobCountryReset = await request('/user/account-country', {
+    method: 'PATCH',
+    token: bobToken,
+    body: { accountCountry: 'IN' }
+  });
+  assert.equal(bobCountryReset.response.status, 200);
+  const matchingCountryWithoutDemoKyc = await request('/orchestration/route', {
+    method: 'POST',
+    token: aliceToken,
+    body: {
+      sourceCurrency: 'INR',
+      destinationCurrency: 'INR',
+      amount: 1000,
+      receiverEmail: 'bob@transact3.com'
+    }
+  });
+  assert.equal(matchingCountryWithoutDemoKyc.response.status, 200, matchingCountryWithoutDemoKyc.body.message);
+  assert.equal(matchingCountryWithoutDemoKyc.body.data.corridorAssessment.classification, 'DOMESTIC');
+  assert.ok(
+    matchingCountryWithoutDemoKyc.body.data.evaluatedRails.every(rail =>
+      !['INSTANT_PAYMENT_LINK', 'REGIONAL_INSTANT'].includes(rail.id) || !rail.is_eligible
+    ),
+    'Matching account countries must not enable an instant route until recipient demo KYC is complete'
+  );
+  const bobReverified = await request('/user/demo-verification', { method: 'POST', token: bobToken });
+  assert.equal(bobReverified.response.status, 200, bobReverified.body.message);
   const unavailableFunding = await request('/portfolio/funding/order', {
     method: 'POST',
     token: aliceToken,

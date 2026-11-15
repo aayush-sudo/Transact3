@@ -19,7 +19,7 @@ const PaymentRouter = () => {
       <div className="flex gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">
         <Info size={18} className="mt-0.5 shrink-0 text-sky-700" />
         <p>
-          Compare route estimates and schedule a wallet-funded transfer. The domestic instant option is intended for small, everyday payments. Transfers settle within the platform; no external payment networks are connected.
+          Compare route estimates and schedule a wallet-funded transfer. Domestic instant eligibility requires matching verified account countries, the same local currency, completed KYC, a supported local rail, and the demo amount limit. In non-production demo mode, simulated verification can exercise this routing path; it is not real KYC or account verification. Transfers settle within the platform; no external payment networks are connected.
         </p>
       </div>
 

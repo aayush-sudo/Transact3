@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const orchestrationController = require('../controllers/orchestrationController');
-const { protect } = require('../middleware');
+const { protect, optionalProtect } = require('../middleware');
 
-router.post('/route', orchestrationController.previewRoute);
+router.post('/route', optionalProtect, orchestrationController.previewRoute);
 router.post('/provider-quotes', orchestrationController.getProviderQuotes);
 router.post('/fx-forecast', orchestrationController.getFXForecast);
 router.get('/rails', orchestrationController.getRailsStatus);

@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const Portfolio = require('../models/Portfolio');
 const { provisionNewUserWallet } = require('../services/walletProvisioning');
+const { isDemoVerificationEnabled } = require('../config/demoVerification');
 const jwt = require('jsonwebtoken');
 
 // Generate JWT
@@ -18,13 +19,18 @@ const EMAIL_POLICY = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 // @access  Public
 exports.registerUser = async (req, res, next) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, accountCountry } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({ success: false, message: 'Please provide name, email, and password' });
     }
     if (typeof email !== 'string' || !EMAIL_POLICY.test(email.trim())) {
       return res.status(400).json({ success: false, message: 'Enter a valid email address' });
+    }
+    if (accountCountry != null && accountCountry !== '' && (
+      typeof accountCountry !== 'string' || !/^[A-Za-z]{2}$/.test(accountCountry.trim())
+    )) {
+      return res.status(400).json({ success: false, message: 'Account country must be a two-letter ISO country code' });
     }
     if (
       typeof password !== 'string' ||
@@ -48,6 +54,7 @@ exports.registerUser = async (req, res, next) => {
       name,
       email: email.toLowerCase().trim(),
       password,
+      accountCountry: accountCountry ? accountCountry.trim().toUpperCase() : null,
       walletBalance: 0
     });
 
@@ -61,6 +68,12 @@ exports.registerUser = async (req, res, next) => {
       email: user.email,
       role: user.role,
       walletBalance: user.walletBalance,
+      accountCountry: user.accountCountry,
+      accountCountryVerified: user.accountCountryVerified,
+      accountCountryVerificationSource: user.accountCountryVerificationSource,
+      kycStatus: user.kycStatus,
+      kycVerificationSource: user.kycVerificationSource,
+      demoVerificationEnabled: isDemoVerificationEnabled(),
       token: generateToken(user._id),
     });
   } catch (error) {
@@ -105,7 +118,89 @@ exports.loginUser = async (req, res, next) => {
       email: user.email,
       role: user.role,
       walletBalance: user.walletBalance,
+      accountCountry: user.accountCountry,
+      accountCountryVerified: user.accountCountryVerified,
+      accountCountryVerificationSource: user.accountCountryVerificationSource,
+      kycStatus: user.kycStatus,
+      kycVerificationSource: user.kycVerificationSource,
+      demoVerificationEnabled: isDemoVerificationEnabled(),
       token: generateToken(user._id),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Set the account's declared country; only a trusted verification process can verify it
+// @route   PATCH /api/user/account-country
+// @access  Private
+exports.updateAccountCountry = async (req, res, next) => {
+  try {
+    const { accountCountry } = req.body;
+    if (typeof accountCountry !== 'string' || !/^[A-Za-z]{2}$/.test(accountCountry.trim())) {
+      return res.status(400).json({ success: false, message: 'Account country must be a two-letter ISO country code' });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    user.accountCountry = accountCountry.trim().toUpperCase();
+    user.accountCountryVerified = false;
+    user.accountCountryVerificationSource = 'NONE';
+    user.kycStatus = 'NOT_STARTED';
+    user.kycVerificationSource = 'NONE';
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      data: {
+        accountCountry: user.accountCountry,
+        accountCountryVerified: user.accountCountryVerified,
+        accountCountryVerificationSource: user.accountCountryVerificationSource,
+        kycStatus: user.kycStatus,
+        kycVerificationSource: user.kycVerificationSource
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Simulate account-country and KYC verification for local/demo use only
+// @route   POST /api/user/demo-verification
+// @access  Private; disabled in production
+exports.completeDemoVerification = async (req, res, next) => {
+  try {
+    if (!isDemoVerificationEnabled()) {
+      return res.status(404).json({ success: false, message: 'Demo verification is not enabled' });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    if (!user.accountCountry) {
+      return res.status(400).json({ success: false, message: 'Set your account country before running demo verification' });
+    }
+
+    user.accountCountryVerified = true;
+    user.accountCountryVerificationSource = 'DEMO';
+    user.kycStatus = 'VERIFIED';
+    user.kycVerificationSource = 'DEMO';
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Demo verification completed. This is simulated and is not real KYC.',
+      data: {
+        accountCountry: user.accountCountry,
+        accountCountryVerified: user.accountCountryVerified,
+        accountCountryVerificationSource: user.accountCountryVerificationSource,
+        kycStatus: user.kycStatus,
+        kycVerificationSource: user.kycVerificationSource
+      }
     });
   } catch (error) {
     next(error);
@@ -123,7 +218,7 @@ exports.getMe = async (req, res) => {
     }
     res.status(200).json({
       success: true,
-      data: user,
+      data: { ...user.toObject(), demoVerificationEnabled: isDemoVerificationEnabled() },
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -138,7 +233,9 @@ exports.getRecipients = async (req, res) => {
     const currentUserId = req.user ? (req.user._id || req.user.id) : null;
     const query = currentUserId ? { _id: { $ne: currentUserId } } : {};
 
-    const recipients = await User.find(query).select('name email _id createdAt').sort({ name: 1 });
+    const recipients = await User.find(query)
+      .select('name email _id createdAt accountCountry accountCountryVerified accountCountryVerificationSource kycStatus kycVerificationSource')
+      .sort({ name: 1 });
 
     res.status(200).json({
       success: true,
