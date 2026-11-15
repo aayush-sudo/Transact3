@@ -437,14 +437,14 @@ const AIAgent = () => {
                     <div className="w-7 h-7 rounded-lg bg-indigo-600/50 flex items-center justify-center text-indigo-300">
                       <Zap size={15} />
                     </div>
-                    <span className="text-xs font-bold text-indigo-200">Predictive FX Execution</span>
+                    <span className="text-xs font-bold text-indigo-200">FX Target-Rate Watcher</span>
                   </div>
                   <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-indigo-900/80 text-indigo-300 border border-indigo-700/50">
-                    Model 1
+                    Reference rates
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-300 mt-2 leading-relaxed">
-                  HistGradientBoosting forecast engine. Sets conditional rate triggers and executes before banking cutoff.
+                  Monitors the latest available reference rate for your threshold. No validated forecast is connected; settlement is simulated in this prototype.
                 </p>
               </div>
               <button
@@ -655,10 +655,10 @@ const AIAgent = () => {
                         <div><span className="text-slate-500">Corridor:</span> {msg.data.data.mandate.amount} {msg.data.data.mandate.sourceCurrency} → {msg.data.data.mandate.destinationCurrency}</div>
                         <div><span className="text-slate-500">Target Rate:</span> ≥ {msg.data.data.mandate.targetRate} (+{msg.data.data.mandate.targetImprovementPct}%)</div>
                         <div><span className="text-slate-500">Current Rate:</span> {msg.data.data.mandate.latestRate}</div>
-                        <div><span className="text-slate-500">Model 1 Trend:</span> {msg.data.data.mandate.predictedTrend}</div>
+                        <div><span className="text-slate-500">Forecast:</span> No validated provider connected</div>
                       </div>
                       <p className="text-[11px] text-slate-500 italic">
-                        Predictive agent will execute settlement when target is met or before cutoff.
+                        The target watcher uses reference rates; any resulting settlement is simulated and does not send money externally.
                       </p>
                     </div>
                   )}
@@ -836,7 +836,7 @@ const AIAgent = () => {
         >
           <Info size={14} className="mt-0.5 shrink-0 text-slate-400" aria-hidden="true" />
           <p className="min-w-0 flex-1">
-            Responses from the Transact3 AI Agent and Multi-Agent Society are generated for financial transfer optimization. Models include HistGradientBoosting (FX forecasting), Random Forest (Rail Utility), and Isolation Forest (Compliance).
+            Responses from the Transact3 AI Agent and Multi-Agent Society are generated for financial transfer planning. FX outlooks use dated reference rates only; no validated rate-forecast provider or external payment execution is connected.
           </p>
         </div>
 

@@ -8,8 +8,7 @@ import {
   LineElement,
   Title,
   Tooltip,
-  Legend,
-  Filler
+  Legend
 } from 'chart.js';
 import api from '../services/api';
 
@@ -20,33 +19,37 @@ ChartJS.register(
   LineElement,
   Title,
   Tooltip,
-  Legend,
-  Filler
+  Legend
 );
 
-const FXForecastChart = ({ base = 'USD', target = 'INR' }) => {
-  const [forecastData, setForecastData] = useState(null);
+const FXForecastChart = ({ base, target }) => {
+  const [historyData, setHistoryData] = useState(null);
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
-  const fetchForecast = useCallback(async () => {
+  const fetchHistory = useCallback(async () => {
     setLoading(true);
+    setHistoryData(null);
+    setError('');
     try {
-      const { data } = await api.post('/orchestration/fx-forecast', {
-        sourceCurrency: base,
-        destinationCurrency: target
+      const { data } = await api.post('/fx/history', {
+        baseCurrency: base,
+        targetCurrency: target,
+        days: 30
       });
-      setForecastData(data.data);
+      setHistoryData(data.data);
     } catch (err) {
-      console.error('Failed to fetch FX forecast', err);
+      console.error('Failed to fetch historical FX rates', err);
+      setError(err.response?.data?.message || `Could not load reference-rate history for ${base}/${target}.`);
     } finally {
       setLoading(false);
     }
   }, [base, target]);
 
   useEffect(() => {
-    const initialFetch = setTimeout(fetchForecast, 0);
+    const initialFetch = setTimeout(fetchHistory, 0);
     return () => clearTimeout(initialFetch);
-  }, [fetchForecast]);
+  }, [fetchHistory]);
 
   if (loading) {
     return (
@@ -56,34 +59,26 @@ const FXForecastChart = ({ base = 'USD', target = 'INR' }) => {
     );
   }
 
-  if (!forecastData) return null;
+  if (error) {
+    return <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-800">{error}</div>;
+  }
 
-  const current = forecastData.currentRate;
-  const preds = forecastData.predictions;
-
-  const labels = ['Past (-24h)', 'Past (-12h)', 'Now', '+6h', '+12h', '+24h', '+48h'];
-  const values = [
-    parseFloat((current * 0.997).toFixed(4)),
-    parseFloat((current * 0.999).toFixed(4)),
-    current,
-    preds.h6,
-    preds.h12,
-    preds.h24,
-    preds.h48
-  ];
+  if (!historyData?.observations?.length) {
+    return <div role="status" className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-700">No historical reference rates are available for {base}/{target}.</div>;
+  }
 
   const chartData = {
-    labels,
+    labels: historyData.observations.map(({ date }) => date),
     datasets: [
       {
-        label: `${base}/${target} Projected Rate`,
-        data: values,
+        label: `${base}/${target} daily reference rate`,
+        data: historyData.observations.map(({ rate }) => rate),
         borderColor: '#10b981',
         backgroundColor: 'rgba(16, 185, 129, 0.1)',
-        tension: 0.35,
+        tension: 0.2,
         fill: true,
         pointBackgroundColor: '#10b981',
-        pointRadius: 4
+        pointRadius: 2
       }
     ]
   };
@@ -102,56 +97,33 @@ const FXForecastChart = ({ base = 'USD', target = 'INR' }) => {
       }
     },
     scales: {
-      x: { grid: { color: 'rgba(148, 163, 184, 0.25)' }, ticks: { color: '#64748b' } },
+      x: { grid: { color: 'rgba(148, 163, 184, 0.25)' }, ticks: { color: '#64748b', maxTicksLimit: 8 } },
       y: { grid: { color: 'rgba(148, 163, 184, 0.25)' }, ticks: { color: '#64748b' } }
     }
   };
 
   return (
     <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold uppercase tracking-widest text-emerald-700">Predictive FX outlook</span>
-            <span className="rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-mono font-extrabold text-emerald-800">
-              {forecastData.confidencePct}% Confidence
-            </span>
-          </div>
-          <h3 className="mt-0.5 text-lg font-bold text-slate-900">
-            {base}/{target} Exchange Rate Forecast
-          </h3>
+          <span className="text-xs font-bold uppercase tracking-widest text-emerald-700">Historical reference rates</span>
+          <h3 className="mt-0.5 text-lg font-bold text-slate-900">{base}/{target} · last 30 days</h3>
         </div>
-
         <div className="text-right font-mono">
-          <span className="text-xl font-extrabold text-slate-900">1 {base} = {current} {target}</span>
-          <p className="text-xs text-slate-500">Current reference rate</p>
+          <span className="text-xl font-extrabold text-slate-900">1 {base} = {historyData.currentRate} {target}</span>
+          <p className="text-xs text-slate-500">Reference rate dated {historyData.rateDate || 'date unavailable'}</p>
         </div>
       </div>
 
-      {/* Chart Canvas */}
       <div className="h-[220px] w-full">
         <Line data={chartData} options={chartOptions} />
       </div>
 
-      {/* Horizon Predictions Grid */}
-      <div className="grid grid-cols-4 gap-2 border-t border-slate-200 pt-2">
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-center font-mono">
-          <span className="block text-[10px] font-semibold text-slate-500">+6 Hours</span>
-          <span className="text-sm font-bold text-slate-800">{preds.h6}</span>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-center font-mono">
-          <span className="block text-[10px] font-semibold text-slate-500">+12 Hours</span>
-          <span className="text-sm font-bold text-emerald-800">{preds.h12}</span>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-center font-mono">
-          <span className="block text-[10px] font-semibold text-slate-500">+24 Hours</span>
-          <span className="text-sm font-bold text-slate-800">{preds.h24}</span>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-center font-mono">
-          <span className="block text-[10px] font-semibold text-slate-500">+48 Hours</span>
-          <span className="text-sm font-bold text-slate-800">{preds.h48}</span>
-        </div>
-      </div>
+      <p className="border-t border-slate-200 pt-3 text-xs leading-relaxed text-slate-600">
+        Source: Frankfurter daily reference rates. These are historical observations, not live executable quotes.
+        No independently validated forecast provider is connected, so future-rate predictions and confidence scores are not shown.
+        Google may show a different, more frequently updated indicative rate.
+      </p>
     </div>
   );
 };

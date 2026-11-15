@@ -35,7 +35,7 @@ The Transact3 platform is structured into clean, decoupled tiers:
 
 1. **React Frontend (`client/`)**: Light-themed account, wallet, route comparison, payment scheduling, and activity pages.
 2. **Node.js / Express Backend (`server/`)**: Verifies captured Razorpay test payments before wallet credit, reserves funds and modeled route capacity, and settles due transfers asynchronously.
-3. **Python / FastAPI Intelligence Service (`python-service/`)**: Provides route scoring, FX analysis, TCA metrics, and inference endpoints for the trained FX forecast, payment rail recommendation, and transaction risk models in `ml_models/saved_models/`.
+3. **Python / FastAPI Intelligence Service (`python-service/`)**: Provides route scoring, FX analysis, TCA metrics, and payment rail and transaction-risk inference.
 4. **Data Persistence (MongoDB)**: Mongoose schemas for `User`, `Transaction`, `LedgerEntry`, `RailSetting`, and `AuditLog`.
 
 > **Important:** Razorpay funding is test-mode only. Cross-border route execution remains an internal model and does not send funds through payout networks. Do not use this application for live payments.
@@ -87,16 +87,9 @@ If a rail's pool is fully depleted or toggled off by an administrator, its eligi
 
 ## 📈 FX Analysis Engine
 
-The FX intelligence service uses cached daily reference rates from [Frankfurter](https://frankfurter.dev/), which aggregates published central-bank and other official rates. These are indicative reference rates, not live executable provider quotes. If the reference-rate service is unavailable, the application reports the error rather than substituting hard-coded rates.
+The FX outlook uses cached daily reference rates from [Frankfurter](https://frankfurter.dev/). It displays dated historical observations for the same pair selected in the currency converter. These are not live executable quotes; Google may show a different indicative rate because its source and update cadence differ.
 
-1. **Spot Rate**: Clean mid-market exchange rate between any of the 10 supported currencies.
-2. **Simple Moving Average (SMA-20)**: Rolling trend indicator derived from recent 24-hour rate distributions.
-3. **Exponential Moving Average (EMA-12)**: Weighted trend indicator sensitive to recent price movements.
-4. **24-Hour Rolling Volatility ($\sigma_{24h}$)**: Percentage standard deviation indicating rate dispersion.
-5. **Analytical Execution Guidance**:
-   - **`EXECUTE_NOW`**: Current rate is favorably higher than the EMA by $> 0.15\%$ with low/moderate volatility.
-   - **`CONSIDER_DEFER`**: Current rate is depressed below the EMA by $> 0.20\%$ with an upward-trending trajectory.
-   - **`NEUTRAL`**: Current rate is within normal boundary bands.
+Transact3 does not currently have a validated FX forecasting provider. The outlook therefore does not display fabricated future-rate points, confidence scores, or backtest performance, and timing guidance does not defer a transfer based on an unvalidated prediction. Connecting a forecast service would require a provider with documented methodology and historical predictions suitable for out-of-sample validation; an online forecast by itself cannot guarantee future rates.
 
 ---
 

@@ -245,13 +245,17 @@ async function run() {
     assert(ok.ok === true, 'N3 matching forecast accepted', JSON.stringify(ok));
   }
 
-  // -- O: USD/INR forecasting still works ---------------------------------
+  // -- O: reference data is available without fabricating a forecast ------
   {
     const forecast = await fxForecastingEngine.predictFXMovements('USD', 'INR');
     assert(forecast.currencyPair === 'USD/INR' && forecast.currentRate > 0,
-      'O1 existing USD/INR forecasting unchanged', `${forecast.currencyPair} @ ${forecast.currentRate}`);
-    assert(forecast.predictions && forecast.predictions.h6 > 0 && forecast.predictions.h48 > 0,
-      'O2 all model horizons present');
+      'O1 USD/INR reference rate is available', `${forecast.currencyPair} @ ${forecast.currentRate}`);
+    assert(forecast.forecastAvailable === false && forecast.predictions === null
+      && forecast.confidencePct === null && forecast.trendDirection === 'UNAVAILABLE',
+    'O2 no forecast or confidence is fabricated without a validated provider');
+    const timing = await fxForecastingEngine.evaluateTiming('USD', 'INR');
+    assert(timing.recommendation === 'EXECUTE_NOW' && timing.deferHours === 0,
+      'O3 transfer timing is not deferred based on an unvalidated forecast');
   }
 
   // -- P: context versioning ----------------------------------------------

@@ -300,7 +300,7 @@ exports.aiQuery = async (req, res, next) => {
       msg += `• Corridor: ${mandate.amount} ${mandate.sourceCurrency} -> ${mandate.destinationCurrency}\n`;
       msg += `• Initial Spot Rate: 1 ${mandate.sourceCurrency} = ${mandate.initialRate} ${mandate.destinationCurrency}\n`;
       msg += `• Target Trigger Rate: >= ${mandate.targetRate} (+${mandate.targetImprovementPct}%)\n`;
-      msg += `• Model 1 Trend: ${mandate.predictedTrend} (Optimal Window: ~${mandate.optimalHorizon})\n`;
+      msg += `• Rate forecast: ${mandate.predictedTrend === 'UNAVAILABLE' ? 'not available; this mandate triggers only on observed reference rates' : mandate.predictedTrend}\n`;
       msg += `• Expiration Cutoff: ${new Date(mandate.expiresAt).toLocaleString()} (${mandate.maxWaitHours}h max)\n\n`;
       msg += `The Predictive FX Agent will monitor exchange rates continuously and trigger settlement automatically when your rate target is met or at cutoff window.`;
 
@@ -621,31 +621,16 @@ exports.aiQuery = async (req, res, next) => {
           });
         }
 
-        const trend = forecast.trendDirection || 'NEUTRAL';
-        const volatility = forecast.volatilityPct != null ? forecast.volatilityPct : null;
-        const confidence = forecast.confidencePct != null ? forecast.confidencePct : null;
         const amountLine = parsed.amount != null
-          ? `\nAt the current rate, ${formatCurrencyAmount(parsed.amount, source)} is about ${formatCurrencyAmount(parsed.amount * forecast.currentRate, destination)}.`
+          ? `\nAt the reference rate, ${formatCurrencyAmount(parsed.amount, source)} is about ${formatCurrencyAmount(parsed.amount * forecast.currentRate, destination)}.`
           : '';
-
-        const message = `FX Forecast for ${source} → ${destination}
-Current rate: 1 ${source} = ${formatRateValue(forecast.currentRate)} ${destination}
-Trend: ${trend}
-Volatility: ${volatility != null ? volatility + '%' : 'N/A'}
-Confidence: ${confidence != null ? confidence + '%' : 'N/A'}
-6h projection: ${formatRateValue(forecast.predictions?.h6)}
-12h projection: ${formatRateValue(forecast.predictions?.h12)}
-24h projection: ${formatRateValue(forecast.predictions?.h24)}
-48h projection: ${formatRateValue(forecast.predictions?.h48)}${amountLine}
-
-Model: Transact3 FX forecasting engine (existing trained pipeline, exponential smoothing on reference rates). Forecasts are uncertain and are not a guarantee of future rates.`;
 
         return send({
           success: true,
           requiresClarification: false,
           actionType: 'FX_FORECAST',
           parsed,
-          assistantMessage: message,
+          assistantMessage: `FX reference rate for ${source} → ${destination}\n1 ${source} = ${formatRateValue(forecast.currentRate)} ${destination}\nRate date: ${forecast.rateDate || 'unavailable'} (${forecast.rateSource || 'reference source'}).${amountLine}\n\nNo independently validated FX forecast provider is connected, so I can't provide a reliable future-rate prediction or confidence score.`,
           data: forecast
         });
       } catch (err) {
@@ -660,7 +645,7 @@ Model: Transact3 FX forecasting engine (existing trained pipeline, exponential s
     }
 
     // ---------------------------------------------------------------------
-    // FX TIMING ANALYSIS - same pair, real model output
+    // FX timing guidance requires a validated forecast provider.
     // ---------------------------------------------------------------------
     if (actionType === 'FX_TIMING_ANALYSIS') {
       const source = normalizeCurrency(parsed.sourceCurrency);
@@ -695,61 +680,23 @@ Model: Transact3 FX forecasting engine (existing trained pipeline, exponential s
         }
 
         const currentRate = forecast.currentRate;
-        const trend = forecast.trendDirection || 'NEUTRAL';
-        const volatility = forecast.volatilityPct;
-        const confidence = forecast.confidencePct;
-
-        // The quote is destination-per-source, so a higher projected rate always
-        // means more destination currency per unit of source.
-        const trendFavourable = trend === 'BULLISH';
         const nowAmount = Number((amount * currentRate).toFixed(2));
-        const h24Amount = Number((amount * forecast.predictions.h24).toFixed(2));
-        const h48Amount = Number((amount * forecast.predictions.h48).toFixed(2));
-
-        let message = `FX Timing Analysis for ${amountIsAssumed ? `1 ${source}` : formatCurrencyAmount(amount, source)} → ${destination}:\n\n`;
-        message += `Current rate: 1 ${source} = ${formatRateValue(currentRate)} ${destination}\n`;
-        message += `If you convert now: ${formatCurrencyAmount(nowAmount, destination)}\n\n`;
-        message += `Model trend: ${trend} (confidence: ${confidence != null ? confidence + '%' : 'N/A'})\n`;
-        message += `Volatility: ${volatility != null ? volatility + '%' : 'N/A'}\n`;
-        message += `24h model projection: 1 ${source} = ${formatRateValue(forecast.predictions.h24)} ${destination} → ${formatCurrencyAmount(h24Amount, destination)}\n`;
-        message += `48h model projection: 1 ${source} = ${formatRateValue(forecast.predictions.h48)} ${destination} → ${formatCurrencyAmount(h48Amount, destination)}\n\n`;
-
-        if (trendFavourable) {
-          message += `The model's projected path is higher, which would give you more ${destination} per ${source} if it holds. `;
-          message += `Waiting could yield up to ${formatCurrencyAmount(Math.max(0, h24Amount - nowAmount), destination)} more on this amount over 24h.\n`;
-        } else {
-          message += `The model's projected path is lower, which would give you fewer ${destination} per ${source} if it holds. `;
-          message += `Waiting could cost up to ${formatCurrencyAmount(Math.max(0, nowAmount - Math.min(h24Amount, h48Amount)), destination)} on this amount.\n`;
-        }
-
-        message += `\nThese are model projections, not guarantees. `;
-        if (volatility != null && volatility > 0.6) {
-          message += `With ${volatility}% volatility, the rate could move significantly in either direction. `;
-        }
-        message += amountIsAssumed
-          ? 'Tell me an amount and I can size the scenarios precisely.'
-          : 'If you need the money urgently, converting now removes timing risk.';
-
         return send({
           success: true,
           requiresClarification: false,
           actionType: 'FX_TIMING_ANALYSIS',
           parsed,
-          assistantMessage: message,
+          assistantMessage: `Current reference rate for ${source} → ${destination}: 1 ${source} = ${formatRateValue(currentRate)} ${destination} (dated ${forecast.rateDate || 'unavailable'}).\nIf you convert now, ${amountIsAssumed ? `1 ${source}` : formatCurrencyAmount(amount, source)} is about ${formatCurrencyAmount(nowAmount, destination)} before provider fees and spreads.\n\nNo independently validated FX forecast provider is connected, so I can't estimate whether waiting will improve the rate. Waiting or converting now is a decision under uncertainty.`,
           data: {
             source,
             destination,
             amount: parsed.amount,
             amountAssumed: amountIsAssumed,
             currentRate,
-            trend,
-            volatility,
-            confidence,
+            rateDate: forecast.rateDate,
+            rateSource: forecast.rateSource,
+            forecastAvailable: false,
             nowAmount,
-            h24Amount,
-            h48Amount,
-            trendFavourable,
-            predictions: forecast.predictions
           }
         });
       } catch (err) {

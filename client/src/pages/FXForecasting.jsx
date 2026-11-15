@@ -1,39 +1,32 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import FXForecastChart from '../components/FXForecastChart';
 import api from '../services/api';
-import { ArrowRightLeft, BarChart2, Calculator, Loader2 } from 'lucide-react';
+import { ArrowRightLeft, Calculator, Loader2 } from 'lucide-react';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'INR', 'BRL', 'MXN', 'SGD', 'AED', 'CHF', 'CAD', 'AUD', 'HKD', 'SEK', 'ZAR'];
-const CONVERTER_CURRENCIES = ['USD', 'EUR', 'GBP', 'INR', 'BRL', 'AED', 'SGD', 'AUD', 'CAD', 'JPY'];
 
 const FXForecasting = () => {
   const [base, setBase] = useState('USD');
   const [target, setTarget] = useState('INR');
-  const [backtest, setBacktest] = useState(null);
-  const [converterBase, setConverterBase] = useState('USD');
-  const [converterTarget, setConverterTarget] = useState('INR');
   const [converterAmount, setConverterAmount] = useState('100');
   const [conversion, setConversion] = useState(null);
   const [conversionError, setConversionError] = useState('');
   const [converting, setConverting] = useState(false);
 
-  const fetchBacktest = useCallback(async () => {
-    try {
-      const { data } = await api.post('/fx/backtest', {
-        baseCurrency: base,
-        targetCurrency: target,
-        days: 30
-      });
-      setBacktest(data.data);
-    } catch (err) {
-      console.error(err);
+  const selectBaseCurrency = (nextBase) => {
+    setBase(nextBase);
+    if (nextBase === target) {
+      setTarget(CURRENCIES.find((code) => code !== nextBase));
     }
-  }, [base, target]);
+    setConversion(null);
+    setConversionError('');
+  };
 
-  useEffect(() => {
-    const initialFetch = setTimeout(fetchBacktest, 0);
-    return () => clearTimeout(initialFetch);
-  }, [fetchBacktest]);
+  const selectTargetCurrency = (nextTarget) => {
+    setTarget(nextTarget);
+    setConversion(null);
+    setConversionError('');
+  };
 
   const convertAmount = async (event) => {
     event.preventDefault();
@@ -41,8 +34,8 @@ const FXForecasting = () => {
     setConversionError('');
     try {
       const { data } = await api.post('/currency/convert', {
-        base: converterBase,
-        target: converterTarget,
+        base,
+        target,
         amount: Number(converterAmount)
       });
       setConversion(data);
@@ -59,7 +52,7 @@ const FXForecasting = () => {
       <div className="flex justify-between items-end">
         <div>
           <p className="text-xs font-bold tracking-widest text-emerald-700 uppercase mb-1">
-            FX INFORMATION & MODEL GUIDANCE
+            FX REFERENCE DATA
           </p>
           <h1 className="text-3xl font-extrabold text-slate-900">Exchange-rate outlook</h1>
         </div>
@@ -67,7 +60,7 @@ const FXForecasting = () => {
         <div className="flex items-center gap-3">
           <select
             value={base}
-            onChange={(e) => setBase(e.target.value)}
+            onChange={(e) => selectBaseCurrency(e.target.value)}
             className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-mono font-bold text-slate-800"
           >
             {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
@@ -75,7 +68,7 @@ const FXForecasting = () => {
           <span className="text-gray-400 text-xs font-mono">→</span>
           <select
             value={target}
-            onChange={(e) => setTarget(e.target.value)}
+            onChange={(e) => selectTargetCurrency(e.target.value)}
             className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-mono font-bold text-emerald-800"
           >
             {CURRENCIES.filter(c => c !== base).map(c => <option key={c} value={c}>{c}</option>)}
@@ -89,7 +82,7 @@ const FXForecasting = () => {
           <h2 className="mt-1 flex items-center gap-2 text-xl font-bold text-slate-900">
             <Calculator size={20} className="text-emerald-700" /> Currency converter
           </h2>
-          <p className="mt-1 text-sm text-slate-600">Enter an amount to estimate its value using the latest available exchange-rate feed.</p>
+          <p className="mt-1 text-sm text-slate-600">Enter an amount to estimate its value using the latest published daily reference rate. Your selected pair also controls the historical chart below.</p>
         </div>
         <form onSubmit={convertAmount} className="grid gap-3 md:grid-cols-[1.2fr_1fr_auto_1fr_auto] md:items-end">
           <label className="text-sm font-semibold text-slate-800">
@@ -109,16 +102,10 @@ const FXForecasting = () => {
             From
             <select
               className="input-field mt-1"
-              value={converterBase}
-              onChange={(event) => {
-                const nextBase = event.target.value;
-                setConverterBase(nextBase);
-                if (nextBase === converterTarget) {
-                  setConverterTarget(CONVERTER_CURRENCIES.find((code) => code !== nextBase));
-                }
-              }}
+              value={base}
+              onChange={(event) => selectBaseCurrency(event.target.value)}
             >
-              {CONVERTER_CURRENCIES.map((code) => <option key={code} value={code}>{code}</option>)}
+                {CURRENCIES.map((code) => <option key={code} value={code}>{code}</option>)}
             </select>
           </label>
           <ArrowRightLeft className="mx-auto mb-3 hidden text-slate-400 md:block" size={18} />
@@ -126,10 +113,10 @@ const FXForecasting = () => {
             To
             <select
               className="input-field mt-1"
-              value={converterTarget}
-              onChange={(event) => setConverterTarget(event.target.value)}
+              value={target}
+              onChange={(event) => selectTargetCurrency(event.target.value)}
             >
-              {CONVERTER_CURRENCIES.filter((code) => code !== converterBase).map((code) => (
+              {CURRENCIES.filter((code) => code !== base).map((code) => (
                 <option key={code} value={code}>{code}</option>
               ))}
             </select>
@@ -150,8 +137,8 @@ const FXForecasting = () => {
                 </p>
               </div>
               <div className="text-right text-xs text-slate-600">
-                <p>{conversion.is_mock ? 'Indicative fallback rate' : conversion.source === 'LIVE_API' ? 'Live reference rate' : 'Cached live reference rate'}</p>
-                <p>{conversion.timestamp ? new Date(conversion.timestamp).toLocaleString() : ''}</p>
+                <p>Frankfurter daily reference rate · not a live quote</p>
+                <p>Rate date: {conversion.rateDate || (conversion.timestamp ? new Date(conversion.timestamp).toLocaleDateString() : 'unavailable')}</p>
               </div>
             </div>
             <dl className="mt-4 grid gap-3 border-t border-emerald-200 pt-3 text-sm sm:grid-cols-2">
@@ -192,45 +179,7 @@ const FXForecasting = () => {
         <p className="text-xs text-slate-500">All rails and delivery windows are modeled estimates, not external network integrations or payout guarantees. The displayed rail fee is separate from the net payout; actual provider pricing and delivery may differ.</p>
       </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <FXForecastChart base={base} target={target} />
-        </div>
-
-        {/* Backtesting Accuracy Panel */}
-        <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 font-mono shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-            <div className="flex items-center gap-2">
-              <BarChart2 size={18} className="text-emerald-700" />
-              <h3 className="text-sm font-bold text-slate-900">Model Backtest Validation</h3>
-            </div>
-            <span className="text-[10px] font-bold text-slate-500">30-Day Evaluation</span>
-          </div>
-
-          {backtest ? (
-            <div className="space-y-3">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <span className="block text-[10px] text-slate-500">Directional Accuracy</span>
-                <span className="text-xl font-bold text-emerald-800">{backtest.metrics.directionalAccuracyPct}%</span>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <span className="block text-[10px] text-slate-500">Timing Success Rate</span>
-                <span className="text-xl font-bold text-emerald-800">{backtest.metrics.timingSuccessRatePct}%</span>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <span className="block text-[10px] text-slate-500">Mean Absolute Error (MAE)</span>
-                <span className="text-lg font-bold text-slate-800">{backtest.metrics.maePct}%</span>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <span className="block text-[10px] text-slate-500">Average Yield Savings</span>
-                <span className="text-lg font-bold text-emerald-800">+{backtest.metrics.avgSavingsBps} bps</span>
-              </div>
-            </div>
-          ) : (
-            <div className="py-8 text-center text-slate-500">Loading backtest data...</div>
-          )}
-        </div>
-      </div>
+      <FXForecastChart base={base} target={target} />
     </div>
   );
 };

@@ -59,6 +59,7 @@ async function createCurrencyConversionQuote(sourceCurrency, destinationCurrency
     pricingSource: rateData.source,
     source: rateData.source,
     timestamp: rateData.timestamp,
+    rateDate: rateData.rateDate,
     is_mock: rateData.is_mock
   };
 }

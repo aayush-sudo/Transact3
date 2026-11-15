@@ -1,97 +1,53 @@
-const { getHistoricalRates, getExchangeRates } = require('./currencyService');
+const { getHistoricalRates } = require('./currencyService');
 
 class FXBacktestingEngine {
   async runBacktest(baseCurrency = 'USD', targetCurrency = 'INR', days = 30) {
-    const base = baseCurrency.toUpperCase();
-    const target = targetCurrency.toUpperCase();
-    const totalDays = Math.max(days, 30);
-
-    let historicalRates = [];
-    try {
-      const history = await getHistoricalRates(base, target, totalDays);
-      if (history && history.conversion_rates) {
-        const sortedDates = Object.keys(history.conversion_rates).sort();
-        for (const d of sortedDates) {
-          const rateVal = history.conversion_rates[d][target] || history.conversion_rates[d];
-          if (typeof rateVal === 'number') {
-            historicalRates.push({ date: d, rate: rateVal });
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('[FXBacktestingEngine] Live historical fetch fallback');
+    const base = String(baseCurrency || '').toUpperCase();
+    const target = String(targetCurrency || '').toUpperCase();
+    const requestedDays = Number(days);
+    if (!Number.isInteger(requestedDays) || requestedDays < 1 || requestedDays > 365) {
+      throw new Error('Backtest days must be an integer from 1 to 365.');
     }
 
-    // If historical rates from API are insufficient, generate realistic calibrated series
-    if (historicalRates.length < 10) {
-      const currentRates = await getExchangeRates(base);
-      const baseAnchor = (currentRates.conversion_rates && currentRates.conversion_rates[target]) || 83.20;
-      historicalRates = [];
-
-      for (let i = totalDays; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        const dateStr = d.toISOString().split('T')[0];
-        const walk = Math.sin(i * 0.35) * (baseAnchor * 0.008) + ((totalDays - i) * (baseAnchor * 0.0003));
-        historicalRates.push({ date: dateStr, rate: parseFloat((baseAnchor + walk).toFixed(4)) });
-      }
+    const history = await getHistoricalRates(base, target, requestedDays + 1);
+    const rates = Object.entries(history.conversion_rates)
+      .map(([date, rateData]) => ({ date, rate: Number(rateData[target]) }))
+      .filter(({ rate }) => Number.isFinite(rate) && rate > 0)
+      .sort((left, right) => left.date.localeCompare(right.date));
+    if (rates.length < 2) {
+      throw new Error(`Not enough historical observations to backtest ${base}/${target}.`);
     }
 
     const observations = [];
-    let correctDirectionCount = 0;
-    let timingSuccessCount = 0;
-    let sumAbsoluteErrorPct = 0;
-    let sumSquaredErrorPct = 0;
-    let totalSavingsBps = 0;
+    let absoluteErrorPctTotal = 0;
+    let squaredErrorPctTotal = 0;
 
-    const count = historicalRates.length;
-
-    for (let i = 0; i < count; i++) {
-      const actualRate = historicalRates[i].rate;
-      // Model simulated prediction with Exponential Smoothing
-      const noise = (Math.sin(i * 0.7) * 0.002 - 0.0005) * actualRate;
-      const predictedRate = parseFloat((actualRate + noise).toFixed(4));
-
-      const errorPct = Math.abs((predictedRate - actualRate) / actualRate) * 100;
-      sumAbsoluteErrorPct += errorPct;
-      sumSquaredErrorPct += Math.pow(errorPct, 2);
-
-      const actualDirection = i > 0 ? (actualRate >= historicalRates[i - 1].rate ? 1 : -1) : 1;
-      const predictedDirection = i > 0 ? (predictedRate >= historicalRates[i - 1].rate ? 1 : -1) : 1;
-
-      if (actualDirection === predictedDirection) correctDirectionCount++;
-
-      const deferredSavingsBps = Math.max(0, Math.round((Math.sin(i * 0.5) * 12) + 6));
-      if (deferredSavingsBps > 0) {
-        timingSuccessCount++;
-        totalSavingsBps += deferredSavingsBps;
-      }
-
+    for (let index = 1; index < rates.length; index += 1) {
+      const previous = rates[index - 1];
+      const actual = rates[index];
+      const errorPct = Math.abs((previous.rate - actual.rate) / actual.rate) * 100;
+      absoluteErrorPctTotal += errorPct;
+      squaredErrorPctTotal += errorPct ** 2;
       observations.push({
-        day: i + 1,
-        date: historicalRates[i].date,
-        actualRate,
-        predictedRate,
-        errorPct: parseFloat(errorPct.toFixed(3)),
-        savedBps: deferredSavingsBps
+        date: actual.date,
+        predictedRate: previous.rate,
+        actualRate: actual.rate,
+        errorPct: Number(errorPct.toFixed(5))
       });
     }
 
-    const maePct = parseFloat((sumAbsoluteErrorPct / count).toFixed(3));
-    const rmsePct = parseFloat((Math.sqrt(sumSquaredErrorPct / count)).toFixed(3));
-    const directionalAccuracyPct = parseFloat(((correctDirectionCount / count) * 100).toFixed(1));
-    const timingSuccessRatePct = parseFloat(((timingSuccessCount / count) * 100).toFixed(1));
-    const avgSavingsBps = parseFloat((totalSavingsBps / count).toFixed(1));
-
+    const count = observations.length;
     return {
       pair: `${base}/${target}`,
+      model: 'PERSISTENCE_BASELINE',
+      source: history.source,
       testPeriodDays: count,
       metrics: {
-        maePct,
-        rmsePct,
-        directionalAccuracyPct,
-        timingSuccessRatePct,
-        avgSavingsBps
+        maePct: Number((absoluteErrorPctTotal / count).toFixed(5)),
+        rmsePct: Number((Math.sqrt(squaredErrorPctTotal / count)).toFixed(5)),
+        directionalAccuracyPct: null,
+        timingSuccessRatePct: null,
+        avgSavingsBps: null
       },
       sampleObservations: observations.slice(-7)
     };

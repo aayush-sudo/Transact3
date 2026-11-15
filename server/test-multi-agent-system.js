@@ -50,7 +50,8 @@ async function runTests() {
   assert(mandate && mandate.mandateId.startsWith('MND-'), 'A1.1 Mandate created with unique ID', mandate?.mandateId);
   assert(mandate.status === 'ACTIVE', 'A1.2 Mandate status is ACTIVE');
   assert(mandate.targetRate > mandate.initialRate, 'A1.3 Target rate computed with +0.50% threshold');
-  assert(mandate.predictedTrend != null, 'A1.4 Model 1 trend predictions integrated');
+  assert(mandate.predictedTrend === 'UNAVAILABLE' && mandate.predictedHorizonRate === null,
+    'A1.4 Does not invent a rate trend or projection without a forecast provider');
 
   // Test 2: Evaluate mandate without trigger
   const eval1 = await predictiveFXAgent.evaluateMandate(mandate.mandateId);

@@ -4,6 +4,7 @@ const fxBacktestingEngine = require('../services/fxBacktestingEngine');
 const orchestrationEngine = require('../services/orchestrationEngine');
 const { createCurrencyConversionQuote } = require('../services/currencyConversionService');
 const { isCurrencySupported } = require('../config/currencies');
+const { getExchangeRates, getHistoricalRates } = require('../services/currencyService');
 
 exports.getRates = async (req, res, next) => {
   try {
@@ -20,6 +21,55 @@ exports.getRates = async (req, res, next) => {
     }
     const quote = await createCurrencyConversionQuote(sourceCurrency, destinationCurrency, amount);
     res.status(200).json({ success: true, data: quote });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.getHistory = async (req, res, next) => {
+  try {
+    const { baseCurrency, targetCurrency, days = 30 } = req.body;
+    const base = String(baseCurrency || '').toUpperCase();
+    const target = String(targetCurrency || '').toUpperCase();
+    const count = Number(days);
+
+    if (!isCurrencySupported(base) || !isCurrencySupported(target) || base === target) {
+      return res.status(400).json({ success: false, message: 'Choose a supported pair of different currencies.' });
+    }
+    if (!Number.isInteger(count) || count < 1 || count > 365) {
+      return res.status(400).json({ success: false, message: 'History days must be an integer from 1 to 365.' });
+    }
+
+    const [currentData, historyData] = await Promise.all([
+      getExchangeRates(base),
+      getHistoricalRates(base, target, count)
+    ]);
+    const currentRate = Number(currentData.conversion_rates?.[target]);
+    if (!Number.isFinite(currentRate) || currentRate <= 0) {
+      throw new Error(`No reference rate is available for ${base}/${target}.`);
+    }
+
+    const observations = Object.entries(historyData.conversion_rates)
+      .map(([date, rateData]) => ({ date, rate: Number(rateData[target]) }))
+      .filter((observation) => Number.isFinite(observation.rate) && observation.rate > 0)
+      .sort((left, right) => left.date.localeCompare(right.date));
+    if (currentData.rateDate && !observations.some((observation) => observation.date === currentData.rateDate)) {
+      observations.push({ date: currentData.rateDate, rate: currentRate });
+      observations.sort((left, right) => left.date.localeCompare(right.date));
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        baseCurrency: base,
+        targetCurrency: target,
+        currencyPair: `${base}/${target}`,
+        currentRate,
+        rateDate: currentData.rateDate,
+        source: currentData.source,
+        observations
+      }
+    });
   } catch (err) {
     next(err);
   }

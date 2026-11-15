@@ -1,4 +1,3 @@
-const fxForecastingEngine = require('./fxForecastingEngine');
 const fxRateEngine = require('./fxRateEngine');
 const settlementEngine = require('./settlementEngine');
 const auditEngine = require('./auditEngine');
@@ -6,8 +5,8 @@ const crypto = require('crypto');
 
 /**
  * PredictiveFXExecutionAgent
- * Autonomous Agent 1: Monitors currency rate momentum using Model 1 (HistGradientBoosting / FXForecastingEngine)
- * and executes conditional transfer mandates when target rate thresholds or cutoffs are met.
+ * Autonomous Agent 1: Monitors reference rates and executes conditional transfer mandates
+ * when target rate thresholds or cutoffs are met.
  */
 class PredictiveFXExecutionAgent {
   constructor() {
@@ -43,8 +42,6 @@ class PredictiveFXExecutionAgent {
     }
 
     const currentRate = await fxRateEngine.getReferenceRate(src, dst);
-    const forecast = await fxForecastingEngine.predictFXMovements(src, dst);
-
     const now = new Date();
     const expiresAt = new Date(now.getTime() + Math.max(1, maxWaitHours) * 3600 * 1000);
     const mandateId = this.generateMandateId();
@@ -67,9 +64,9 @@ class PredictiveFXExecutionAgent {
       lastEvaluatedAt: now.toISOString(),
       checksCount: 1,
       latestRate: currentRate,
-      predictedTrend: forecast.trendDirection,
-      predictedHorizonRate: forecast.predictions?.h24 || currentRate,
-      optimalHorizon: forecast.optimalHorizon || '24h',
+      predictedTrend: 'UNAVAILABLE',
+      predictedHorizonRate: null,
+      optimalHorizon: null,
       triggerReason: null,
       executionResult: null,
       history: [
@@ -101,7 +98,7 @@ class PredictiveFXExecutionAgent {
   }
 
   /**
-   * Evaluates a single mandate against current spot rates and Model 1 predictions
+   * Evaluates a single mandate against the latest available reference rate
    */
   async evaluateMandate(mandateId) {
     const mandate = this.mandates.get(mandateId);
@@ -116,12 +113,10 @@ class PredictiveFXExecutionAgent {
     const now = new Date();
     const expiresAt = new Date(mandate.expiresAt);
     const currentRate = await fxRateEngine.getReferenceRate(mandate.sourceCurrency, mandate.destinationCurrency);
-    const forecast = await fxForecastingEngine.predictFXMovements(mandate.sourceCurrency, mandate.destinationCurrency);
-
     mandate.lastEvaluatedAt = now.toISOString();
     mandate.checksCount += 1;
     mandate.latestRate = currentRate;
-    mandate.predictedTrend = forecast.trendDirection;
+    mandate.predictedTrend = 'UNAVAILABLE';
 
     const rateDeltaPct = ((currentRate - mandate.initialRate) / mandate.initialRate) * 100;
     const hoursRemaining = Math.max(0, (expiresAt.getTime() - now.getTime()) / 3600000);

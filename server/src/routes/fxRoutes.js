@@ -4,6 +4,7 @@ const fxController = require('../controllers/fxController');
 const { protect, validatePaymentQuoteRequest } = require('../middleware');
 
 router.get('/rates/:pair', fxController.getRates);
+router.post('/history', fxController.getHistory);
 router.post('/quote', protect, validatePaymentQuoteRequest, fxController.generateQuote);
 router.post('/forecast', fxController.getForecast);
 router.post('/backtest', fxController.getBacktest);
