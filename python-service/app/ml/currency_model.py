@@ -2,8 +2,8 @@ import os
 import joblib
 import numpy as np
 import pandas as pd
-from datetime import datetime
-from typing import Dict, Any, Optional, List
+from datetime import datetime, timedelta
+from typing import Dict, Any, List, Optional
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.metrics import mean_absolute_error, root_mean_squared_error, r2_score
 
@@ -79,6 +79,8 @@ class CurrencyForecaster:
         self.metadata = {
             "model_type": "HistGradientBoostingRegressor",
             "features": FEATURE_COLUMNS,
+            "data_from": df_featured["date"].min().date().isoformat(),
+            "data_through": df_featured["date"].max().date().isoformat(),
             "training_samples": len(X_train),
             "test_samples": len(X_test),
             "mae_return": round(mae_test, 6),
@@ -102,137 +104,181 @@ class CurrencyForecaster:
         self,
         slug: str,
         current_rate: float,
-        recent_prices: Optional[List[float]] = None,
+        recent_observations: Optional[List[Dict[str, Any]]] = None,
         amount: float = 10000.0
     ) -> Dict[str, Any]:
         """
-        Generates ML currency rate forecast and advisory timing recommendation.
+        Forecasts the next daily observation using actual dated reference rates.
         """
-        # If no recent prices supplied, construct realistic trajectory around current_rate
-        if not recent_prices or len(recent_prices) < 30:
-            np.random.seed(abs(hash(slug)) % 100000)
-            drift = 0.0001
-            vols = np.random.normal(0, 0.003, 35)
-            prices = [current_rate * (1 - 0.015)]
-            for v in vols:
-                prices.append(prices[-1] * (1 + drift + v))
-            prices.append(current_rate)
-            recent_prices = prices[-35:]
+        if not self.is_loaded or self.model is None:
+            raise RuntimeError("The trained FX model is not loaded.")
+        if not recent_observations or len(recent_observations) < 35:
+            raise ValueError("At least 35 actual dated FX observations are required.")
 
-        # Build mini dataframe to compute exact technical indicators
-        df_mini = pd.DataFrame({
-            "date": pd.date_range(end=datetime.now(), periods=len(recent_prices), freq="D"),
-            "slug": slug,
-            "currency": slug.split("/")[-1] if "/" in slug else "EUR",
-            "open": [p * 0.999 for p in recent_prices],
-            "high": [p * 1.002 for p in recent_prices],
-            "low": [p * 0.998 for p in recent_prices],
-            "close": recent_prices
-        })
+        slug = str(slug).upper()
+        currency = slug.split("/")[-1]
+        observations = pd.DataFrame(recent_observations)
+        if not {"date", "rate"}.issubset(observations.columns):
+            raise ValueError("FX observations must include date and rate.")
+        observations["date"] = pd.to_datetime(observations["date"], errors="coerce")
+        observations["close"] = pd.to_numeric(observations["rate"], errors="coerce")
+        observations = observations.dropna(subset=["date", "close"])
+        observations = observations[observations["close"] > 0]
+        observations = observations.sort_values("date").drop_duplicates("date").reset_index(drop=True)
+        if len(observations) < 35:
+            raise ValueError("At least 35 valid dated FX observations are required.")
 
-        feat_df = extract_technical_features(df_mini)
+        df_rates = self._build_close_only_ohlc(observations, slug, currency)
+        current_observation_rate = float(df_rates.iloc[-1]["close"])
+        if abs(current_observation_rate - float(current_rate)) / current_observation_rate > 1e-6:
+            raise ValueError("The supplied current rate does not match the latest historical observation.")
 
-        if not feat_df.empty:
-            last_feat = feat_df.iloc[-1:][FEATURE_COLUMNS]
-            volatility = float(feat_df.iloc[-1]["volatility_14d"])
-            rsi = float(feat_df.iloc[-1]["rsi_14"])
-            macd = float(feat_df.iloc[-1]["macd"])
-        else:
-            last_feat = pd.DataFrame([{col: 0.0 for col in FEATURE_COLUMNS}])
-            volatility = 0.004
-            rsi = 50.0
-            macd = 0.0
+        backtest = self._walk_forward_validation(df_rates)
+        future_row = df_rates.iloc[-1].copy()
+        future_row["date"] = future_row["date"] + timedelta(days=1)
+        future_row["open"] = current_observation_rate
+        future_row["high"] = current_observation_rate
+        future_row["low"] = current_observation_rate
+        future_row["close"] = current_observation_rate
+        with_next_placeholder = pd.concat([df_rates, future_row.to_frame().T], ignore_index=True)
+        with_next_placeholder["date"] = pd.to_datetime(with_next_placeholder["date"])
+        feature_rows = extract_technical_features(with_next_placeholder)
+        latest_date = df_rates.iloc[-1]["date"]
+        current_features = feature_rows[feature_rows["date"] == latest_date]
+        if current_features.empty:
+            raise RuntimeError("Could not construct model features from the supplied FX observations.")
 
-        predicted_return = 0.0005
-        rmse = self.metadata.get("rmse_return", 0.004)
+        latest_features = current_features.iloc[-1:][FEATURE_COLUMNS].replace(
+            [np.inf, -np.inf], np.nan
+        ).fillna(0.0)
+        predicted_return = float(self.model.predict(latest_features)[0])
+        predicted_rate = current_observation_rate * (1.0 + predicted_return)
+        interval = backtest.get("absolute_error_quantile_90")
+        lower_bound = upper_bound = None
+        if interval is not None:
+            lower_bound = round(current_observation_rate * (1.0 + predicted_return - interval), 5)
+            upper_bound = round(current_observation_rate * (1.0 + predicted_return + interval), 5)
 
-        if self.is_loaded and self.model is not None:
-            try:
-                pred_raw = float(self.model.predict(last_feat)[0])
-                # Clip extreme single-day returns for stability
-                predicted_return = max(-0.03, min(0.03, pred_raw))
-            except Exception as e:
-                print(f"[CurrencyModel] Inference warning: {e}")
-                predicted_return = 0.0005
-
-        expected_rate_24h = round(current_rate * (1.0 + predicted_return), 5)
-        lower_bound = round(current_rate * (1.0 + predicted_return - 1.96 * rmse), 5)
-        upper_bound = round(current_rate * (1.0 + predicted_return + 1.96 * rmse), 5)
-
-        # Formulate Advisory Timing Decision
-        # In a transfer from Source to Target, a higher rate means more target currency per source unit.
+        latest_features_row = current_features.iloc[-1]
+        volatility = float(latest_features_row["volatility_14d"])
+        rsi = float(latest_features_row["rsi_14"])
+        macd = float(latest_features_row["macd"])
         return_pct = predicted_return * 100.0
         delta_amount_target = round(amount * current_rate * predicted_return, 2)
 
-        if predicted_return >= 0.0015:
-            recommendation = "WAIT_24H"
-            confidence = min(0.92, 0.70 + abs(predicted_return) * 15)
-            rationale = (
-                f"ML model projects rate appreciation (+{return_pct:.2f}% to {expected_rate_24h}) over the next 24 hours. "
-                f"Waiting is estimated to yield an additional {abs(delta_amount_target):,.2f} in target currency."
-            )
-            action_window_hours = 24
-        elif predicted_return >= 0.0005:
-            recommendation = "WAIT_6H"
-            confidence = 0.74
-            rationale = (
-                f"Moderate upward momentum detected (+{return_pct:.2f}%). "
-                f"Consider timing execution during the next intraday liquidity overlap for optimal pricing."
-            )
-            action_window_hours = 6
-        elif predicted_return <= -0.0010:
-            recommendation = "EXECUTE_NOW"
-            confidence = min(0.94, 0.75 + abs(predicted_return) * 20)
-            rationale = (
-                f"ML model forecasts exchange rate depreciation ({return_pct:.2f}% to {expected_rate_24h}). "
-                f"Immediate execution is recommended to prevent adverse FX slippage and protect target proceeds."
-            )
-            action_window_hours = 0
-        else:
-            recommendation = "EXECUTE_NOW"
-            confidence = 0.81
-            rationale = (
-                f"Neutral rate trajectory ({return_pct:+.2f}%) within normal volatility bands ({volatility*100:.2f}%). "
-                f"Immediate execution offers predictable pricing with zero holding risk."
-            )
-            action_window_hours = 0
+        reliable = bool(backtest.get("reliability_gate_passed"))
+        recommendation = "MODEL_SIGNAL_ONLY" if reliable else "INSUFFICIENT_EVIDENCE"
+        rationale = (
+            "Historical out-of-sample results passed the configured reliability gate; this remains an uncertain model signal."
+            if reliable else
+            "Historical out-of-sample results do not support using this model to time a transfer. Do not treat this projection as a recommendation."
+        )
 
         return {
             "slug": slug,
             "current_rate": current_rate,
-            "forecasted_rate_24h": expected_rate_24h,
+            "forecast_horizon": "next daily reference-rate observation",
+            "forecasted_rate_next_observation": round(predicted_rate, 5),
+            "forecasted_rate_24h": round(predicted_rate, 5),
             "forecasted_return_pct": round(return_pct, 3),
-            "confidence_score": round(confidence, 2),
+            "confidence_score": backtest.get("directional_accuracy_pct"),
+            "confidence_type": "historical_directional_accuracy_not_calibrated_probability",
             "prediction_interval": {
                 "lower_bound": lower_bound,
                 "upper_bound": upper_bound,
-                "confidence_level": "95%"
+                "confidence_level": "90% empirical absolute-error interval" if interval is not None else None
             },
             "technical_indicators": {
                 "rsi_14": round(rsi, 2),
                 "macd": round(macd, 5),
                 "volatility_14d_pct": round(volatility * 100, 3)
             },
+            "historical_validation": backtest,
             "timing_advisory": {
                 "recommendation": recommendation,
-                "action_window_hours": action_window_hours,
+                "action_window_hours": 0,
                 "rationale": rationale,
-                "projected_benefit_target_currency": delta_amount_target
+                "projected_benefit_target_currency": round(delta_amount_target, 2) if reliable else None
             },
             "model_metadata": {
-                "algorithm": self.metadata.get(
-                    "model_type",
-                    self.metadata.get("algorithm", "HistGradientBoostingRegressor")
-                ),
-                "directional_accuracy_pct": self.metadata.get(
-                    "directional_accuracy_pct",
-                    self.metadata.get("final_directional_accuracy_pct", 68.5)
-                ),
-                "rmse": self.metadata.get(
-                    "rmse_return",
-                    self.metadata.get("final_rmse", 0.004)
+                "algorithm": self.metadata.get("algorithm", self.metadata.get("model_type", "HistGradientBoostingRegressor")),
+                "trained_at": self.metadata.get("trained_at"),
+                "training_data_through": self.metadata.get("data_through") or (
+                    "2021-08-30" if self.metadata.get("total_dataset_rows") == 1453035 else None
                 )
             }
+        }
+
+    @staticmethod
+    def _build_close_only_ohlc(observations: pd.DataFrame, slug: str, currency: str) -> pd.DataFrame:
+        close = observations["close"].astype(float)
+        previous_close = close.shift(1).fillna(close)
+        return pd.DataFrame({
+            "date": observations["date"],
+            "slug": slug,
+            "currency": currency,
+            "open": previous_close,
+            "high": np.maximum(previous_close, close),
+            "low": np.minimum(previous_close, close),
+            "close": close
+        }).reset_index(drop=True)
+
+    def _walk_forward_validation(self, rates: pd.DataFrame) -> Dict[str, Any]:
+        featured = extract_technical_features(rates)
+        if len(featured) < 60:
+            return {
+                "status": "INSUFFICIENT_HISTORY",
+                "observations": len(featured),
+                "directional_accuracy_pct": None,
+                "directional_accuracy_interval_95_pct": None,
+                "mae_pct": None,
+                "baseline_mae_pct": None,
+                "rmse_pct": None,
+                "r2": None,
+                "absolute_error_quantile_90": None,
+                "reliability_gate_passed": False
+            }
+
+        X = featured[FEATURE_COLUMNS].replace([np.inf, -np.inf], np.nan).fillna(0.0)
+        actual = featured["target_return_next"].to_numpy(dtype=float)
+        predicted = self.model.predict(X)
+        valid = np.isfinite(actual) & np.isfinite(predicted)
+        actual = actual[valid]
+        predicted = predicted[valid]
+        errors = predicted - actual
+        count = len(actual)
+        correct = int(np.sum(np.sign(predicted) == np.sign(actual)))
+        accuracy = correct / count
+        z = 1.96
+        denominator = 1 + z * z / count
+        center = (accuracy + z * z / (2 * count)) / denominator
+        half_width = z * np.sqrt(accuracy * (1 - accuracy) / count + z * z / (4 * count * count)) / denominator
+        mae = float(np.mean(np.abs(errors)))
+        baseline_mae = float(np.mean(np.abs(actual)))
+        rmse = float(np.sqrt(np.mean(np.square(errors))))
+        actual_variance = float(np.sum(np.square(actual - np.mean(actual))))
+        r2 = 1 - float(np.sum(np.square(errors))) / actual_variance if actual_variance else 0.0
+        lower_accuracy = max(0.0, center - half_width)
+        upper_accuracy = min(1.0, center + half_width)
+        reliability_gate_passed = bool(count >= 100 and lower_accuracy > 0.5 and mae < baseline_mae)
+
+        return {
+            "status": "VALIDATED",
+            "source": "Frankfurter dated daily reference rates",
+            "evaluation_start": featured.iloc[0]["date"].date().isoformat(),
+            "evaluation_end": featured.iloc[-1]["date"].date().isoformat(),
+            "observations": count,
+            "directional_accuracy_pct": round(accuracy * 100, 2),
+            "directional_accuracy_interval_95_pct": [
+                round(float(lower_accuracy * 100), 2),
+                round(float(upper_accuracy * 100), 2)
+            ],
+            "mae_pct": round(mae * 100, 5),
+            "baseline_mae_pct": round(baseline_mae * 100, 5),
+            "rmse_pct": round(rmse * 100, 5),
+            "r2": round(r2, 5),
+            "absolute_error_quantile_90": float(np.quantile(np.abs(errors), 0.9)),
+            "reliability_gate_passed": reliability_gate_passed
         }
 
 currency_forecaster = CurrencyForecaster()

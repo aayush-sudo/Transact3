@@ -126,18 +126,18 @@ class MLPredictCurrencyRequest(BaseModel):
     slug: str = Field(..., example="USD/EUR")
     current_rate: float = Field(..., example=0.92)
     amount: Optional[float] = Field(10000.0, example=10000.0)
-    recent_prices: Optional[List[float]] = None
+    recent_observations: Optional[List[Dict[str, Any]]] = None
 
 @router.post("/ml/predict-currency", tags=["Machine Learning"])
 async def predict_currency(req: MLPredictCurrencyRequest):
     """
-    Model 1: Predicts currency exchange rate trajectory and execution timing
-    using HistGradientBoostingRegressor trained on historical OHLC data.
+    Model 1: Predicts the next daily rate from actual dated FX observations
+    and returns a walk-forward validation against those same observed rates.
     """
     result = currency_forecaster.predict_timing_advice(
         slug=req.slug,
         current_rate=req.current_rate,
-        recent_prices=req.recent_prices,
+        recent_observations=req.recent_observations,
         amount=req.amount or 10000.0
     )
     return {"success": True, "data": result}

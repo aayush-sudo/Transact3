@@ -44,6 +44,14 @@ class FastApiClient {
     return { success: false, fallback: true };
   }
 
+  async predictCurrency(payload) {
+    const res = await this.client.post('/ml/predict-currency', payload, { timeout: 8000 });
+    if (res.status !== 200 || !res.data?.success || !res.data?.data) {
+      throw new Error('FX model service returned an invalid prediction response.');
+    }
+    return res.data.data;
+  }
+
   async calculateTCA(payload) {
     try {
       const res = await this.client.post('/tca/calculate', payload);

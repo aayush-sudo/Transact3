@@ -444,7 +444,7 @@ const AIAgent = () => {
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-300 mt-2 leading-relaxed">
-                  Monitors the latest available reference rate for your threshold. No validated forecast is connected; settlement is simulated in this prototype.
+                  Monitors the latest reference rate against your threshold. FX projections are experimental and never trigger a live external payment.
                 </p>
               </div>
               <button
@@ -547,7 +547,7 @@ const AIAgent = () => {
                   {msg.actionType === 'FX_MANDATE' && (
                     <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold text-indigo-700">
                       <Zap size={13} />
-                      <span>Predictive FX Execution Agent (Model 1)</span>
+                      <span>FX Target-Rate Watcher</span>
                     </div>
                   )}
                   {msg.actionType === 'LIQUIDITY_HEALTH' && (
@@ -836,7 +836,7 @@ const AIAgent = () => {
         >
           <Info size={14} className="mt-0.5 shrink-0 text-slate-400" aria-hidden="true" />
           <p className="min-w-0 flex-1">
-            Responses from the Transact3 AI Agent and Multi-Agent Society are generated for financial transfer planning. FX outlooks use dated reference rates only; no validated rate-forecast provider or external payment execution is connected.
+            Responses from the Transact3 AI Agent and Multi-Agent Society are generated for transfer planning. FX outlooks show experimental model estimates and measured historical accuracy; they are not guarantees or live quotes. External payment execution is not connected.
           </p>
         </div>
 

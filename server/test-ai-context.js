@@ -245,17 +245,23 @@ async function run() {
     assert(ok.ok === true, 'N3 matching forecast accepted', JSON.stringify(ok));
   }
 
-  // -- O: reference data is available without fabricating a forecast ------
+  // -- O: model prediction is real-data-backed or explicitly unavailable ---
   {
     const forecast = await fxForecastingEngine.predictFXMovements('USD', 'INR');
     assert(forecast.currencyPair === 'USD/INR' && forecast.currentRate > 0,
       'O1 USD/INR reference rate is available', `${forecast.currencyPair} @ ${forecast.currentRate}`);
-    assert(forecast.forecastAvailable === false && forecast.predictions === null
-      && forecast.confidencePct === null && forecast.trendDirection === 'UNAVAILABLE',
-    'O2 no forecast or confidence is fabricated without a validated provider');
+    if (forecast.forecastAvailable) {
+      assert(Number.isFinite(forecast.forecastRate) && forecast.historicalValidation?.observations >= 60,
+        'O2a model forecast includes real out-of-sample validation');
+      assert(forecast.confidenceType === 'historical_directional_accuracy_not_calibrated_probability',
+        'O2b forecast confidence is identified as historical accuracy, not a probability');
+    } else {
+      assert(Boolean(forecast.forecastUnavailableReason) && forecast.forecastRate === null,
+        'O2 model unavailability is explicit rather than replaced with fabricated predictions');
+    }
     const timing = await fxForecastingEngine.evaluateTiming('USD', 'INR');
     assert(timing.recommendation === 'EXECUTE_NOW' && timing.deferHours === 0,
-      'O3 transfer timing is not deferred based on an unvalidated forecast');
+      'O3 transfer timing is not deferred based on a model projection');
   }
 
   // -- P: context versioning ----------------------------------------------

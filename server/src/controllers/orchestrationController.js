@@ -624,13 +624,21 @@ exports.aiQuery = async (req, res, next) => {
         const amountLine = parsed.amount != null
           ? `\nAt the reference rate, ${formatCurrencyAmount(parsed.amount, source)} is about ${formatCurrencyAmount(parsed.amount * forecast.currentRate, destination)}.`
           : '';
-
+        const validationResult = forecast.historicalValidation;
+        const forecastLine = forecast.forecastAvailable
+          ? `\nModel estimate for the next daily observation: 1 ${source} = ${formatRateValue(forecast.forecastRate)} ${destination} (${forecast.forecastReturnPct >= 0 ? '+' : ''}${forecast.forecastReturnPct}%).`
+            + `\nHistorical direction accuracy: ${forecast.confidencePct == null ? 'not available' : `${forecast.confidencePct}%`} across ${validationResult?.observations || 0} rolling tests (a historical proxy, not a calibrated probability).`
+            + (forecast.predictionInterval?.lower_bound != null
+              ? `\nEmpirical 90% error band: ${formatRateValue(forecast.predictionInterval.lower_bound)}–${formatRateValue(forecast.predictionInterval.upper_bound)} ${destination} per ${source}.`
+              : '')
+            + `\nHistorical reliability gate: ${validationResult?.reliability_gate_passed ? 'passed' : 'not passed'}; this signal is experimental.`
+          : `\nModel estimate unavailable: ${forecast.forecastUnavailableReason}`;
         return send({
           success: true,
           requiresClarification: false,
           actionType: 'FX_FORECAST',
           parsed,
-          assistantMessage: `FX reference rate for ${source} → ${destination}\n1 ${source} = ${formatRateValue(forecast.currentRate)} ${destination}\nRate date: ${forecast.rateDate || 'unavailable'} (${forecast.rateSource || 'reference source'}).${amountLine}\n\nNo independently validated FX forecast provider is connected, so I can't provide a reliable future-rate prediction or confidence score.`,
+          assistantMessage: `FX outlook for ${source} → ${destination}\nCurrent reference rate: 1 ${source} = ${formatRateValue(forecast.currentRate)} ${destination}\nRate date: ${forecast.rateDate || 'unavailable'} (${forecast.rateSource || 'reference source'}).${forecastLine}${amountLine}\n\nHistorical reference rates can differ from Google's more frequently updated indicative rates. Model projections are not executable quotes or guarantees.`,
           data: forecast
         });
       } catch (err) {
@@ -681,12 +689,17 @@ exports.aiQuery = async (req, res, next) => {
 
         const currentRate = forecast.currentRate;
         const nowAmount = Number((amount * currentRate).toFixed(2));
+        const modelForecastLine = forecast.forecastAvailable
+          ? `\nModel estimate for the next daily observation: 1 ${source} = ${formatRateValue(forecast.forecastRate)} ${destination} (${forecast.forecastReturnPct >= 0 ? '+' : ''}${forecast.forecastReturnPct}%).`
+            + `\nHistorical direction accuracy: ${forecast.confidencePct == null ? 'not available' : `${forecast.confidencePct}%`} across ${forecast.historicalValidation?.observations || 0} rolling tests.`
+            + `\nReliability gate: ${forecast.historicalValidation?.reliabilityGatePassed ? 'passed' : 'not passed'}.`
+          : `\nModel estimate unavailable: ${forecast.forecastUnavailableReason}`;
         return send({
           success: true,
           requiresClarification: false,
           actionType: 'FX_TIMING_ANALYSIS',
           parsed,
-          assistantMessage: `Current reference rate for ${source} → ${destination}: 1 ${source} = ${formatRateValue(currentRate)} ${destination} (dated ${forecast.rateDate || 'unavailable'}).\nIf you convert now, ${amountIsAssumed ? `1 ${source}` : formatCurrencyAmount(amount, source)} is about ${formatCurrencyAmount(nowAmount, destination)} before provider fees and spreads.\n\nNo independently validated FX forecast provider is connected, so I can't estimate whether waiting will improve the rate. Waiting or converting now is a decision under uncertainty.`,
+          assistantMessage: `Current reference rate for ${source} → ${destination}: 1 ${source} = ${formatRateValue(currentRate)} ${destination} (dated ${forecast.rateDate || 'unavailable'}).\nIf you convert now, ${amountIsAssumed ? `1 ${source}` : formatCurrencyAmount(amount, source)} is about ${formatCurrencyAmount(nowAmount, destination)} before provider fees and spreads.${modelForecastLine}\n\nThis experimental model is not used to recommend waiting or to execute a transfer.`,
           data: {
             source,
             destination,
@@ -695,7 +708,11 @@ exports.aiQuery = async (req, res, next) => {
             currentRate,
             rateDate: forecast.rateDate,
             rateSource: forecast.rateSource,
-            forecastAvailable: false,
+            forecastAvailable: forecast.forecastAvailable,
+            forecastRate: forecast.forecastRate,
+            forecastReturnPct: forecast.forecastReturnPct,
+            confidencePct: forecast.confidencePct,
+            historicalValidation: forecast.historicalValidation,
             nowAmount,
           }
         });

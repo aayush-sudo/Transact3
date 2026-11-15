@@ -87,9 +87,11 @@ If a rail's pool is fully depleted or toggled off by an administrator, its eligi
 
 ## 📈 FX Analysis Engine
 
-The FX outlook uses cached daily reference rates from [Frankfurter](https://frankfurter.dev/). It displays dated historical observations for the same pair selected in the currency converter. These are not live executable quotes; Google may show a different indicative rate because its source and update cadence differ.
+The FX outlook uses dated daily reference rates from [Frankfurter](https://frankfurter.dev/) for the same pair selected in the converter. It sends those observations to the saved `HistGradientBoostingRegressor` in the Python ML service and plots the model's next-daily-observation estimate. These daily reference rates are not live executable quotes; Google may show a different, more frequently updated indicative rate.
 
-Transact3 does not currently have a validated FX forecasting provider. The outlook therefore does not display fabricated future-rate points, confidence scores, or backtest performance, and timing guidance does not defer a transfer based on an unvalidated prediction. Connecting a forecast service would require a provider with documented methodology and historical predictions suitable for out-of-sample validation; an online forecast by itself cannot guarantee future rates.
+The displayed “confidence” is the model's **historical directional hit rate** over a rolling holdout, not a calibrated probability that the next prediction will be correct. The UI also reports a Wilson interval for that hit rate and model MAE against a no-change baseline. The model's prediction interval uses empirical absolute errors from that holdout. Forecasts are experimental, and transfers are never delayed or executed based on them.
+
+**Current reliability check (USD/INR, Frankfurter observations from 2025-11-15 through 2026-11-15):** the model scored 36.31% directional accuracy over 336 next-observation tests (95% Wilson interval 31.35–41.58%). Its return MAE was 0.13429%, worse than the 0.12506% no-change baseline, and its out-of-sample R² was -0.07881. This is not reliable predictive performance. The loaded artifact's training data ends on 2021-08-30, so retraining on recent, verified market data and repeating a strictly chronological holdout evaluation is necessary before relying on its signals.
 
 ---
 
