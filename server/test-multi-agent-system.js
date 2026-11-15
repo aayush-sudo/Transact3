@@ -103,16 +103,18 @@ async function runTests() {
   const instantRail = health.rails.find(r => r.railId === 'REGIONAL_INSTANT');
   assert(instantRail && instantRail.status === 'AMOUNT_EXCEEDED', 'A2.3 Flags retail limit exceedance when $15,000 sent over Regional Instant ($1k cap)');
 
-  // Test 8: Dijkstra Multi-Hop Synthetic Rerouting
+  // Test 8: Never recommend an unverified FX route
   const reroutePlan = await liquidityAgent.planRerouteOrRebalance({
     sourceCurrency: 'USD',
     destinationCurrency: 'INR',
     amountUSD: 50000,
     congestedRailId: 'REGIONAL_INSTANT'
   });
-  assert(reroutePlan && reroutePlan.planId.startsWith('REBAL-'), 'A2.4 Generates rebalancing and rerouting plan');
-  assert(reroutePlan.graphPath && reroutePlan.graphPath.length >= 2, 'A2.5 Employs Dijkstra shortest path for optimal multi-currency route');
-  assert(reroutePlan.actionPlan != null, 'A2.6 Generates explainable diversion rationale');
+  assert(reroutePlan && reroutePlan.planId.startsWith('REBAL-'), 'A2.4 Generates a liquidity diagnosis');
+  assert(reroutePlan.status === 'NO_EXECUTABLE_ROUTE' && reroutePlan.graphPath.length === 0,
+    'A2.5 Withholds routes not confirmed by an execution provider');
+  assert(reroutePlan.actionPlan.includes('No payment provider confirms'),
+    'A2.6 Explains why no route was recommended');
 
   // Test 9: Pool Replenishment Simulation
   const replenish = await liquidityAgent.executePoolReplenishment('CARD_PAYOUT', 25000);

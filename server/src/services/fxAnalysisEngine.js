@@ -21,15 +21,18 @@ class FXAnalysisEngine {
         classification: 'EXECUTE_NOW',
         recommendation: 'Same-currency transfer requires no foreign exchange conversion.',
         isSufficientHistory: true,
-        source: 'SIMULATED',
+        source: 'IDENTITY',
         timestamp: new Date()
       };
     }
 
     // 1. Fetch current exchange rate
     const currentRatesData = await getExchangeRates(base);
-    const currentRate = (currentRatesData.conversion_rates && currentRatesData.conversion_rates[target]) || 1.0;
-    const source = currentRatesData.source || 'SIMULATED';
+    const currentRate = Number(currentRatesData.conversion_rates && currentRatesData.conversion_rates[target]);
+    if (!Number.isFinite(currentRate) || currentRate <= 0) {
+      throw new Error(`No reference rate is available for ${base}/${target}.`);
+    }
+    const source = currentRatesData.source;
 
     // 2. Fetch historical series (last 14 days)
     const historyData = await getHistoricalRates(base, target, 14);

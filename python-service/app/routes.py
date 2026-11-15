@@ -50,7 +50,7 @@ async def calculate_tca(req: TCACalculateRequest):
     return tca_service.calculate(req)
 
 # ====================================================================
-# 4. Multi-Hop Graph Routing (Dijkstra Shortest Path)
+# 4. Provider-Confirmed FX Route Discovery
 # ====================================================================
 class GraphPathRequest(BaseModel):
     source_currency: str = Field(..., example="USD")
@@ -72,13 +72,19 @@ async def get_graph_path(req: GraphPathRequest):
         }
     return {
         "success": True,
-        "message": "Optimal conversion graph calculated via Dijkstra's algorithm",
+        "message": "Provider-confirmed executable conversion route returned.",
         "data": result
     }
 
 @router.get("/routing/arbitrage-check", tags=["Graph Routing"])
 async def check_arbitrage():
     has_negative_cycle = smart_fx_router.check_arbitrage_cycle()
+    if has_negative_cycle is None:
+        return {
+            "success": False,
+            "has_arbitrage_opportunity": None,
+            "message": "Arbitrage analysis is unavailable without provider-confirmed executable route quotes."
+        }
     return {
         "success": True,
         "has_arbitrage_opportunity": has_negative_cycle,

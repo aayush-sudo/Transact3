@@ -1,124 +1,85 @@
 const axios = require('axios');
+const { SUPPORTED_CURRENCY_CODES, isCurrencySupported } = require('../config/currencies');
 
-// In-memory cache for FX rates with 60s TTL
+const FRANKFURTER_ENDPOINT = 'https://api.frankfurter.dev/v2';
+const CACHE_TTL_MS = 60 * 60 * 1000;
 const rateCache = new Map();
-const CACHE_TTL_MS = 60 * 1000;
-
-const DEFAULT_USD_RATES = {
-  USD: 1.0,
-  EUR: 0.92,
-  GBP: 0.79,
-  INR: 87.20,
-  BRL: 5.55,
-  AED: 3.6725,
-  SGD: 1.345,
-  AUD: 1.52,
-  CAD: 1.36,
-  JPY: 152.0
-};
 
 const getExchangeRates = async (baseCurrency = 'USD') => {
-  const base = (baseCurrency || 'USD').toUpperCase();
-  const cacheKey = `RATES_${base}`;
-  const cached = rateCache.get(cacheKey);
-
-  if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
-    return {
-      result: 'success',
-      base_code: base,
-      conversion_rates: cached.rates,
-      source: 'CACHED',
-      timestamp: new Date(cached.timestamp),
-      is_mock: cached.is_mock
-    };
+  const base = String(baseCurrency || 'USD').toUpperCase();
+  if (!isCurrencySupported(base)) {
+    throw new Error(`Unsupported base currency: ${base}`);
   }
 
-  const API_KEY = process.env.EXCHANGE_RATE_API_KEY;
-  if (API_KEY && API_KEY !== 'your_api_key_here') {
-    try {
-      const url = `https://v6.exchangerate-api.com/v6/${API_KEY}/latest/${base}`;
-      const response = await axios.get(url, { timeout: 4000 });
-      if (response.data && response.data.result === 'success' && response.data.conversion_rates) {
-        const rates = response.data.conversion_rates;
-        rateCache.set(cacheKey, { rates, timestamp: Date.now(), is_mock: false });
-        return {
-          result: 'success',
-          base_code: base,
-          conversion_rates: rates,
-          source: 'LIVE_API',
-          timestamp: new Date(),
-          is_mock: false
-        };
-      }
-    } catch (error) {
-      console.warn(`[CurrencyService] Live API call failed (${error.message}). Falling back to simulated rates.`);
+  const cached = rateCache.get(base);
+  if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  const quotes = SUPPORTED_CURRENCY_CODES.filter((code) => code !== base);
+  const response = await axios.get(`${FRANKFURTER_ENDPOINT}/rates`, {
+    params: { base, quotes: quotes.join(',') },
+    timeout: 5000
+  });
+  const rows = Array.isArray(response.data) ? response.data : [];
+  const rates = { [base]: 1 };
+  let rateDate = null;
+
+  for (const row of rows) {
+    const quote = String(row.quote || '').toUpperCase();
+    const rate = Number(row.rate);
+    if (row.base === base && isCurrencySupported(quote) && Number.isFinite(rate) && rate > 0) {
+      rates[quote] = rate;
+      rateDate = row.date || rateDate;
     }
   }
 
-  // Realistic simulated rates derived from realistic baseline
-  const rates = {};
-  const baseToUSD = DEFAULT_USD_RATES[base] || 1.0;
-  for (const [curr, usdRate] of Object.entries(DEFAULT_USD_RATES)) {
-    rates[curr] = Number((usdRate / baseToUSD).toFixed(4));
+  if (Object.keys(rates).length < 2 || !rateDate) {
+    throw new Error(`No current reference rates are available for ${base}.`);
   }
 
-  rateCache.set(cacheKey, { rates, timestamp: Date.now(), is_mock: true });
-  return {
+  const data = {
     result: 'success',
     base_code: base,
     conversion_rates: rates,
-    source: 'SIMULATED',
-    timestamp: new Date(),
-    is_mock: true
+    source: 'FRANKFURTER_REFERENCE',
+    timestamp: new Date(`${rateDate}T00:00:00.000Z`),
+    rateDate,
+    is_mock: false
   };
+  rateCache.set(base, { data, cachedAt: Date.now() });
+  return data;
 };
 
 const getHistoricalRates = async (baseCurrency, targetCurrency, days = 14) => {
-  const base = (baseCurrency || 'USD').toUpperCase();
-  const target = (targetCurrency || 'EUR').toUpperCase();
-
-  try {
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(endDate.getDate() - days);
-
-    const endStr = endDate.toISOString().split('T')[0];
-    const startStr = startDate.toISOString().split('T')[0];
-
-    const url = `https://api.frankfurter.dev/v1/${startStr}..${endStr}?base=${base}&symbols=${target}`;
-    const response = await axios.get(url, { timeout: 3500 });
-
-    if (response.data && response.data.rates && Object.keys(response.data.rates).length > 0) {
-      return {
-        result: 'success',
-        base_code: base,
-        target_code: target,
-        conversion_rates: response.data.rates,
-        source: 'LIVE_API',
-        is_mock: false
-      };
-    }
-    throw new Error('Invalid or empty response from Frankfurter API');
-  } catch (error) {
-    const latestRates = await getExchangeRates(base);
-    const anchorRate = (latestRates.conversion_rates && latestRates.conversion_rates[target]) || 1.0;
-    return mockHistoricalData(base, target, days, anchorRate);
+  const base = String(baseCurrency || 'USD').toUpperCase();
+  const target = String(targetCurrency || 'EUR').toUpperCase();
+  if (!isCurrencySupported(base) || !isCurrencySupported(target)) {
+    throw new Error(`Unsupported currency pair: ${base}/${target}`);
   }
-};
 
-const mockHistoricalData = (base, target, days, anchorRate) => {
+  const count = Math.max(1, Math.min(365, Math.floor(Number(days) || 14)));
+  const end = new Date();
+  const start = new Date(end);
+  start.setUTCDate(start.getUTCDate() - count);
+  const from = start.toISOString().slice(0, 10);
+  const to = end.toISOString().slice(0, 10);
+  const response = await axios.get(`${FRANKFURTER_ENDPOINT}/rates`, {
+    params: { base, quotes: target, from, to },
+    timeout: 5000
+  });
+  const rows = Array.isArray(response.data) ? response.data : [];
   const rates = {};
-  let currentRate = anchorRate;
-  const trend = (Math.random() - 0.48) * 0.001 * anchorRate;
 
-  for (let i = 0; i < days; i++) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().split('T')[0];
+  for (const row of rows) {
+    const rate = Number(row.rate);
+    if (row.base === base && String(row.quote || '').toUpperCase() === target && Number.isFinite(rate) && rate > 0) {
+      rates[row.date] = { [target]: rate };
+    }
+  }
 
-    rates[dateStr] = { [target]: Number(currentRate.toFixed(4)) };
-    const volatility = anchorRate * 0.003;
-    currentRate = Math.max(0.0001, currentRate - ((Math.random() * 2 - 1) * volatility) - trend);
+  if (Object.keys(rates).length === 0) {
+    throw new Error(`No historical reference rates are available for ${base}/${target}.`);
   }
 
   return {
@@ -126,8 +87,8 @@ const mockHistoricalData = (base, target, days, anchorRate) => {
     base_code: base,
     target_code: target,
     conversion_rates: rates,
-    source: 'SIMULATED',
-    is_mock: true
+    source: 'FRANKFURTER_REFERENCE',
+    is_mock: false
   };
 };
 
@@ -139,6 +100,5 @@ const formatAmount = (amount, currencyCode) => {
 module.exports = {
   getExchangeRates,
   getHistoricalRates,
-  formatAmount,
-  DEFAULT_USD_RATES
+  formatAmount
 };

@@ -60,7 +60,10 @@ class MultiRailOrchestrationEngine {
     // Rates to USD for liquidity & fee normalization
     const usdRatesData = await getExchangeRates('USD');
     const usdRates = usdRatesData.conversion_rates || {};
-    const srcVsUSD = usdRates[srcCurr] || 1.0;
+    const srcVsUSD = Number(usdRates[srcCurr]);
+    if (!Number.isFinite(srcVsUSD) || srcVsUSD <= 0) {
+      throw new Error(`No USD reference rate is available for ${srcCurr}.`);
+    }
 
     // 3. Establish amount and instant-rail feasibility before scoring routes.
     let sourceAmount = numAmount;

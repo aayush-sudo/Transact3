@@ -86,6 +86,7 @@ Return a single JSON object with exactly these keys:
   "paymentMode": "SEND_AMOUNT" | "RECIPIENT_GETS",
   "mentionedProvider": string or null,
   "recipientName": string or null,
+  "recipientEmail": string or null,
   "explanation": "one or two friendly sentences describing the request",
   "missingFields": ["amount" | "sourceCurrency" | "destinationCurrency"],
   "isClarification": boolean
@@ -125,6 +126,7 @@ Entity extraction rules:
 - "euros" → EUR.
 - "pounds" → GBP.
 - Extract recipient name if user mentions sending to a person.
+- Extract a recipient email address exactly as written, if present.
 - If user says "recipient should receive exactly X", set amountType to RECIPIENT_AMOUNT and paymentMode to RECIPIENT_GETS.
 - Otherwise amountType is SENDER_AMOUNT and paymentMode is SEND_AMOUNT.
 
@@ -148,6 +150,15 @@ const sanitizeString = (value, maxLength = 500) => {
   if (typeof value !== 'string') return '';
   return value.replace(/\s+/g, ' ').trim().slice(0, maxLength);
 };
+
+const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+const detectRecipientEmail = (prompt) => {
+  const match = String(prompt || '').match(EMAIL_PATTERN);
+  const email = match ? match[0].toLowerCase() : null;
+  return email && email.length <= 254 ? email : null;
+};
+
+const redactEmailAddresses = (text) => String(text || '').replace(EMAIL_PATTERN, '[recipient email]');
 
 const normalizeCurrency = (value) => {
   if (typeof value !== 'string') return null;
@@ -430,6 +441,7 @@ const fallbackParse = (prompt, context = null) => {
     missingFields: [],
     mentionedProvider: detectProvider(prompt),
     recipientName: null,
+    recipientEmail: detectRecipientEmail(prompt),
     isClarification: /^(\d+(?:[\.,]\d+)?|USD|EUR|GBP|INR|SGD|AED|AUD|CAD|JPY|BRL|cheapest|fastest|balanced)$/i.test(prompt.trim())
   };
 
@@ -563,6 +575,7 @@ const validateIntent = (rawIntent, options = {}) => {
     missingFields: [],
     mentionedProvider: sanitizeString(raw.mentionedProvider, 80) || null,
     recipientName: sanitizeString(raw.recipientName, 80) || null,
+    recipientEmail: detectRecipientEmail(String(raw.recipientEmail || '')),
     isClarification: Boolean(raw.isClarification)
   };
 
@@ -644,7 +657,7 @@ const callGroq = async ({ prompt, history, apiKey, model }) => {
         : '';
       return {
         role,
-        content: `${sanitizeString(message.content, 1200)}${contextNote}`
+        content: `${redactEmailAddresses(sanitizeString(message.content, 1200))}${contextNote}`
       };
     });
 
@@ -658,7 +671,7 @@ const callGroq = async ({ prompt, history, apiKey, model }) => {
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         ...historyMessages,
-        { role: 'user', content: prompt }
+        { role: 'user', content: redactEmailAddresses(prompt) }
       ]
     },
     {
@@ -759,7 +772,7 @@ const extractIntent = async (prompt, options = {}) => {
     const requestFn = options.requestFn || callGroq;
     let response;
     try {
-      response = await requestFn({ prompt: safePrompt, history, apiKey, model });
+      response = await requestFn({ prompt: redactEmailAddresses(safePrompt), history, apiKey, model });
     } catch (error) {
       // A retired model returns 404 from Groq. Retry once with the configured
       // fallback model instead of silently degrading to keyword matching.
@@ -768,7 +781,7 @@ const extractIntent = async (prompt, options = {}) => {
           || process.env.GROQ_FALLBACK_MODEL
           || DEFAULT_GROQ_FALLBACK_MODEL;
         if (fallbackModel && fallbackModel !== model) {
-          response = await requestFn({ prompt: safePrompt, history, apiKey, model: fallbackModel });
+          response = await requestFn({ prompt: redactEmailAddresses(safePrompt), history, apiKey, model: fallbackModel });
         } else {
           throw error;
         }
@@ -778,6 +791,7 @@ const extractIntent = async (prompt, options = {}) => {
     }
     const rawIntent = parseGroqJson(response);
     const grounded = groundLlmIntent(rawIntent, safePrompt, context);
+    grounded.recipientEmail = fallback.parsed.recipientEmail;
     const llmValidation = validateIntent(grounded, {
       ambiguousCurrency: fallback.ambiguousCurrency,
       invalidCurrencyCode: fallback.invalidCurrencyCode
@@ -934,6 +948,8 @@ module.exports = {
   CURRENCY_NAMES,
   SYSTEM_PROMPT,
   detectAmount,
+  detectRecipientEmail,
+  redactEmailAddresses,
   isCorrectionMessage,
   detectPriority,
   detectCurrencyMentions,

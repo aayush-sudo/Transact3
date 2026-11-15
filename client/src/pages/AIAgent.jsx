@@ -24,6 +24,7 @@ import {
 import PaymentSchedulingModal from '../components/PaymentSchedulingModal';
 
 const CONVERSATION_STORAGE_KEY = 'transact3.ai.conversation';
+const EMAIL_ADDRESS_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const GREETING_MESSAGE = {
   role: 'assistant',
   content: "Hi! I'm your Transact3 AI Transfer Assistant. I can help you with transfers, wallet balance, currency conversion, FX forecasts, transaction history, and our specialized Multi-Agent Society (FX Mandates, Rail Saturation, & Compliance). Just ask!"
@@ -162,12 +163,34 @@ const AIAgent = () => {
     // If asking for recipient email
     if (askingForRecipient) {
       const email = userPrompt.trim();
+      if (!EMAIL_ADDRESS_PATTERN.test(email)) {
+        setMessages((prev) => [...prev, {
+          role: 'assistant',
+          content: 'Please enter a valid recipient email address, or choose one of the saved recipients.'
+        }]);
+        return;
+      }
       setRecipientEmail(email);
       setAskingForRecipient(false);
+      setCurrentParams((current) => current ? { ...current, receiverEmail: email } : current);
       setMessages((prev) => [...prev, {
         role: 'assistant',
         content: `Got it! Recipient set to: ${email}. Opening payment review & quote...`
       }]);
+      setConversationHistory((prev) => [
+        ...prev,
+        { role: 'user', content: userPrompt },
+        {
+          role: 'assistant',
+          content: 'Recipient selected for the pending transfer.',
+          parsed: {
+            ...(currentParams || {}),
+            intent: 'PAYMENT_SCHEDULING',
+            recipientEmail: email
+          },
+          actionType: 'TRANSFER'
+        }
+      ].slice(-20));
       setPendingSchedule(true);
       return;
     }
@@ -219,11 +242,17 @@ const AIAgent = () => {
 
       if (data.actionType === 'TRANSFER' && data.routeAnalysis) {
         const route = data.routeAnalysis.recommendedRoute;
+        const parsedEmail = typeof data.parsed?.recipientEmail === 'string'
+          ? data.parsed.recipientEmail
+          : '';
+        setRecipientEmail(parsedEmail);
+        setAskingForRecipient(false);
         if (route) {
           assistantMessage += `\n\nRecommended Route: ${route.name} - Fee: $${route.feeUSD}, Delivery: ${route.estimatedDelivery}`;
         }
         setCurrentParams({
           ...data.parsed,
+          receiverEmail: parsedEmail,
           selectedRailId: route?.id || 'REGIONAL_INSTANT'
         });
         setFollowUpSuggestions([
@@ -316,10 +345,24 @@ const AIAgent = () => {
   const handleSelectRecipient = (email) => {
     setRecipientEmail(email);
     setAskingForRecipient(false);
+    setCurrentParams((current) => current ? { ...current, receiverEmail: email } : current);
     setMessages((prev) => [...prev, {
       role: 'assistant',
       content: `Recipient set to: ${email}. Opening payment review and quote...`
     }]);
+    setConversationHistory((prev) => [
+      ...prev,
+      {
+        role: 'assistant',
+        content: 'Recipient selected for the pending transfer.',
+        parsed: {
+          ...(currentParams || {}),
+          intent: 'PAYMENT_SCHEDULING',
+          recipientEmail: email
+        },
+        actionType: 'TRANSFER'
+      }
+    ].slice(-20));
     setPendingSchedule(true);
   };
 
@@ -430,7 +473,7 @@ const AIAgent = () => {
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-300 mt-2 leading-relaxed">
-                  Monitors rail saturation ratio S_R. Synthesizes multi-hop conversion paths and virtual pool replenishment.
+                  Monitors modeled rail capacity. Intermediate routes stay hidden unless a payment provider confirms executable quotes and availability.
                 </p>
               </div>
               <button
@@ -536,6 +579,7 @@ const AIAgent = () => {
                       <p className="text-xs font-bold text-emerald-900 mb-1">Recommended Settlement Route</p>
                       <p className="text-sm font-semibold text-slate-900">{msg.data.routeAnalysis.recommendedRoute.name}</p>
                       <p className="text-xs text-slate-600">Fee: ${msg.data.routeAnalysis.recommendedRoute.feeUSD} · Delivery: {msg.data.routeAnalysis.recommendedRoute.estimatedDelivery}</p>
+                      <p className="mt-1 text-[10px] text-slate-500">Modeled estimate; not a binding quote from a connected payment provider.</p>
                       <button
                         type="button"
                         onClick={handleScheduleTransfer}
@@ -543,6 +587,29 @@ const AIAgent = () => {
                       >
                         Schedule Transfer <ArrowRight size={13} />
                       </button>
+                    </div>
+                  )}
+
+                  {msg.actionType === 'TRANSFER' && msg.data?.routeComparison && (
+                    <div className="mt-2.5 rounded-xl border border-sky-200 bg-sky-50 p-3.5 shadow-sm">
+                      <p className="text-xs font-bold text-sky-950">Direct vs. intermediate-currency route</p>
+                      {msg.data.routeComparison.directReferenceQuote ? (
+                        <p className="mt-1 text-xs text-slate-700">
+                          Direct reference estimate: {Number(msg.data.routeComparison.directReferenceQuote.sourceAmount).toLocaleString()} {msg.data.routeComparison.directReferenceQuote.sourceCurrency}
+                          {' → '}{Number(msg.data.routeComparison.directReferenceQuote.destinationAmount).toLocaleString()} {msg.data.routeComparison.directReferenceQuote.destinationCurrency}
+                          {' · rate '}{Number(msg.data.routeComparison.directReferenceQuote.rate).toPrecision(6)}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-xs text-slate-700">A current direct reference rate is unavailable.</p>
+                      )}
+                      <p className="mt-1 text-xs text-slate-600">
+                        Hop comparison withheld: reference rates do not confirm per-leg provider fees, corridor availability, or settlement. No third-currency route is recommended.
+                      </p>
+                      <p className="mt-1 text-[10px] text-slate-500">
+                        Reference rate date: {msg.data.routeComparison.directReferenceQuote?.rateTimestamp
+                          ? new Date(msg.data.routeComparison.directReferenceQuote.rateTimestamp).toLocaleDateString()
+                          : 'unavailable'} · not a binding transfer quote
+                      </p>
                     </div>
                   )}
 
@@ -615,7 +682,7 @@ const AIAgent = () => {
                           </div>
                         ))}
                       </div>
-                      {msg.data.data.plan?.isSyntheticMultiHop && (
+                      {msg.data.data.plan?.hasProviderConfirmedMultiHop && (
                         <div className="mt-2 p-2 rounded-lg bg-white border border-teal-300 text-xs text-teal-950 font-medium">
                           ⚡ Dijkstra Graph Rerouting: {msg.data.data.plan.graphPath?.join(' → ')}
                         </div>

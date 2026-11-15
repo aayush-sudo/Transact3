@@ -19,6 +19,7 @@
 const {
   detectCurrencyMentions,
   detectAmount,
+  detectRecipientEmail,
   normalizeCurrency,
   isCorrectionMessage,
   extractIntent
@@ -183,6 +184,7 @@ const buildActiveContext = ({ history = [], prompt = '' } = {}) => {
           destinationCurrency,
           priority: message.parsed.priority || 'BALANCED',
           paymentMode: message.parsed.paymentMode || 'SEND_AMOUNT',
+          recipientEmail: message.parsed.recipientEmail || null,
           referencedPairs,
           messageIndex: i,
           distance,
@@ -364,6 +366,17 @@ const mergeIntentWithContext = ({ prompt, intentResult, context }) => {
     }));
   } else if (explicitPairs.length === 0 && !reset && active && active.referencedPairs && active.referencedPairs.length > 1) {
     parsed.referencedPairs = active.referencedPairs.map((pair) => ({ ...pair }));
+  }
+
+  const recipientEmail = detectRecipientEmail(prompt);
+  if (recipientEmail) {
+    parsed.recipientEmail = recipientEmail;
+  } else if (!reset && active && active.recipientEmail
+    && (treatAsClarification || correction || (followUp && /\b(?:same recipient|same person|same email)\b/i.test(prompt)))) {
+    parsed.recipientEmail = active.recipientEmail;
+    fieldsRetained.push('recipientEmail');
+  } else if (originalIntent !== 'CLARIFICATION_RESPONSE' && !followUp) {
+    parsed.recipientEmail = null;
   }
 
   parsed.operationTimestamp = new Date().toISOString();

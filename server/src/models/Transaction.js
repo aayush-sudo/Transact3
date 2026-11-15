@@ -73,7 +73,7 @@ const TransactionSchema = new mongoose.Schema({
   },
   fxSource: {
     type: String,
-    enum: ['LIVE_API', 'CACHED', 'SIMULATED'],
+    enum: ['LIVE_API', 'CACHED', 'SIMULATED', 'FRANKFURTER_REFERENCE', 'IDENTITY'],
     default: 'LIVE_API',
   },
   fxSpreadBps: {

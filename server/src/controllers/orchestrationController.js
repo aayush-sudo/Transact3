@@ -337,12 +337,11 @@ exports.aiQuery = async (req, res, next) => {
         msg += `   • Status: ${r.status} - ${r.recommendation}\n\n`;
       });
 
-      if (plan.isSyntheticMultiHop) {
-        msg += `⚡ Graph Router Recommendation:\n`;
-        msg += `Direct route faces pool congestion. Dijkstra algorithm synthesized an optimal synthetic multi-hop path:\n`;
-        msg += `👉 ${plan.graphPath.join(' -> ')} (Effective Yield: ${plan.graphEffectiveRate}, Est Fee: ${plan.graphEstimatedFeeUSD} USD).\n`;
+      if (plan.hasProviderConfirmedMultiHop) {
+        msg += `⚡ Provider-confirmed alternate route:\n`;
+        msg += `👉 ${plan.graphPath.join(' -> ')} (Reference yield: ${plan.graphEffectiveRate}).\n`;
       } else {
-        msg += `System capacity is sufficient for standard single-hop dispatch.`;
+        msg += `No provider-confirmed alternate route is available, so I won't recommend a multi-hop transfer.`;
       }
 
       return send({
@@ -450,8 +449,11 @@ exports.aiQuery = async (req, res, next) => {
         const holdings = portfolio.holdings.map((holding) => {
           const code = holding.currency.toUpperCase();
           const amount = Number(holding.amount);
-          const rateToUSD = rates[code] || 1.0;
-          const valueInUSD = rateToUSD > 0 ? (amount / rateToUSD) : amount;
+          const rateToUSD = Number(rates[code]);
+          if (!Number.isFinite(rateToUSD) || rateToUSD <= 0) {
+            throw new Error(`No USD reference rate is available for ${code}.`);
+          }
+          const valueInUSD = amount / rateToUSD;
           totalValueUSD += valueInUSD;
           return { currency: code, amount: amount.toFixed(2), valueUSD: valueInUSD.toFixed(2) };
         });
@@ -1039,6 +1041,31 @@ Model: Transact3 FX forecasting engine (existing trained pipeline, exponential s
       providerComparison,
       parsed
     });
+    const directRate = await fxRateEngine.getIndicativeConversion(
+      parsed.sourceCurrency,
+      parsed.destinationCurrency
+    );
+    const sourcePrecision = currencyConfig[parsed.sourceCurrency]?.precision ?? 2;
+    const destinationPrecision = currencyConfig[parsed.destinationCurrency]?.precision ?? 2;
+    const recipientGetsAmount = parsed.paymentMode === 'RECIPIENT_GETS';
+    const routeComparison = {
+      status: 'EXECUTABLE_HOP_COMPARISON_UNAVAILABLE',
+      directReferenceQuote: directRate ? {
+        sourceAmount: Number((recipientGetsAmount
+          ? parsed.amount / directRate.rate
+          : parsed.amount).toFixed(sourcePrecision)),
+        sourceCurrency: parsed.sourceCurrency,
+        destinationAmount: Number((recipientGetsAmount
+          ? parsed.amount
+          : parsed.amount * directRate.rate).toFixed(destinationPrecision)),
+        destinationCurrency: parsed.destinationCurrency,
+        rate: directRate.rate,
+        rateSource: directRate.rateSource,
+        rateTimestamp: toIsoTimestamp(directRate.timestamp)
+      } : null,
+      hopRoutes: [],
+      message: 'A reference FX rate does not confirm route availability, leg-level fees, or settlement. No intermediate-currency route is recommended until a payment provider supplies executable quotes.'
+    };
 
     return send({
       success: true,
@@ -1052,12 +1079,14 @@ Model: Transact3 FX forecasting engine (existing trained pipeline, exponential s
         destinationCurrency: parsed.destinationCurrency,
         priority: parsed.priority,
         paymentMode: parsed.paymentMode,
+        recipientEmail: parsed.recipientEmail || null,
         explanation: parsed.explanation,
         missingFields: [],
         operationTimestamp: parsed.operationTimestamp,
         contextVersion: parsed.contextVersion
       },
       routeAnalysis,
+      routeComparison,
       providerQuotes,
       assistantMessage: explanation.short
     });

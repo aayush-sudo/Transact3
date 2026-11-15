@@ -87,7 +87,7 @@ If a rail's pool is fully depleted or toggled off by an administrator, its eligi
 
 ## 📈 FX Analysis Engine
 
-The FX intelligence service calculates mid-market conversion rates using cached live feeds from `ExchangeRate-API` (with deterministic fallback):
+The FX intelligence service uses cached daily reference rates from [Frankfurter](https://frankfurter.dev/), which aggregates published central-bank and other official rates. These are indicative reference rates, not live executable provider quotes. If the reference-rate service is unavailable, the application reports the error rather than substituting hard-coded rates.
 
 1. **Spot Rate**: Clean mid-market exchange rate between any of the 10 supported currencies.
 2. **Simple Moving Average (SMA-20)**: Rolling trend indicator derived from recent 24-hour rate distributions.
@@ -102,7 +102,7 @@ The FX intelligence service calculates mid-market conversion rates using cached 
 
 ## 💧 Liquidity Management & Controlled Failure Testing
 
-Transact3 includes a persistent liquidity pool system tracked in MongoDB via the `RailSetting` model:
+Transact3 includes a modeled liquidity pool system tracked in MongoDB via the `RailSetting` model:
 - Each rail has a configured total capacity and current available balance in USD.
 - When an atomic payment settles, the rail's available liquidity is decremented by the principal USD amount.
 - **Admin Controls**: Administrators can toggle rails on/off or replenish liquidity via the Admin Portal (`/admin`).
@@ -110,6 +110,8 @@ Transact3 includes a persistent liquidity pool system tracked in MongoDB via the
   1. An administrator can adjust configured route availability in the Admin Portal.
   2. The comparison excludes a route when its configured capacity is insufficient.
   3. The results explain the exclusion and rank the remaining available options.
+
+The current system does not connect to a payment provider for real transfer execution. It therefore does not recommend intermediate-currency hops: reference FX data cannot confirm route availability, per-leg fees, or settlement. A real direct-versus-hop comparison requires executable quotes for each route from an integrated provider.
 
 ---
 

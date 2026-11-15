@@ -21,6 +21,7 @@ const {
 } = require('./src/services/aiConversationContext');
 const fxForecastingEngine = require('./src/services/fxForecastingEngine');
 const fxRateEngine = require('./src/services/fxRateEngine');
+const { redactEmailAddresses } = require('./src/services/aiAgentService');
 
 const FINANCIAL_ACTIONS = new Set([
   'TRANSFER',
@@ -214,6 +215,9 @@ async function run() {
     const sgdInr = await fxRateEngine.getIndicativeConversion('SGD', 'INR');
     const inrSgd = await fxRateEngine.getIndicativeConversion('INR', 'SGD');
     assert(sgdInr && sgdInr.rate > 10, 'M1 SGD->INR is INR-per-SGD (not inverted)', sgdInr && String(sgdInr.rate));
+    assert(sgdInr && sgdInr.rateSource === 'FRANKFURTER_REFERENCE',
+      'M1a exchange-rate source is the free reference-rate provider',
+      sgdInr && String(sgdInr.rateSource));
     assert(inrSgd && inrSgd.rate < 0.1, 'M2 INR->SGD is SGD-per-INR (not inverted)', inrSgd && String(inrSgd.rate));
     assert(Math.abs((100 * sgdInr.rate) - (100 / inrSgd.rate)) / (100 * sgdInr.rate) < 0.01,
       'M3 inverse quote is mathematically consistent (within provider rounding)', `${100 * sgdInr.rate} vs ${100 / inrSgd.rate}`);
@@ -261,6 +265,31 @@ async function run() {
 
     const ctx = buildActiveContext({ history: c.history, prompt: 'Reset the context.' });
     assert(ctx.reset === true && ctx.active === null, 'P2 reset message clears active context');
+  }
+
+  // -- Q: transfer email extraction and recipient memory ------------------
+  {
+    const c = makeConversation('test-q');
+    const t1 = await c.ask('Send 1,000 INR to USD to demouser@gmail.com');
+    assert(t1.effectiveActionType === 'TRANSFER', 'Q1 recipient transfer routes to TRANSFER', t1.effectiveActionType);
+    assert(t1.parsed.amount === 1000 && pairOf(t1) === 'INR/USD',
+      'Q2 amount and currency direction are extracted from the request',
+      `${t1.parsed.amount} ${pairOf(t1)}`);
+    assert(t1.parsed.recipientEmail === 'demouser@gmail.com',
+      'Q3 recipient email is extracted without an extra recipient prompt',
+      String(t1.parsed.recipientEmail));
+
+    const t2 = await c.ask('Make it 2,000.');
+    assert(t2.parsed.amount === 2000, 'Q4 amount correction is retained as a transfer', String(t2.parsed.amount));
+    assert(t2.parsed.recipientEmail === 'demouser@gmail.com',
+      'Q5 recipient email is preserved across a transfer clarification',
+      String(t2.parsed.recipientEmail));
+    assert(redactEmailAddresses('Send to demouser@gmail.com') === 'Send to [recipient email]',
+      'Q6 recipient email is redacted before model requests');
+
+    const noRecipient = await resolveAgentTurn({ prompt: 'Send 100 INR to USD' });
+    assert(noRecipient.parsed.recipientEmail == null,
+      'Q7 no recipient is invented when the request omits an email');
   }
 
   console.log('\n============================================================');

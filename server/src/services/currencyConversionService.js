@@ -13,7 +13,11 @@ async function createCurrencyConversionQuote(sourceCurrency, destinationCurrency
     throw new Error(`No exchange rate is available for ${sourceCurrency}/${destinationCurrency}.`);
   }
 
-  const sourceAmountUSD = amount / (Number(usdRateData.conversion_rates?.[sourceCurrency]) || 1);
+  const usdReferenceRate = Number(usdRateData.conversion_rates?.[sourceCurrency]);
+  if (!Number.isFinite(usdReferenceRate) || usdReferenceRate <= 0) {
+    throw new Error(`No USD reference rate is available for ${sourceCurrency}.`);
+  }
+  const sourceAmountUSD = amount / usdReferenceRate;
   const instantEligibility = getInstantEligibility(sourceCurrency, destinationCurrency, sourceAmountUSD);
   const selectedRail = instantEligibility.eligible ? 'INSTANT_PAYMENT_LINK' : 'SWIFT_CORRESPONDENT';
   const fxQuote = await fxRateEngine.calculateFXQuoteAsync(sourceCurrency, destinationCurrency, amount, {

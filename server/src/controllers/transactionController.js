@@ -86,7 +86,7 @@ exports.createTransactionQuote = async (req, res, next) => {
       });
     }
 
-    // 5. Smart Multi-Hop FX Graph Routing (Dijkstra)
+    // 5. Optional provider-confirmed route; reference-only data never invents hops.
     const graphRoute = await graphRouterService.findOptimalRoute(sourceCurrency, destinationCurrency);
 
     // 6. Run Multi-Rail Orchestration Evaluation
@@ -467,13 +467,20 @@ exports.screenCompliance = async (req, res, next) => {
   }
 };
 
-// @desc    Calculate optimal Dijkstra multi-hop graph path
+// @desc    Return a provider-confirmed executable FX route when available
 // @route   POST /api/routing/graph-path
 // @access  Public / Private
 exports.getGraphPath = async (req, res, next) => {
   try {
     const { sourceCurrency = 'USD', destinationCurrency = 'INR', maxLatencySeconds = 300 } = req.body;
     const result = await graphRouterService.findOptimalRoute(sourceCurrency, destinationCurrency, maxLatencySeconds);
+    if (!result || !result.executable) {
+      return res.status(503).json({
+        success: false,
+        message: result?.reason || 'No provider-confirmed executable route is available for this corridor.',
+        data: null
+      });
+    }
     res.status(200).json({ success: true, data: result });
   } catch (err) {
     next(err);

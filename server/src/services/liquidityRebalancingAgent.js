@@ -6,8 +6,8 @@ const RAIL_CONFIG = require('../config/railConfig');
 /**
  * LiquidityRebalancingAgent
  * Autonomous Agent 2: Monitors rail liquidity saturation, detects corridor bottlenecks,
- * synthesizes alternative multi-hop conversion paths via Dijkstra's graph optimization,
- * and proposes proactive pool rebalancing strategies.
+ * assesses rail liquidity and withholds rerouting recommendations unless a payment
+ * provider supplies executable, leg-by-leg quotes.
  */
 class LiquidityRebalancingAgent {
   constructor() {
@@ -59,7 +59,7 @@ class LiquidityRebalancingAgent {
         bottleneckCount += 1;
       } else if (saturation >= this.saturationThresholdCritical || avail < amt * 1.2) {
         status = 'CRITICAL_CONGESTION';
-        recommendation = `High saturation (${(saturation * 100).toFixed(1)}%). Impending settlement failure; synthetic multi-hop failover advised.`;
+        recommendation = `High saturation (${(saturation * 100).toFixed(1)}%). No provider-confirmed alternate route is available; settlement may fail.`;
         bottleneckCount += 1;
       } else if (saturation >= this.saturationThresholdWarning) {
         status = 'ELEVATED_LOAD';
@@ -90,8 +90,7 @@ class LiquidityRebalancingAgent {
   }
 
   /**
-   * Generates a synthetic multi-hop graph rerouting plan using Dijkstra's algorithm
-   * when direct corridors or rails face congestion.
+   * Requests a provider-confirmed rerouting plan when a direct rail is congested.
    */
   async planRerouteOrRebalance({
     sourceCurrency = 'USD',
@@ -106,10 +105,11 @@ class LiquidityRebalancingAgent {
     const health = await this.assessRailHealth(amt);
     const congestedRail = health.rails.find(r => r.railId === congestedRailId) || health.rails[0];
 
-    // Query Dijkstra Multi-Hop Graph Router for alternative path
+    // FX reference rates alone cannot confirm an executable settlement route.
     const graphResult = await graphRouterService.findOptimalRoute(src, dst, 300);
 
-    const hasAlternativeMultiHop = Boolean(graphResult && (graphResult.is_multi_hop || (graphResult.path && graphResult.path.length > 2)));
+    const hasProviderConfirmedMultiHop = Boolean(graphResult && graphResult.executable
+      && (graphResult.is_multi_hop || (graphResult.path && graphResult.path.length > 2)));
 
     const recommendation = {
       planId: `REBAL-${Date.now().toString(36).toUpperCase()}`,
@@ -120,27 +120,31 @@ class LiquidityRebalancingAgent {
       primaryRailId: congestedRailId,
       primaryRailSaturationPct: congestedRail ? congestedRail.saturationPct : 0,
       congestionDetected: congestedRail ? (congestedRail.status === 'CRITICAL_CONGESTION' || congestedRail.status === 'AMOUNT_EXCEEDED') : false,
-      graphPath: graphResult ? graphResult.path : [src, dst],
-      isSyntheticMultiHop: hasAlternativeMultiHop,
-      graphEffectiveRate: graphResult ? (graphResult.effective_rate || graphResult.effectiveRate) : null,
-      graphEstimatedFeeBps: graphResult ? (graphResult.net_fee_bps || 15) : 15,
-      hops: graphResult ? graphResult.hops : [],
-      actionPlan: hasAlternativeMultiHop
-        ? `AUTOMATED_GRAPH_DIVERSION: Reroute traffic via synthetic multi-hop ${graphResult.path.join(' -> ')} to bypass congested pool ${congestedRailId}.`
-        : `LIQUIDITY_BUFFER_INJECTION: Inject $${(amt * 1.5).toLocaleString()} USD virtual buffer into ${congestedRailId} to alleviate saturation.`,
-      status: 'PLAN_READY'
+      graphPath: graphResult && graphResult.executable ? graphResult.path : [],
+      hasProviderConfirmedMultiHop,
+      graphEffectiveRate: graphResult && graphResult.executable
+        ? (graphResult.effective_rate || graphResult.effectiveRate)
+        : null,
+      graphEstimatedFeeBps: graphResult && graphResult.executable ? graphResult.net_fee_bps : null,
+      hops: graphResult && graphResult.executable ? graphResult.hops : [],
+      actionPlan: hasProviderConfirmedMultiHop
+        ? `PROVIDER_CONFIRMED_REROUTE: Use the verified ${graphResult.path.join(' -> ')} route to bypass congested pool ${congestedRailId}.`
+        : 'NO_EXECUTABLE_REROUTE: No payment provider confirms an executable alternate route for this corridor.',
+      status: hasProviderConfirmedMultiHop ? 'PLAN_READY' : 'NO_EXECUTABLE_ROUTE'
     };
 
     await auditEngine.logEvent({
       transactionId: recommendation.planId,
       actor: 'LIQUIDITY_REBALANCING_AGENT',
-      action: 'LIQUIDITY_REROUTE_PLAN_GENERATED',
-      result: 'SUCCESS',
+      action: hasProviderConfirmedMultiHop ? 'LIQUIDITY_REROUTE_PLAN_GENERATED' : 'LIQUIDITY_REROUTE_UNAVAILABLE',
+      result: hasProviderConfirmedMultiHop ? 'SUCCESS' : 'WARNING',
       metadata: {
         congestedRailId,
         saturationPct: congestedRail ? congestedRail.saturationPct : 0,
         graphPath: recommendation.graphPath,
-        isSyntheticMultiHop: recommendation.isSyntheticMultiHop
+        hasProviderConfirmedMultiHop: recommendation.hasProviderConfirmedMultiHop,
+        status: recommendation.status,
+        reason: recommendation.actionPlan
       }
     });
 

@@ -1,25 +1,6 @@
 const { getExchangeRates, formatAmount } = require('./currencyService');
 const { calculateSpreadBps } = require('./settlementPolicy');
 
-// Standard reference rates table for fast reference & fallback across 15 currencies
-const BASE_RATES_VS_USD = {
-  USD: 1.0,
-  CAD: 1.36,
-  BRL: 5.55,
-  MXN: 18.20,
-  EUR: 0.92,
-  GBP: 0.79,
-  CHF: 0.90,
-  SEK: 10.50,
-  JPY: 151.5,
-  INR: 83.20,
-  SGD: 1.35,
-  AUD: 1.52,
-  HKD: 7.82,
-  AED: 3.67,
-  ZAR: 18.50
-};
-
 class FXRateEngine {
   async getReferenceRate(sourceCurrency, destinationCurrency) {
     const src = sourceCurrency.toUpperCase();
@@ -27,19 +8,12 @@ class FXRateEngine {
 
     if (src === dst) return 1.0;
 
-    try {
-      const ratesData = await getExchangeRates(src);
-      if (ratesData && ratesData.conversion_rates && ratesData.conversion_rates[dst]) {
-        return ratesData.conversion_rates[dst];
-      }
-    } catch (err) {
-      console.warn(`[FXRateEngine] Live rate fetch failed, using internal base rates matrix`);
+    const ratesData = await getExchangeRates(src);
+    const rate = Number(ratesData.conversion_rates?.[dst]);
+    if (!Number.isFinite(rate) || rate <= 0) {
+      throw new Error(`No reference rate is available for ${src}/${dst}.`);
     }
-
-    // Fallback using base rate matrix
-    const srcVsUSD = BASE_RATES_VS_USD[src] || 1.0;
-    const dstVsUSD = BASE_RATES_VS_USD[dst] || 1.0;
-    return parseFloat((dstVsUSD / srcVsUSD).toFixed(6));
+    return rate;
   }
 
   /**
@@ -55,43 +29,18 @@ class FXRateEngine {
       return { rate: 1, inverted: false, timestamp: new Date(), rateSource: 'IDENTITY', sourceCurrency: src, destinationCurrency: dst };
     }
 
-    try {
-      const directData = await getExchangeRates(src);
-      const directRates = (directData && directData.conversion_rates) || {};
-      const direct = Number(directRates[dst]);
-      if (Number.isFinite(direct) && direct > 0) {
-        return {
-          rate: direct,
-          inverted: false,
-          timestamp: directData.timestamp || new Date(),
-          rateSource: directData.source || null,
-          sourceCurrency: src,
-          destinationCurrency: dst
-        };
-      }
-    } catch (err) {
-      console.warn('[FXRateEngine] Indicative conversion fetch failed for', src, dst);
-    }
+    const directData = await getExchangeRates(src);
+    const rate = Number(directData.conversion_rates?.[dst]);
+    if (!Number.isFinite(rate) || rate <= 0) return null;
 
-    try {
-      const inverseData = await getExchangeRates(dst);
-      const inverseRates = (inverseData && inverseData.conversion_rates) || {};
-      const inverse = Number(inverseRates[src]);
-      if (Number.isFinite(inverse) && inverse > 0) {
-        return {
-          rate: 1 / inverse,
-          inverted: true,
-          timestamp: inverseData.timestamp || new Date(),
-          rateSource: inverseData.source || null,
-          sourceCurrency: src,
-          destinationCurrency: dst
-        };
-      }
-    } catch (err) {
-      console.warn('[FXRateEngine] Inverse indicative conversion fetch failed for', src, dst);
-    }
-
-    return null;
+    return {
+      rate,
+      inverted: false,
+      timestamp: directData.timestamp || new Date(),
+      rateSource: directData.source || null,
+      sourceCurrency: src,
+      destinationCurrency: dst
+    };
   }
 
   calculateFXQuote(sourceCurrency, destinationCurrency, amount) {
@@ -105,7 +54,11 @@ class FXRateEngine {
     let sourceAmountUSD = Number(options.sourceAmountUSD);
     if (!Number.isFinite(sourceAmountUSD) || sourceAmountUSD < 0) {
       const usdRates = await getExchangeRates('USD');
-      sourceAmountUSD = Number(amount) / (Number(usdRates.conversion_rates?.[src]) || 1);
+      const sourceCurrencyRate = Number(usdRates.conversion_rates?.[src]);
+      if (!Number.isFinite(sourceCurrencyRate) || sourceCurrencyRate <= 0) {
+        throw new Error(`No USD reference rate is available for ${src}.`);
+      }
+      sourceAmountUSD = Number(amount) / sourceCurrencyRate;
     }
     const spreadBps = calculateSpreadBps(
       src,

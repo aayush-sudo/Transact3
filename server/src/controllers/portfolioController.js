@@ -52,8 +52,11 @@ exports.getPortfolio = async (req, res) => {
     const enrichedHoldings = portfolio.holdings.map(h => {
       const code = h.currency.toUpperCase();
       const amount = roundToPrecision(h.amount, 2);
-      const rateToUSD = rates[code] || 1.0;
-      const valueInUSD = rateToUSD > 0 ? (amount / rateToUSD) : amount;
+      const rateToUSD = Number(rates[code]);
+      if (!Number.isFinite(rateToUSD) || rateToUSD <= 0) {
+        throw new Error(`No USD reference rate is available for ${code}.`);
+      }
+      const valueInUSD = amount / rateToUSD;
       totalValueUSD += valueInUSD;
 
       return {

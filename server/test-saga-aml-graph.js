@@ -89,14 +89,13 @@ async function runTestSuite() {
   const aml3 = await amlService.screenName('John Doe');
   assert(aml3.decision === 'PASS' && aml3.risk_score < 0.65, 'Clean entity "John Doe" successfully passes AML screening (Risk: ' + aml3.risk_score + ')');
 
-  console.log('\n--- 2. Dijkstra Multi-Hop FX Graph Routing ---');
+  console.log('\n--- 2. Executable FX Route Availability ---');
   const routeUSD_INR = await graphRouterService.findOptimalRoute('USD', 'INR');
-  assert(routeUSD_INR && routeUSD_INR.path.includes('USD') && routeUSD_INR.path.includes('INR'), 'Dijkstra found optimal path for USD -> INR: [' + routeUSD_INR.path.join(' -> ') + ']');
-  assert(routeUSD_INR.effective_rate > 0, 'Effective yield rate computed: ' + routeUSD_INR.effective_rate);
-  assert(routeUSD_INR.net_fee_bps >= 0, 'Net conversion fee calculated in bps: ' + routeUSD_INR.net_fee_bps + ' bps');
+  assert(routeUSD_INR && routeUSD_INR.executable === false, 'Reference data alone does not claim an executable USD -> INR route');
+  assert(routeUSD_INR.path.length === 0 && routeUSD_INR.hops.length === 0, 'Unverified route legs are not returned');
 
   const routeJPY_EUR = await graphRouterService.findOptimalRoute('JPY', 'EUR');
-  assert(routeJPY_EUR && routeJPY_EUR.path.length >= 2, 'Multi-hop graph path resolved for JPY -> EUR: [' + routeJPY_EUR.path.join(' -> ') + ']');
+  assert(routeJPY_EUR && routeJPY_EUR.executable === false, 'Unverified multi-hop JPY -> EUR route is withheld');
 
   console.log('\n--- 3. ISO 20022 pacs.008.001.10 XML Generation ---');
   const sampleTx = {
@@ -130,6 +129,7 @@ async function runTestSuite() {
     destinationAmount: 460,
     referenceFXRate: 0.92,
     quotedFXRate: 0.92,
+    fxSource: 'FRANKFURTER_REFERENCE',
     fxSpreadBps: 30,
     fxCostUSD: 1.5,
     selectedRail: 'REGIONAL_INSTANT',
