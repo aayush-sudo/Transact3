@@ -38,3 +38,8 @@ yarn-error.log*
 # MongoDB memory server binary cache
 .cache/
 server/node_modules/.cache/
+FLOW_DIAGRAMS.md
+.gitignore
+docs/presentation/transact3-user-flow.png
+docs/presentation/transact3-user-flow.svg
+PRESENTATION_DIAGRAMS.md
